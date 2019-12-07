@@ -1,3 +1,5 @@
+#![no_std]
+mod bytes;
 #[cfg(test)]
 mod tests {
     #[test]
