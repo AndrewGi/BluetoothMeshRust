@@ -1,5 +1,17 @@
-# Bluetooth Mesh Rust
+### Bluetooth Mesh Rust
 Bluetooth Mesh stack implemented in Rust. In progress port/rewrite of Ero Bluetooth Mesh
+
+
+# Big Endian
+- Network, Lower, Upper, Beacon, Provisioning
+- Lower
+- Upper
+- Beacons
+- Provisioning
+# Little Endian
+- Access
+- Foundation
+
 
 TODO:
 - [ ] Stack
