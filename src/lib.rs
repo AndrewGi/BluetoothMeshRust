@@ -1,4 +1,5 @@
 #![no_std]
+extern crate alloc;
 mod bytes;
 mod uuid;
 
