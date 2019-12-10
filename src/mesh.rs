@@ -1,3 +1,5 @@
+use crate::bytes::ToFromBytesEndian;
+
 #[derive(Copy, Clone, PartialOrd, PartialEq, Debug)]
 pub struct IVI(bool);
 impl From<IVI> for bool {
@@ -86,7 +88,39 @@ impl SequenceNumber {
         self.0
     }
 }
+impl ToFromBytesEndian for SequenceNumber {
+    fn byte_size() -> usize {
+        3 // 24 bits = 3 * 8
+    }
 
+    fn to_bytes_le(&self) -> &[u8] {
+        &(self.0).to_bytes_le()[..3]
+    }
+
+    fn to_bytes_be(&self) -> &[u8] {
+        &(self.0).to_bytes_be()[..3]
+    }
+
+    fn from_bytes_le(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() != 3 {
+            None
+        } else {
+            Some(SequenceNumber(u32::from_le_bytes([
+                bytes[0], bytes[1], bytes[2], 0,
+            ])))
+        }
+    }
+
+    fn from_bytes_be(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() != 3 {
+            None
+        } else {
+            Some(SequenceNumber(u32::from_be_bytes([
+                bytes[0], bytes[1], bytes[2], 0,
+            ])))
+        }
+    }
+}
 pub enum MIC {
     Big(u64),
     Small(u32),
@@ -98,17 +132,52 @@ impl MIC {
             MIC::Small(s) => *s as u64,
         }
     }
-    pub fn byte_size(&self) -> u8 {
+    pub fn is_big(&self) -> bool {
+        match self {
+            MIC::Big(_) => true,
+            MIC::Small(_) => false,
+        }
+    }
+    pub fn byte_size(&self) -> usize {
         if self.is_big() {
             8
         } else {
             4
         }
     }
-    pub fn is_big(&self) -> bool {
+}
+impl ToFromBytesEndian for MIC {
+    fn byte_size() -> usize {
+        unimplemented!("MIC byte size can be 4 or 8 bytes")
+    }
+
+    fn to_bytes_le(&self) -> &[u8] {
         match self {
-            MIC::Big(_) => true,
-            MIC::Small(_) => false,
+            MIC::Big(b) => b.to_bytes_le(),
+            MIC::Small(s) => s.to_bytes_le(),
+        }
+    }
+
+    fn to_bytes_be(&self) -> &[u8] {
+        match self {
+            MIC::Big(b) => b.to_bytes_be(),
+            MIC::Small(s) => s.to_bytes_be(),
+        }
+    }
+
+    fn from_bytes_le(bytes: &[u8]) -> Option<Self> {
+        match bytes.len() {
+            4 => Some(MIC::Small(u32::from_bytes_le(bytes)?)),
+            8 => Some(MIC::Big(u64::from_bytes_le(bytes)?)),
+            _ => None,
+        }
+    }
+
+    fn from_bytes_be(bytes: &[u8]) -> Option<Self> {
+        match bytes.len() {
+            4 => Some(MIC::Small(u32::from_bytes_be(bytes)?)),
+            8 => Some(MIC::Big(u64::from_bytes_be(bytes)?)),
+            _ => None,
         }
     }
 }

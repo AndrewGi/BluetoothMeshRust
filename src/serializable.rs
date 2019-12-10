@@ -16,6 +16,6 @@ pub trait WireSerializable: Sized {
     /// place in the stack the Address is.
     ///
     type Error;
-    fn serialize_to<'a>(&self, buf: &'a mut BytesMut<'a>) -> Result<(), Self::Error>;
-    fn serialize_from<'a>(buf: &'a mut Bytes<'a>) -> Result<Self, Self::Error>;
+    fn serialize_to(&self, buf: &mut BytesMut) -> Result<(), Self::Error>;
+    fn serialize_from(buf: &mut Bytes) -> Result<Self, Self::Error>;
 }
