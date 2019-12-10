@@ -20,6 +20,7 @@ impl UUID {
         let th = &time_high.to_be_bytes();
         let cs = &clock_seq.to_be_bytes();
         let nb = &node.to_be_bytes()[..6];
+        // This is a dumb way of building a UUID from byte slices but it should work.
         UUID([
             tl[0], tl[1], tl[2], tl[3], tm[0], tm[1], th[0], th[1], cs[0], cs[1], nb[0], nb[1],
             nb[2], nb[3], nb[4], nb[5],
