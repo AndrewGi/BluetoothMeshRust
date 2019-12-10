@@ -1,5 +1,5 @@
 use crate::uuid::UUID;
-use core::convert::TryInto;
+use core::convert::{TryFrom, TryInto};
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct UnicastAddress(u16);
@@ -10,43 +10,63 @@ pub struct VirtualAddressHash(u16);
 #[derive(Copy, Clone)]
 pub struct VirtualAddress(VirtualAddressHash, UUID);
 
-impl TryInto<UnicastAddress> for u16 {
+impl TryFrom<u16> for UnicastAddress {
     type Error = ();
 
-    fn try_into(self) -> Result<UnicastAddress, Self::Error> {
-        if self == 0 {
+    fn try_from(v: u16) -> Result<UnicastAddress, Self::Error> {
+        if v == 0 {
             Err(())
-        } else if self & 0x8000 == 0 {
-            Ok(UnicastAddress(self))
+        } else if v & 0x8000 == 0 {
+            Ok(UnicastAddress(v))
         } else {
             Err(())
         }
     }
 }
 
-impl TryInto<GroupAddress> for u16 {
+impl TryFrom<u16> for GroupAddress {
     type Error = ();
 
-    fn try_into(self) -> Result<GroupAddress, Self::Error> {
-        if self & 0xC000 == 0xC000 {
-            Ok(GroupAddress(self))
+    fn try_from(v: u16) -> Result<GroupAddress, Self::Error> {
+        if v & 0xC000 == 0xC000 {
+            Ok(GroupAddress(v))
         } else {
             Err(())
         }
     }
 }
 
-impl TryInto<VirtualAddressHash> for u16 {
+impl TryFrom<u16> for VirtualAddressHash {
     type Error = ();
-    fn try_into(self) -> Result<VirtualAddressHash, Self::Error> {
-        if self & 0xC000 == 0x8000 {
-            Ok(VirtualAddressHash(self))
+    fn try_from(v: u16) -> Result<VirtualAddressHash, Self::Error> {
+        if v & 0xC000 == 0x8000 {
+            Ok(VirtualAddressHash(v))
         } else {
             Err(())
         }
     }
 }
 
+impl From<UnicastAddress> for u16 {
+    fn from(v: UnicastAddress) -> Self {
+        v.0
+    }
+}
+impl From<GroupAddress> for u16 {
+    fn from(v: GroupAddress) -> Self {
+        v.0
+    }
+}
+impl From<VirtualAddressHash> for u16 {
+    fn from(v: VirtualAddressHash) -> Self {
+        v.0
+    }
+}
+impl From<VirtualAddress> for u16 {
+    fn from(v: VirtualAddress) -> Self {
+        (v.0).0
+    }
+}
 #[derive(Copy, Clone)]
 pub enum Address {
     Unassigned,
@@ -57,7 +77,7 @@ pub enum Address {
 }
 
 impl Address {
-    fn is_assigned(self) -> bool {
+    fn is_assigned(&self) -> bool {
         match self {
             Address::Unassigned => false,
             _ => true,
@@ -71,27 +91,28 @@ impl Default for Address {
     }
 }
 
-impl Into<u16> for Address {
-    fn into(self) -> u16 {
-        match self {
-            Address::Unassigned => 0u16,
-            Address::Unicast(u) => u.0,
-            Address::Group(g) => g.0,
-            Address::Virtual(v) => (v.0).0,
-            Address::VirtualHash(v) => v.0,
+impl From<u16> for Address {
+    fn from(v: u16) -> Address {
+        if v == 0 {
+            Address::Unassigned
+        } else if v & 0x8000 == 0 {
+            Address::Unicast(UnicastAddress(v))
+        } else if v & 0xC000 == 0xC000 {
+            Address::Group(GroupAddress(v))
+        } else {
+            Address::VirtualHash(VirtualAddressHash(v))
         }
     }
 }
-impl Into<Address> for u16 {
-    fn into(self) -> Address {
-        if self == 0 {
-            Address::Unassigned
-        } else if self & 0x8000 == 0 {
-            Address::Unicast(UnicastAddress(self))
-        } else if self & 0xC000 == 0xC000 {
-            Address::Group(GroupAddress(self))
-        } else {
-            Address::VirtualHash(VirtualAddressHash(self))
+
+impl From<Address> for u16 {
+    fn from(v: Address) -> Self {
+        match v {
+            Address::Unassigned => 0,
+            Address::Unicast(u) => u.into(),
+            Address::Group(g) => g.into(),
+            Address::Virtual(v) => v.into(),
+            Address::VirtualHash(vh) => vh.into(),
         }
     }
 }
