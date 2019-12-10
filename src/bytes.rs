@@ -3,6 +3,13 @@ use core::iter::Iterator;
 use core::ops::{Deref, DerefMut, Range, RangeBounds};
 
 #[derive(Copy, Clone)]
+pub enum Endian {
+    Big,
+    Little,
+    Native,
+}
+
+#[derive(Copy, Clone)]
 pub struct Bytes<'a> {
     data: &'a [u8],
     length: usize,
@@ -31,34 +38,11 @@ impl BytesMut<'_> {
 }
 pub trait Buf {
     fn length(&self) -> usize;
-    fn capacity(&self) -> usize {
-        self.bytes().len()
-    }
-    fn slice_to(&self, range: Range<usize>) -> Option<Bytes> {
-        if range.end > self.length() {
-            None
-        } else {
-            Some(Bytes::new(&self.bytes()[range.start..range.end]))
-        }
-    }
+    /// Returns bytes trimmed to 0..capacity()
     fn bytes(&self) -> &[u8];
-    fn length_mut(&mut self) -> &mut usize;
-    fn add_length(&mut self, amount: usize) {
-        self.ensure_remaining_space(amount);
-        *self.length_mut() += amount;
-    }
-    fn sub_length(&mut self, amount: usize) {
-        let l = self.length_mut();
-        if amount > *l {
-            panic!("buffer underflow amount: {} length: {}", amount, *l);
-        } else {
-            *l -= amount;
-        }
-    }
-    fn get_n_bytes(&self, index: usize, amount: usize) -> &[u8] {
-        self.ensure_in_range(index + amount);
-        &self.bytes()[index..index + amount]
-    }
+    fn capacity(&self) -> usize;
+    fn add_length(&mut self, amount: usize);
+    fn sub_length(&mut self, amount: usize);
     fn remaining_space(&self) -> usize {
         self.capacity() - self.length()
     }
@@ -76,150 +60,18 @@ pub trait Buf {
             panic!("out of range {} > {}", index, self.remaining_space())
         }
     }
-
-    fn get_u8(&self, index: usize) -> u8 {
-        self.ensure_in_range(index);
-        self.bytes()[index]
+    fn slice_to(&self, range: Range<usize>) -> Option<Bytes> {
+        if range.end > self.length() {
+            None
+        } else {
+            Some(Bytes::new(&self.bytes()[range.start..range.end]))
+        }
     }
-    fn pop_u8(&mut self) -> u8 {
-        self.ensure_in_range(1);
-        let v = self.get_u8(self.length() - 1);
-        self.sub_length(1);
-        v
+    fn get_n_bytes(&self, index: usize, amount: usize) -> &[u8] {
+        self.ensure_in_range(index + amount);
+        &self.bytes()[index..index + amount]
     }
-
-    fn get_i8(&self, index: usize) -> i8 {
-        self.get_u8(index) as i8
-    }
-    fn pop_i8(&mut self) -> i8 {
-        let v = self.get_i8(self.length() - core::mem::size_of::<i8>());
-        self.sub_length(core::mem::size_of::<i8>());
-        v
-    }
-    ///
-    /// While writing all the methods for get/pop u8/i8/u16/i16/u32/i32/u24/i24 is not the
-    /// most maintainable way of witting this code, Rust doesn't generically define from_be/le_bytes
-    /// and macros don't allow for generating functions with prefix/postfixxes.
-    ///
-
-    fn get_u16_be(&self, index: usize) -> u16 {
-        u16::from_be_bytes(
-            self.get_n_bytes(index, core::mem::size_of::<u16>())
-                .try_into()
-                .unwrap(),
-        )
-    }
-    fn get_u16_le(&self, index: usize) -> u16 {
-        u16::from_le_bytes(
-            self.get_n_bytes(index, core::mem::size_of::<u16>())
-                .try_into()
-                .unwrap(),
-        )
-    }
-    fn pop_u16_be(&mut self) -> u16 {
-        const SIZE: usize = core::mem::size_of::<u16>();
-        let v = self.get_u16_be(self.length() - SIZE);
-        self.sub_length(SIZE);
-        v
-    }
-    fn pop_u16_le(&mut self) -> u16 {
-        const SIZE: usize = core::mem::size_of::<u16>();
-        let v = self.get_u16_le(self.length() - SIZE);
-        self.sub_length(SIZE);
-        v
-    }
-
-    fn get_u32_be(&self, index: usize) -> u32 {
-        u32::from_be_bytes(
-            self.get_n_bytes(index, core::mem::size_of::<u32>())
-                .try_into()
-                .unwrap(),
-        )
-    }
-    fn get_u32_le(&self, index: usize) -> u32 {
-        u32::from_le_bytes(
-            self.get_n_bytes(index, core::mem::size_of::<u32>())
-                .try_into()
-                .unwrap(),
-        )
-    }
-    fn pop_u32_be(&mut self) -> u32 {
-        const SIZE: usize = core::mem::size_of::<u32>();
-        let v = self.get_u32_be(self.length() - SIZE);
-        self.sub_length(SIZE);
-        v
-    }
-    fn pop_u32_le(&mut self) -> u32 {
-        const SIZE: usize = core::mem::size_of::<u32>();
-        let v = self.get_u32_le(self.length() - SIZE);
-        self.sub_length(SIZE);
-        v
-    }
-
-    fn get_i16_be(&self, index: usize) -> i16 {
-        i16::from_be_bytes(
-            self.get_n_bytes(index, core::mem::size_of::<i16>())
-                .try_into()
-                .unwrap(),
-        )
-    }
-    fn get_i16_le(&self, index: usize) -> i16 {
-        i16::from_le_bytes(
-            self.get_n_bytes(index, core::mem::size_of::<i16>())
-                .try_into()
-                .unwrap(),
-        )
-    }
-
-    fn pop_i32_be(&mut self) -> i32 {
-        const SIZE: usize = core::mem::size_of::<i32>();
-        let v = self.get_i32_be(self.length() - SIZE);
-        self.sub_length(SIZE);
-        v
-    }
-    fn pop_i32_le(&mut self) -> i32 {
-        const SIZE: usize = core::mem::size_of::<i32>();
-        let v = self.get_i32_le(self.length() - SIZE);
-        self.sub_length(SIZE);
-        v
-    }
-
-    fn get_i32_be(&self, index: usize) -> i32 {
-        i32::from_be_bytes(
-            self.get_n_bytes(index, core::mem::size_of::<i32>())
-                .try_into()
-                .unwrap(),
-        )
-    }
-    fn get_i32_le(&self, index: usize) -> i32 {
-        i32::from_le_bytes(
-            self.get_n_bytes(index, core::mem::size_of::<i32>())
-                .try_into()
-                .unwrap(),
-        )
-    }
-
-    fn get_u24_be(&self, index: usize) -> u32 {
-        let b = self.get_n_bytes(index, 3);
-        u32::from_le_bytes([b[0], b[1], b[2], 0])
-    }
-    fn get_u24_le(&self, index: usize) -> u32 {
-        let b = self.get_n_bytes(index, 3);
-        u32::from_le_bytes([b[0], b[1], b[2], 0])
-    }
-    fn pop_u24_be(&mut self) -> u32 {
-        const SIZE: usize = 3;
-        let v = self.get_u24_be(self.length() - SIZE);
-        self.sub_length(SIZE);
-        v
-    }
-    fn pop_u24_le(&mut self) -> u32 {
-        const SIZE: usize = 3;
-        let v = self.get_u24_le(self.length() - SIZE);
-        self.sub_length(SIZE);
-        v
-    }
-    fn peek_bytes(&mut self, amount: usize) -> &[u8] {
+    fn peek_bytes(&self, amount: usize) -> &[u8] {
         self.ensure_in_range(amount);
         let b = &self.bytes()[self.length() - amount..];
         b
@@ -228,6 +80,28 @@ pub trait Buf {
         let b = self.peek_bytes(amount);
         self.sub_length(amount);
         b
+    }
+
+    fn get_at<T: ToFromBytesEndian>(&self, index: usize, endian: Endian) -> Option<T> {
+        self.ensure_in_range(index + T::byte_size());
+        T::from_bytes_endian(self.get_n_bytes(index, T::byte_size()), endian)
+    }
+
+    fn peek_be<T: ToFromBytesEndian>(&self) -> Option<T> {
+        T::from_bytes_be(self.peek_bytes(T::byte_size()))
+    }
+    fn peek_le<T: ToFromBytesEndian>(&self) -> Option<T> {
+        T::from_bytes_be(self.peek_bytes(T::byte_size()))
+    }
+    fn pop_be<T: ToFromBytesEndian>(&mut self) -> Option<T> {
+        let out = self.peek_be()?;
+        self.sub_length(T::byte_size());
+        Some(out)
+    }
+    fn pop_le<T: ToFromBytesEndian>(&mut self) -> Option<T> {
+        let out = self.peek_le()?;
+        self.sub_length(T::byte_size());
+        Some(out)
     }
 }
 
@@ -255,44 +129,11 @@ pub trait BufMut: Buf {
     fn push_bytes_swapped(&mut self, value: &[u8]) {
         self.push_bytes(value.iter().rev())
     }
-
-    fn push_i8(&mut self, value: i8) {
-        self.push_u8(value as u8)
+    fn push_be(&mut self, b: impl ToFromBytesEndian) {
+        self.push_bytes(b.to_bytes_be().iter())
     }
-
-    fn push_u16_le(&mut self, value: u16) {
-        self.push_bytes(value.to_le_bytes().iter())
-    }
-    fn push_u16_be(&mut self, value: u16) {
-        self.push_bytes(value.to_be_bytes().iter())
-    }
-
-    fn push_i16_le(&mut self, value: i16) {
-        self.push_bytes(value.to_le_bytes().iter())
-    }
-    fn push_i16_be(&mut self, value: i16) {
-        self.push_bytes(value.to_be_bytes().iter())
-    }
-
-    fn push_u32_le(&mut self, value: u32) {
-        self.push_bytes(value.to_le_bytes().iter())
-    }
-    fn push_u32_be(&mut self, value: u32) {
-        self.push_bytes(value.to_be_bytes().iter())
-    }
-
-    fn push_i32_le(&mut self, value: i32) {
-        self.push_bytes(value.to_le_bytes().iter())
-    }
-    fn push_i32_be(&mut self, value: i32) {
-        self.push_bytes(value.to_be_bytes().iter())
-    }
-
-    fn push_u24_le(&mut self, value: u32) {
-        self.push_bytes(value.to_le_bytes()[..3].iter())
-    }
-    fn push_u24_be(&mut self, value: u32) {
-        self.push_bytes(value.to_be_bytes()[..3].iter())
+    fn push_le(&mut self, b: impl ToFromBytesEndian) {
+        self.push_bytes(b.to_bytes_le().iter())
     }
 }
 impl Deref for Bytes<'_> {
@@ -319,16 +160,21 @@ impl<'a> Buf for Bytes<'a> {
         self.length
     }
 
-    fn capacity(&self) -> usize {
-        self.data.len()
-    }
-
     fn bytes(&self) -> &[u8] {
         &self.data[..self.length]
     }
 
-    fn length_mut(&mut self) -> &mut usize {
-        &mut self.length
+    fn capacity(&self) -> usize {
+        self.data.len()
+    }
+
+    fn add_length(&mut self, amount: usize) {
+        self.ensure_remaining_space(amount);
+        self.length += amount;
+    }
+    fn sub_length(&mut self, amount: usize) {
+        self.ensure_in_range(amount);
+        self.length -= amount;
     }
 }
 impl<'a> From<&'a BytesMut<'a>> for Bytes<'a> {
@@ -344,16 +190,21 @@ impl Buf for BytesMut<'_> {
         self.length
     }
 
-    fn capacity(&self) -> usize {
-        self.data.len()
-    }
-
     fn bytes(&self) -> &[u8] {
         &self.data[..self.length]
     }
 
-    fn length_mut(&mut self) -> &mut usize {
-        &mut self.length
+    fn capacity(&self) -> usize {
+        self.data.len()
+    }
+
+    fn add_length(&mut self, amount: usize) {
+        self.ensure_remaining_space(amount);
+        self.length += amount;
+    }
+    fn sub_length(&mut self, amount: usize) {
+        self.ensure_in_range(amount);
+        self.length -= amount;
     }
 }
 impl BufMut for BytesMut<'_> {
@@ -378,3 +229,110 @@ impl<'a> From<&'a mut [u8]> for BytesMut<'a> {
         BytesMut::new(b)
     }
 }
+
+pub trait ToFromBytesEndian: Sized {
+    fn byte_size() -> usize;
+    fn to_bytes_le(&self) -> &[u8];
+    fn to_bytes_be(&self) -> &[u8];
+    fn to_bytes_ne(&self) -> &[u8] {
+        if cfg!(target_endian = "big") {
+            self.to_bytes_be()
+        } else {
+            self.to_bytes_le()
+        }
+    }
+    fn from_bytes_le(bytes: &[u8]) -> Option<Self>;
+    fn from_bytes_be(bytes: &[u8]) -> Option<Self>;
+    fn from_bytes_ne(bytes: &[u8]) -> Option<Self> {
+        if cfg!(target_endian = "big") {
+            Self::from_bytes_be(bytes)
+        } else {
+            Self::from_bytes_le(bytes)
+        }
+    }
+    fn to_bytes_endian(&self, endian: Endian) -> &[u8] {
+        match endian {
+            Endian::Big => self.to_bytes_be(),
+            Endian::Little => self.to_bytes_le(),
+            Endian::Native => self.to_bytes_ne(),
+        }
+    }
+    fn from_bytes_endian(bytes: &[u8], endian: Endian) -> Option<Self> {
+        match endian {
+            Endian::Big => Self::from_bytes_be(bytes),
+            Endian::Little => Self::from_bytes_le(bytes),
+            Endian::Native => Self::from_bytes_ne(bytes),
+        }
+    }
+}
+/*
+impl<T, U> ToFromBytesEndian for U
+where
+    T: ToFromBytesEndian,
+    U: From<T> + Into<T> + Copy,
+{
+    fn byte_size() -> usize {
+        T::byte_size()
+    }
+
+    fn to_bytes_le(&self) -> &[u8] {
+        T::from(self).to_bytes_le()
+    }
+
+    fn to_bytes_be(&self) -> &[u8] {
+        T::from(self).to_bytes_be()
+    }
+
+    fn to_bytes_ne(&self) -> &[u8] {
+        T::from(self).to_bytes_ne()
+    }
+
+    fn from_bytes_le(bytes: &[u8]) -> Option<Self> {
+        Some(U::from(T::from_bytes_le(bytes)?))
+    }
+
+    fn from_bytes_be(bytes: &[u8]) -> Option<Self> {
+        Some(U::from(T::from_bytes_be(bytes)?))
+    }
+
+    fn from_bytes_ne(bytes: &[u8]) -> Option<Self> {
+        Some(U::from(T::from_bytes_ne(bytes)?))
+    }
+}
+*/
+macro_rules! implement_to_from_bytes {
+    ( $( $t:ty ), *) => {
+        $(
+            impl ToFromBytesEndian for $t {
+    fn byte_size() -> usize {
+        core::mem::size_of::<Self>()
+    }
+
+    fn to_bytes_le(&self) -> &[u8] {
+        self.to_bytes_le()
+    }
+
+    fn to_bytes_be(&self) -> &[u8] {
+        self.to_bytes_be()
+    }
+
+    fn to_bytes_ne(&self) -> &[u8] {
+        self.to_bytes_ne()
+    }
+
+    fn from_bytes_le(bytes: &[u8]) -> Option<Self> {
+        Self::from_bytes_le(bytes.try_into().ok()?)
+    }
+
+    fn from_bytes_be(bytes: &[u8]) -> Option<Self> {
+        Self::from_bytes_ne(bytes.try_into().ok()?)
+    }
+
+    fn from_bytes_ne(bytes: &[u8]) -> Option<Self> {
+        Self::from_bytes_ne(bytes.try_into().ok()?)
+    }
+}
+        )*
+    }
+}
+implement_to_from_bytes!(u8, i8, u16, i16, u32, i32, u64, i64);

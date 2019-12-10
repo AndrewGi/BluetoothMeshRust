@@ -1,4 +1,5 @@
-//Network Layer is BIG Endian
+//! Bluetooth Mesh
+//! Network Layer is BIG Endian
 
 use crate::address::Address::{Unassigned, Unicast};
 use crate::address::{Address, UnicastAddress};
@@ -27,8 +28,8 @@ impl WireSerializable for Payload {
         } else {
             buf.push_bytes(self.transport_pdu[..self.transport_length as usize].iter());
             match self.net_mic {
-                MIC::Big(b) => buf.push_u32_be(b),
-                MIC::Small(s) => buf.push_u16_be(s),
+                MIC::Big(b) => buf.push_be(b),
+                MIC::Small(s) => buf.push_be(s),
             }
             Ok(())
         }
@@ -39,6 +40,20 @@ impl WireSerializable for Payload {
     }
 }
 
+/// Mesh Network PDU Header
+/// Network layer is Big Endian.
+/// From Mesh Core v1.0
+/// | Field Name    | Bits  | Notes                                                     |
+/// |---------------|-------|-----------------------------------------------------------|
+/// | IVI           | 1     | Least significant bit of IV Index                         |
+/// | NID           | 7     | Value derived from the NetKey used to encrypt this PDU    |
+/// | CTL           | 1     | Network Control                                           |
+/// | TTL           | 7     | Time To Live                                              |
+/// | SEQ           | 24    | Sequence Number                                           |
+/// | SRC           | 16    | Source Unicast Address                                    |
+/// | DST           | 16    | Destination Address (Unicast, Group or Virtual            |
+/// | Transport PDU | 8-128 | Transport PDU (1-16 Bytes)                                |
+/// | NetMIC        | 32,64 | Message Integrity check for Payload (4 or 8 bytes)        |
 pub struct Header {
     ivi: IVI,
     nid: NID,
@@ -98,6 +113,7 @@ impl WireSerializable for Header {
     }
 }
 
+/// Mesh Network PDU Structure
 pub struct PDU {
     header: Header,
     payload: Payload,
