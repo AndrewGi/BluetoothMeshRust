@@ -38,6 +38,7 @@ impl TTL {
     pub fn with_flag(&self, flag: bool) -> u8 {
         self.0 | ((flag as u8) << 7)
     }
+    /// returns 7 bit TTL + 1 bit bool flag from 8bit uint.
     pub fn new_with_flag(v: u8) -> (TTL, bool) {
         (TTL(v & 0x7F), v & 0x80 != 0)
     }
@@ -60,6 +61,7 @@ impl NID {
         self.0 | ((flag as u8) << 7)
     }
 
+    /// returns 7 bit NID + 1 bit bool flag from 8bit uint.
     pub fn new_with_flag(v: u8) -> (NID, bool) {
         (NID(v & 0x7F), v & 0x80 != 0)
     }
@@ -86,21 +88,21 @@ impl SequenceNumber {
 }
 
 pub enum MIC {
-    Big(u32),
-    Small(u16),
+    Big(u64),
+    Small(u32),
 }
 impl MIC {
-    pub fn mic(&self) -> u32 {
+    pub fn mic(&self) -> u64 {
         match self {
             MIC::Big(b) => *b,
-            MIC::Small(s) => *s as u32,
+            MIC::Small(s) => *s as u64,
         }
     }
     pub fn byte_size(&self) -> u8 {
         if self.is_big() {
-            4
+            8
         } else {
-            2
+            4
         }
     }
     pub fn is_big(&self) -> bool {
