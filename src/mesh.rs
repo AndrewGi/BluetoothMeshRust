@@ -44,6 +44,12 @@ impl TTL {
     pub fn new_with_flag(v: u8) -> (TTL, bool) {
         (TTL(v & 0x7F), v & 0x80 != 0)
     }
+    pub fn should_relay(&self) -> bool {
+        match self.0 {
+            2..=127 => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Copy, Clone, PartialOrd, PartialEq, Debug)]
@@ -179,5 +185,20 @@ impl ToFromBytesEndian for MIC {
             8 => Some(MIC::Big(u64::from_bytes_be(bytes)?)),
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ttl() {
+        assert!(!TTL(0).should_relay());
+        assert!(!TTL(1).should_relay());
+        assert!(TTL(2).should_relay());
+        assert!(TTL(65).should_relay());
+        assert!(TTL(126).should_relay());
+        assert!(TTL(127).should_relay())
     }
 }
