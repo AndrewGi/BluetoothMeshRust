@@ -77,9 +77,9 @@ pub trait Buf {
         b
     }
     fn pop_bytes(&mut self, amount: usize) -> &[u8] {
-        let b = self.peek_bytes(amount);
+        self.ensure_remaining_space(amount);
         self.sub_length(amount);
-        b
+        self.peek_bytes(amount)
     }
 
     fn get_at<T: ToFromBytesEndian>(&self, index: usize, endian: Endian) -> Option<T> {

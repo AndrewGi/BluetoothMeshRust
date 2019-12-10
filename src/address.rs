@@ -1,3 +1,4 @@
+use crate::bytes::ToFromBytesEndian;
 use crate::uuid::UUID;
 use core::convert::{TryFrom, TryInto};
 
@@ -83,6 +84,9 @@ impl Address {
             _ => true,
         }
     }
+    fn value(self) -> u16 {
+        self.into()
+    }
 }
 
 impl Default for Address {
@@ -114,5 +118,104 @@ impl From<Address> for u16 {
             Address::Virtual(v) => v.into(),
             Address::VirtualHash(vh) => vh.into(),
         }
+    }
+}
+
+impl ToFromBytesEndian for Address {
+    fn byte_size() -> usize {
+        2
+    }
+
+    fn to_bytes_le(&self) -> &[u8] {
+        match self {
+            Address::Unassigned => 0u16.to_bytes_le(),
+            Address::Unicast(u) => (u.0).to_bytes_le(),
+            Address::Group(g) => (g.0).to_bytes_le(),
+            Address::Virtual(v) => ((v.0).0).to_bytes_le(),
+            Address::VirtualHash(h) => (h.0).to_bytes_le(),
+        }
+    }
+
+    fn to_bytes_be(&self) -> &[u8] {
+        match self {
+            Address::Unassigned => 0u16.to_bytes_be(),
+            Address::Unicast(u) => (u.0).to_bytes_be(),
+            Address::Group(g) => (g.0).to_bytes_be(),
+            Address::Virtual(v) => ((v.0).0).to_bytes_be(),
+            Address::VirtualHash(h) => (h.0).to_bytes_be(),
+        }
+    }
+
+    fn from_bytes_le(bytes: &[u8]) -> Option<Self> {
+        Some(u16::from_bytes_le(bytes)?.into())
+    }
+
+    fn from_bytes_be(bytes: &[u8]) -> Option<Self> {
+        Some(u16::from_bytes_be(bytes)?.into())
+    }
+}
+
+impl ToFromBytesEndian for UnicastAddress {
+    fn byte_size() -> usize {
+        2
+    }
+
+    fn to_bytes_le(&self) -> &[u8] {
+        (self.0).to_bytes_le()
+    }
+
+    fn to_bytes_be(&self) -> &[u8] {
+        (self.0).to_bytes_be()
+    }
+
+    fn from_bytes_le(bytes: &[u8]) -> Option<Self> {
+        u16::from_bytes_le(bytes)?.try_into().ok()
+    }
+
+    fn from_bytes_be(bytes: &[u8]) -> Option<Self> {
+        u16::from_bytes_be(bytes)?.try_into().ok()
+    }
+}
+
+impl ToFromBytesEndian for VirtualAddressHash {
+    fn byte_size() -> usize {
+        2
+    }
+
+    fn to_bytes_le(&self) -> &[u8] {
+        (self.0).to_bytes_le()
+    }
+
+    fn to_bytes_be(&self) -> &[u8] {
+        (self.0).to_bytes_be()
+    }
+
+    fn from_bytes_le(bytes: &[u8]) -> Option<Self> {
+        u16::from_bytes_le(bytes)?.try_into().ok()
+    }
+
+    fn from_bytes_be(bytes: &[u8]) -> Option<Self> {
+        u16::from_bytes_be(bytes)?.try_into().ok()
+    }
+}
+impl ToFromBytesEndian for GroupAddress {
+    fn byte_size() -> usize {
+        2
+    }
+
+    fn to_bytes_le(&self) -> &[u8] {
+        (self.0).to_bytes_le()
+    }
+
+    fn to_bytes_be(&self) -> &[u8] {
+        (self.0).to_bytes_be()
+    }
+
+    fn from_bytes_le(bytes: &[u8]) -> Option<Self> {
+        u16::from_bytes_le(bytes)?.try_into().ok()
+    }
+
+    fn from_bytes_be(bytes: &[u8]) -> Option<Self> {
+        u16::from_bytes_be(bytes)?.try_into().ok()
     }
 }
