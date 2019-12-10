@@ -45,11 +45,11 @@ impl UUID {
 }
 
 pub struct UUIDFields {
-    time_low: u32,
-    time_mid: u16,
-    time_hi_and_version: u16,
-    clock_seq: u16,
-    node: u64,
+    pub time_low: u32,
+    pub time_mid: u16,
+    pub time_hi_and_version: u16,
+    pub clock_seq: u16,
+    pub node: u64,
 }
 
 impl Into<UUIDFields> for UUID {
@@ -93,7 +93,20 @@ mod tests {
     use super::*;
     #[test]
     fn test_format() {
-        let uuid = UUID::from_fields(0x123e4567, 0xe89b, 0x12d3, 0xa456, 0x426655440000);
-        assert_eq!(uuid.to_string(), "123e4567-e89b-12d3-a456-426655440000")
+        let time_low = 0x123e4567;
+        let time_mid = 0xe89b;
+        let time_high = 0x12d3;
+        let clock_seq = 0xa456;
+        let node = 0x426655440000;
+        let uuid = UUID::from_fields(time_low, time_mid, time_high, clock_seq, node);
+
+        assert_eq!(uuid.to_string(), "123e4567-e89b-12d3-a456-426655440000");
+
+        let fields: UUIDFields = uuid.into();
+        assert_eq!(time_low, fields.time_low);
+        assert_eq!(time_mid, fields.time_mid);
+        assert_eq!(time_high, fields.time_hi_and_version);
+        assert_eq!(clock_seq, fields.clock_seq);
+        assert_eq!(node, fields.node)
     }
 }
