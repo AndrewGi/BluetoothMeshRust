@@ -1,6 +1,7 @@
 use crate::bytes::ToFromBytesEndian;
+use core::fmt::{Display, Error, Formatter};
 
-#[derive(Copy, Clone, PartialOrd, PartialEq, Debug)]
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct IVI(bool);
 impl From<IVI> for bool {
     fn from(i: IVI) -> Self {
@@ -12,7 +13,7 @@ impl From<bool> for IVI {
         IVI(b)
     }
 }
-#[derive(Copy, Clone, PartialOrd, PartialEq, Debug)]
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct CTL(bool);
 impl From<CTL> for bool {
     fn from(c: CTL) -> Self {
@@ -24,7 +25,7 @@ impl From<bool> for CTL {
         CTL(b)
     }
 }
-#[derive(Copy, Clone, PartialOrd, PartialEq, Debug)]
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct TTL(u8);
 
 const TTL_MAX: u8 = 127;
@@ -52,7 +53,7 @@ impl TTL {
     }
 }
 
-#[derive(Copy, Clone, PartialOrd, PartialEq, Debug)]
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct NID(u8);
 
 const NID_MAX: u8 = 127;
@@ -74,27 +75,33 @@ impl NID {
         (NID(v & 0x7F), v & 0x80 != 0)
     }
 }
-/// 24bit Sequence number
-#[derive(Copy, Clone, PartialOrd, PartialEq, Debug)]
-pub struct SequenceNumber(u32);
 
-const SEQUENCE_MAX: u32 = 16777215; // 2**24 - 1
-impl SequenceNumber {
-    pub fn new(v: u32) -> SequenceNumber {
-        if v > SEQUENCE_MAX {
-            panic!(
-                "sequence number {} is bigger than max sequence number {}",
-                v, SEQUENCE_MAX
-            );
+#[derive(Default, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+pub struct U24(u32);
+const U24_MAX: u32 = 16777215; // 2**24 - 1
+impl Display for U24 {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        write!(f, "U24({})", self.0)
+    }
+}
+impl U24 {
+    pub fn new(v: u32) -> U24 {
+        if v > U24_MAX {
+            panic!("number {} is bigger than max U24 {}", v, U24_MAX);
         } else {
-            SequenceNumber(v)
+            U24(v)
         }
     }
     pub fn value(&self) -> u32 {
         self.0
     }
 }
-impl ToFromBytesEndian for SequenceNumber {
+impl From<(u8, u8, u8)> for U24 {
+    fn from(b: (u8, u8, u8)) -> Self {
+        U24(b.0 as u32 | ((b.1 as u32) << 8) | ((b.2 as u32) << 16))
+    }
+}
+impl ToFromBytesEndian for U24 {
     fn byte_size() -> usize {
         3 // 24 bits = 3 * 8
     }
@@ -111,9 +118,7 @@ impl ToFromBytesEndian for SequenceNumber {
         if bytes.len() != 3 {
             None
         } else {
-            Some(SequenceNumber(u32::from_le_bytes([
-                bytes[0], bytes[1], bytes[2], 0,
-            ])))
+            Some(U24(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], 0])))
         }
     }
 
@@ -121,10 +126,33 @@ impl ToFromBytesEndian for SequenceNumber {
         if bytes.len() != 3 {
             None
         } else {
-            Some(SequenceNumber(u32::from_be_bytes([
-                bytes[0], bytes[1], bytes[2], 0,
-            ])))
+            Some(U24(u32::from_be_bytes([bytes[0], bytes[1], bytes[2], 0])))
         }
+    }
+}
+/// 24bit Sequence number
+#[derive(Copy, Clone, Eq, Ord, PartialOrd, PartialEq, Debug, Hash)]
+pub struct SequenceNumber(pub U24);
+
+impl ToFromBytesEndian for SequenceNumber {
+    fn byte_size() -> usize {
+        3
+    }
+
+    fn to_bytes_le(&self) -> &[u8] {
+        (self.0).to_bytes_le()
+    }
+
+    fn to_bytes_be(&self) -> &[u8] {
+        (self.0).to_bytes_be()
+    }
+
+    fn from_bytes_le(bytes: &[u8]) -> Option<Self> {
+        Some(SequenceNumber(U24::from_bytes_le(bytes)?))
+    }
+
+    fn from_bytes_be(bytes: &[u8]) -> Option<Self> {
+        Some(SequenceNumber(U24::from_bytes_be(bytes)?))
     }
 }
 pub enum MIC {

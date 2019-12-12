@@ -2,13 +2,13 @@ use crate::bytes::ToFromBytesEndian;
 use crate::uuid::UUID;
 use core::convert::{TryFrom, TryInto};
 
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct UnicastAddress(u16);
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct GroupAddress(u16);
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct VirtualAddressHash(u16);
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct VirtualAddress(VirtualAddressHash, UUID);
 
 impl TryFrom<u16> for UnicastAddress {
@@ -68,7 +68,7 @@ impl From<VirtualAddress> for u16 {
         (v.0).0
     }
 }
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub enum Address {
     Unassigned,
     Unicast(UnicastAddress),

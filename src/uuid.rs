@@ -4,7 +4,7 @@ use core::fmt::{Display, Error, Formatter};
 
 type Bytes = [u8; 16];
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct UUID(Bytes);
 
 impl UUID {
