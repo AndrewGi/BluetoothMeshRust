@@ -130,10 +130,10 @@ pub trait BufMut: Buf {
         self.push_bytes(value.iter().rev())
     }
     fn push_be(&mut self, b: impl ToFromBytesEndian) {
-        self.push_bytes(b.to_bytes_be().iter())
+        self.push_bytes(b.to_bytes_be().as_ref().iter())
     }
     fn push_le(&mut self, b: impl ToFromBytesEndian) {
-        self.push_bytes(b.to_bytes_le().iter())
+        self.push_bytes(b.to_bytes_le().as_ref().iter())
     }
 }
 impl Deref for Bytes<'_> {
@@ -231,10 +231,13 @@ impl<'a> From<&'a mut [u8]> for BytesMut<'a> {
 }
 
 pub trait ToFromBytesEndian: Sized {
-    fn byte_size() -> usize;
-    fn to_bytes_le(&self) -> &[u8];
-    fn to_bytes_be(&self) -> &[u8];
-    fn to_bytes_ne(&self) -> &[u8] {
+    type AsBytesType: AsRef<[u8]>;
+    fn byte_size() -> usize {
+        core::mem::size_of::<Self::AsBytesType>()
+    }
+    fn to_bytes_le(&self) -> Self::AsBytesType;
+    fn to_bytes_be(&self) -> Self::AsBytesType;
+    fn to_bytes_ne(&self) -> Self::AsBytesType {
         if cfg!(target_endian = "big") {
             self.to_bytes_be()
         } else {
@@ -250,7 +253,7 @@ pub trait ToFromBytesEndian: Sized {
             Self::from_bytes_le(bytes)
         }
     }
-    fn to_bytes_endian(&self, endian: Endian) -> &[u8] {
+    fn to_bytes_endian(&self, endian: Endian) -> Self::AsBytesType {
         match endian {
             Endian::Big => self.to_bytes_be(),
             Endian::Little => self.to_bytes_le(),
@@ -304,32 +307,34 @@ macro_rules! implement_to_from_bytes {
     ( $( $t:ty ), *) => {
         $(
             impl ToFromBytesEndian for $t {
+    type AsBytesType = [u8; core::mem::size_of::<Self>()];
+
     fn byte_size() -> usize {
         core::mem::size_of::<Self>()
     }
 
-    fn to_bytes_le(&self) -> &[u8] {
-        self.to_bytes_le()
+    fn to_bytes_le(&self) -> Self::AsBytesType {
+        self.to_le_bytes()
     }
 
-    fn to_bytes_be(&self) -> &[u8] {
-        self.to_bytes_be()
+    fn to_bytes_be(&self) -> Self::AsBytesType {
+        self.to_be_bytes()
     }
 
-    fn to_bytes_ne(&self) -> &[u8] {
-        self.to_bytes_ne()
+    fn to_bytes_ne(&self) -> Self::AsBytesType {
+        self.to_ne_bytes()
     }
 
     fn from_bytes_le(bytes: &[u8]) -> Option<Self> {
-        Self::from_bytes_le(bytes.try_into().ok()?)
+        Some(Self::from_le_bytes(bytes.try_into().ok()?))
     }
 
     fn from_bytes_be(bytes: &[u8]) -> Option<Self> {
-        Self::from_bytes_ne(bytes.try_into().ok()?)
+        Some(Self::from_be_bytes(bytes.try_into().ok()?))
     }
 
     fn from_bytes_ne(bytes: &[u8]) -> Option<Self> {
-        Self::from_bytes_ne(bytes.try_into().ok()?)
+        Some(Self::from_ne_bytes(bytes.try_into().ok()?))
     }
 }
         )*
