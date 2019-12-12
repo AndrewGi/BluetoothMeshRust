@@ -54,6 +54,10 @@ impl WireSerializable for Payload {
 /// | DST           | 16    | Destination Address (Unicast, Group or Virtual            |
 /// | Transport PDU | 8-128 | Transport PDU (1-16 Bytes)                                |
 /// | NetMIC        | 32,64 | Message Integrity check for Payload (4 or 8 bytes)        |
+///
+/// NetMIC is 32 bit when CTL == 0
+/// NetMIC is 64 bit when CTL == 1
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Header {
     ivi: IVI,
     nid: NID,
@@ -135,4 +139,14 @@ impl WireSerializable for PDU {
     fn serialize_from(buf: &mut Bytes) -> Result<Self, SerializableError> {
         unimplemented!()
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::net::Header;
+
+    fn message_1_header() -> Header {
+        unimplemented!()
+    }
+    fn test_header() {}
 }
