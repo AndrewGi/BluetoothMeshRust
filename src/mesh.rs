@@ -2,7 +2,7 @@ use crate::bytes::ToFromBytesEndian;
 use core::fmt::{Display, Error, Formatter};
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
-pub struct IVI(bool);
+pub struct IVI(pub bool);
 impl From<IVI> for bool {
     fn from(i: IVI) -> Self {
         i.0
@@ -14,7 +14,7 @@ impl From<bool> for IVI {
     }
 }
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
-pub struct CTL(bool);
+pub struct CTL(pub bool);
 impl From<CTL> for bool {
     fn from(c: CTL) -> Self {
         c.0
@@ -45,6 +45,10 @@ impl TTL {
     pub fn new_with_flag(v: u8) -> (TTL, bool) {
         (TTL(v & 0x7F), v & 0x80 != 0)
     }
+    /// Creates a 7 bit TTL by masking out the 8th bit from a u8
+    pub fn from_masked_u8(v: u8) -> TTL {
+        TTL(v & 0x7F)
+    }
     pub fn should_relay(&self) -> bool {
         match self.0 {
             2..=127 => true,
@@ -69,7 +73,10 @@ impl NID {
     pub fn with_flag(&self, flag: bool) -> u8 {
         self.0 | ((flag as u8) << 7)
     }
-
+    /// Creates a 7 bit NID by masking out the 8th bit from a u8
+    pub fn from_masked_u8(v: u8) -> NID {
+        NID(v & 0x7F)
+    }
     /// returns 7 bit NID + 1 bit bool flag from 8bit uint.
     pub fn new_with_flag(v: u8) -> (NID, bool) {
         (NID(v & 0x7F), v & 0x80 != 0)
@@ -92,6 +99,10 @@ impl U24 {
             U24(v)
         }
     }
+    /// Creates a U24 by masking the 4th byte of 'v'
+    pub fn new_masked(v: u32) -> U24 {
+        U24(v & 0xFFFFFF)
+    }
     pub fn value(&self) -> u32 {
         self.0
     }
@@ -102,16 +113,16 @@ impl From<(u8, u8, u8)> for U24 {
     }
 }
 impl ToFromBytesEndian for U24 {
-    fn byte_size() -> usize {
-        3 // 24 bits = 3 * 8
+    type AsBytesType = [u8; 3];
+
+    fn to_bytes_le(&self) -> Self::AsBytesType {
+        let b = (self.0).to_bytes_le();
+        [b[0], b[1], b[2]]
     }
 
-    fn to_bytes_le(&self) -> &[u8] {
-        &(self.0).to_bytes_le()[..3]
-    }
-
-    fn to_bytes_be(&self) -> &[u8] {
-        &(self.0).to_bytes_be()[..3]
+    fn to_bytes_be(&self) -> Self::AsBytesType {
+        let b = (self.0).to_bytes_be();
+        [b[0], b[1], b[2]]
     }
 
     fn from_bytes_le(bytes: &[u8]) -> Option<Self> {
@@ -135,15 +146,13 @@ impl ToFromBytesEndian for U24 {
 pub struct SequenceNumber(pub U24);
 
 impl ToFromBytesEndian for SequenceNumber {
-    fn byte_size() -> usize {
-        3
-    }
+    type AsBytesType = [u8; 3];
 
-    fn to_bytes_le(&self) -> &[u8] {
+    fn to_bytes_le(&self) -> Self::AsBytesType {
         (self.0).to_bytes_le()
     }
 
-    fn to_bytes_be(&self) -> &[u8] {
+    fn to_bytes_be(&self) -> Self::AsBytesType {
         (self.0).to_bytes_be()
     }
 
@@ -160,6 +169,20 @@ pub enum MIC {
     Small(u32),
 }
 impl MIC {
+    pub fn try_from_bytes_be(bytes: &[u8]) -> Option<MIC> {
+        match bytes.len() {
+            4 => Some(MIC::Small(u32::from_bytes_be(bytes)?)),
+            8 => Some(MIC::Big(u64::from_bytes_be(bytes)?)),
+            _ => None,
+        }
+    }
+    pub fn try_from_bytes_le(bytes: &[u8]) -> Option<MIC> {
+        match bytes.len() {
+            4 => Some(MIC::Small(u32::from_bytes_le(bytes)?)),
+            8 => Some(MIC::Big(u64::from_bytes_le(bytes)?)),
+            _ => None,
+        }
+    }
     pub fn mic(&self) -> u64 {
         match self {
             MIC::Big(b) => *b,
@@ -180,41 +203,6 @@ impl MIC {
         }
     }
 }
-impl ToFromBytesEndian for MIC {
-    fn byte_size() -> usize {
-        unimplemented!("MIC byte size can be 4 or 8 bytes")
-    }
-
-    fn to_bytes_le(&self) -> &[u8] {
-        match self {
-            MIC::Big(b) => b.to_bytes_le(),
-            MIC::Small(s) => s.to_bytes_le(),
-        }
-    }
-
-    fn to_bytes_be(&self) -> &[u8] {
-        match self {
-            MIC::Big(b) => b.to_bytes_be(),
-            MIC::Small(s) => s.to_bytes_be(),
-        }
-    }
-
-    fn from_bytes_le(bytes: &[u8]) -> Option<Self> {
-        match bytes.len() {
-            4 => Some(MIC::Small(u32::from_bytes_le(bytes)?)),
-            8 => Some(MIC::Big(u64::from_bytes_le(bytes)?)),
-            _ => None,
-        }
-    }
-
-    fn from_bytes_be(bytes: &[u8]) -> Option<Self> {
-        match bytes.len() {
-            4 => Some(MIC::Small(u32::from_bytes_be(bytes)?)),
-            8 => Some(MIC::Big(u64::from_bytes_be(bytes)?)),
-            _ => None,
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -222,11 +210,16 @@ mod tests {
 
     #[test]
     fn test_ttl() {
-        assert!(!TTL(0).should_relay());
-        assert!(!TTL(1).should_relay());
-        assert!(TTL(2).should_relay());
-        assert!(TTL(65).should_relay());
-        assert!(TTL(126).should_relay());
-        assert!(TTL(127).should_relay())
+        assert!(!TTL::new(0).should_relay());
+        assert!(!TTL::new(1).should_relay());
+        assert!(TTL::new(2).should_relay());
+        assert!(TTL::new(65).should_relay());
+        assert!(TTL::new(126).should_relay());
+        assert!(TTL::new(127).should_relay())
+    }
+    #[test]
+    #[should_panic]
+    fn test_ttl_out_of_range() {
+        TTL::new(128);
     }
 }

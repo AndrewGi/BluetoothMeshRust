@@ -5,7 +5,7 @@ use crate::address::Address::{Unassigned, Unicast};
 use crate::address::{Address, UnicastAddress};
 use crate::bytes::{Buf, BufMut, Bytes, BytesMut};
 use crate::mesh::{SequenceNumber, CTL, IVI, MIC, NID, TTL};
-use crate::serializable::{SerializableError, WireSerializable};
+use crate::serializable::byte::{ByteSerializable, ByteSerializableError};
 use core::convert::TryFrom;
 
 pub struct Payload {
@@ -18,13 +18,13 @@ impl Payload {
         self.transport_length as usize + self.net_mic.byte_size()
     }
 }
-impl WireSerializable for Payload {
-    type Error = SerializableError;
-    fn serialize_to(&self, buf: &mut BytesMut) -> Result<(), SerializableError> {
+impl ByteSerializable for Payload {
+    type Error = ByteSerializableError;
+    fn serialize_to(&self, buf: &mut BytesMut) -> Result<(), ByteSerializableError> {
         if self.transport_length as usize > self.transport_pdu.len() {
-            Err(SerializableError::IncorrectParameter)
+            Err(ByteSerializableError::IncorrectParameter)
         } else if buf.remaining_space() < self.size() as usize {
-            Err(SerializableError::OutOfSpace)
+            Err(ByteSerializableError::OutOfSpace)
         } else {
             buf.push_bytes(self.transport_pdu[..self.transport_length as usize].iter());
             match self.net_mic {
@@ -35,7 +35,7 @@ impl WireSerializable for Payload {
         }
     }
 
-    fn serialize_from(buf: &mut Bytes) -> Result<Self, SerializableError> {
+    fn serialize_from(buf: &mut Bytes) -> Result<Self, ByteSerializableError> {
         unimplemented!("serialize_from for payload depends on MIC length")
     }
 }
@@ -74,34 +74,41 @@ impl Header {
     pub fn size(&self) -> usize {
         PDU_HEADER_SIZE
     }
+    pub fn big_mic(&self) -> bool {
+        self.ctl.into()
+    }
 }
 
-impl WireSerializable for Header {
-    type Error = SerializableError;
-    fn serialize_to(&self, buf: &mut BytesMut) -> Result<(), SerializableError> {
+impl ByteSerializable for Header {
+    type Error = ByteSerializableError;
+    fn serialize_to(&self, buf: &mut BytesMut) -> Result<(), ByteSerializableError> {
         if buf.remaining_space() < PDU_HEADER_SIZE {
-            Err(SerializableError::OutOfSpace)
+            Err(ByteSerializableError::OutOfSpace)
         } else if let Address::Unassigned = self.dst {
             // Can't have a PDU destination be unassigned
-            Err(SerializableError::IncorrectParameter)
+            Err(ByteSerializableError::IncorrectParameter)
         } else {
-            debug_assert_eq!(buf.length(), 0);
+            debug_assert_eq!(buf.length(), 0, "expecting empty buffer");
             buf.push_be(self.nid.with_flag(self.ivi.into()));
             buf.push_be(self.ttl.with_flag(self.ctl.into()));
             buf.push_be(self.seq);
             buf.push_be(self.src);
             buf.push_be(self.dst);
-            debug_assert_eq!(buf.length(), PDU_HEADER_SIZE);
+            debug_assert_eq!(
+                buf.length(),
+                PDU_HEADER_SIZE,
+                "buffer should be filled with header"
+            );
             Ok(())
         }
     }
 
-    fn serialize_from<'a>(buf: &'a mut Bytes) -> Result<Self, SerializableError> {
+    fn serialize_from(buf: &mut Bytes) -> Result<Self, ByteSerializableError> {
         if buf.remaining_space() < PDU_HEADER_SIZE as usize {
-            Err(SerializableError::IncorrectSize)
+            Err(ByteSerializableError::IncorrectSize)
         } else {
             let dst: Address = buf.pop_be().expect("dst address is infallible");
-            let src: UnicastAddress = buf.pop_be().ok_or(SerializableError::BadBytes)?;
+            let src: UnicastAddress = buf.pop_be().ok_or(ByteSerializableError::BadBytes)?;
             let seq: SequenceNumber = buf.pop_be().expect("sequence number is infallible");
             let (ttl, ctl_b) = TTL::new_with_flag(buf.pop_be().unwrap());
             let (nid, ivi_b) = NID::new_with_flag(buf.pop_be().unwrap());
@@ -124,11 +131,11 @@ pub struct PDU {
     payload: Payload,
 }
 
-impl WireSerializable for PDU {
-    type Error = SerializableError;
-    fn serialize_to(&self, buf: &mut BytesMut) -> Result<(), SerializableError> {
+impl ByteSerializable for PDU {
+    type Error = ByteSerializableError;
+    fn serialize_to(&self, buf: &mut BytesMut) -> Result<(), ByteSerializableError> {
         if self.header.size() as usize + self.payload.size() as usize > buf.remaining_space() {
-            Err(SerializableError::OutOfSpace)
+            Err(ByteSerializableError::OutOfSpace)
         } else {
             self.header.serialize_to(buf)?;
             self.payload.serialize_to(buf)?;
@@ -136,17 +143,33 @@ impl WireSerializable for PDU {
         }
     }
 
-    fn serialize_from(buf: &mut Bytes) -> Result<Self, SerializableError> {
+    fn serialize_from(buf: &mut Bytes) -> Result<Self, ByteSerializableError> {
         unimplemented!()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::net::Header;
+    use super::super::random::*;
+    use super::*;
+    use crate::mesh::U24;
 
+    /// Generates a random Network PDU Header. Helpful for testing.
+    pub fn random_header() -> Header {
+        Header {
+            ivi: random_bool().into(),
+            nid: NID::from_masked_u8(random_u8()),
+            ctl: random_bool().into(),
+            ttl: TTL::from_masked_u8(random_u8()),
+            seq: SequenceNumber(U24::new_masked(random_u32())),
+            src: UnicastAddress::from_mask_u16(random_u16()),
+            dst: random_u16().into(),
+        }
+    }
+    fn test_header_size() {}
     fn message_1_header() -> Header {
         unimplemented!()
     }
-    fn test_header() {}
+
+    fn test_random_headers_to_from_bytes() {}
 }

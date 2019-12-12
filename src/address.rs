@@ -2,14 +2,45 @@ use crate::bytes::ToFromBytesEndian;
 use crate::uuid::UUID;
 use core::convert::{TryFrom, TryInto};
 
+/// Mesh Addresses
+/// | Bits (16)             | Type          |
+/// |-----------------------|---------------|
+/// | 0b0000 0000 0000 0000 | Unassigned    |
+/// | 0b0xxx xxxx xxxx xxxx | Unicast       |
+/// | 0b10xx xxxx xxxx xxxx | Virtual       |
+/// | 0b11xx xxxx xxxx xxxx | Group         |
+///
+/// Endian depends on layer!!
+/// Little: Access/Foundation
+/// Big: Everything else
+
+const UNICAST_BIT: u16 = 0x8000;
+const UNICAST_MASK: u16 = !UNICAST_BIT;
+
+const VIRTUAL_BIT: u16 = 0x8000;
+const VIRTUAL_MASK: u16 = 0x3FFF;
+
+const GROUP_BIT: u16 = 0xC000;
+const GROUP_MASK: u16 = VIRTUAL_MASK;
+
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct UnicastAddress(u16);
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct GroupAddress(u16);
+/// Only stores the 14 bit hash of the virtual UUID.
+/// For the full 128 bit UUID, look at [`VirtualAddress`]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct VirtualAddressHash(u16);
+/// Stores the 14 bit hash and full 128 bit virtual UUID.
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct VirtualAddress(VirtualAddressHash, UUID);
+
+impl UnicastAddress {
+    /// Creates a Unicast address by masking any u16 into it.
+    pub fn from_mask_u16(v: u16) -> UnicastAddress {
+        UnicastAddress(v & UNICAST_MASK)
+    }
+}
 
 impl TryFrom<u16> for UnicastAddress {
     type Error = ();
@@ -17,7 +48,7 @@ impl TryFrom<u16> for UnicastAddress {
     fn try_from(v: u16) -> Result<UnicastAddress, Self::Error> {
         if v == 0 {
             Err(())
-        } else if v & 0x8000 == 0 {
+        } else if v & UNICAST_BIT == 0 {
             Ok(UnicastAddress(v))
         } else {
             Err(())
@@ -121,12 +152,50 @@ impl From<Address> for u16 {
     }
 }
 
-impl ToFromBytesEndian for Address {
-    fn byte_size() -> usize {
-        2
-    }
+impl TryFrom<&Address> for UnicastAddress {
+    type Error = ();
 
-    fn to_bytes_le(&self) -> &[u8] {
+    fn try_from(value: &Address) -> Result<Self, Self::Error> {
+        match value {
+            Address::Unicast(u) => Ok(*u),
+            _ => Err(()),
+        }
+    }
+}
+impl TryFrom<&Address> for VirtualAddressHash {
+    type Error = ();
+
+    fn try_from(value: &Address) -> Result<Self, Self::Error> {
+        match value {
+            Address::VirtualHash(h) => Ok(*h),
+            _ => Err(()),
+        }
+    }
+}
+impl TryFrom<&Address> for VirtualAddress {
+    type Error = ();
+
+    fn try_from(value: &Address) -> Result<Self, Self::Error> {
+        match value {
+            Address::Virtual(v) => Ok(*v),
+            _ => Err(()),
+        }
+    }
+}
+impl TryFrom<&Address> for GroupAddress {
+    type Error = ();
+
+    fn try_from(value: &Address) -> Result<Self, Self::Error> {
+        match value {
+            Address::Group(g) => Ok(*g),
+            _ => Err(()),
+        }
+    }
+}
+impl ToFromBytesEndian for Address {
+    type AsBytesType = [u8; 2];
+
+    fn to_bytes_le(&self) -> Self::AsBytesType {
         match self {
             Address::Unassigned => 0u16.to_bytes_le(),
             Address::Unicast(u) => (u.0).to_bytes_le(),
@@ -136,7 +205,7 @@ impl ToFromBytesEndian for Address {
         }
     }
 
-    fn to_bytes_be(&self) -> &[u8] {
+    fn to_bytes_be(&self) -> Self::AsBytesType {
         match self {
             Address::Unassigned => 0u16.to_bytes_be(),
             Address::Unicast(u) => (u.0).to_bytes_be(),
@@ -156,15 +225,13 @@ impl ToFromBytesEndian for Address {
 }
 
 impl ToFromBytesEndian for UnicastAddress {
-    fn byte_size() -> usize {
-        2
-    }
+    type AsBytesType = [u8; 2];
 
-    fn to_bytes_le(&self) -> &[u8] {
+    fn to_bytes_le(&self) -> Self::AsBytesType {
         (self.0).to_bytes_le()
     }
 
-    fn to_bytes_be(&self) -> &[u8] {
+    fn to_bytes_be(&self) -> Self::AsBytesType {
         (self.0).to_bytes_be()
     }
 
@@ -178,15 +245,13 @@ impl ToFromBytesEndian for UnicastAddress {
 }
 
 impl ToFromBytesEndian for VirtualAddressHash {
-    fn byte_size() -> usize {
-        2
-    }
+    type AsBytesType = [u8; 2];
 
-    fn to_bytes_le(&self) -> &[u8] {
+    fn to_bytes_le(&self) -> Self::AsBytesType {
         (self.0).to_bytes_le()
     }
 
-    fn to_bytes_be(&self) -> &[u8] {
+    fn to_bytes_be(&self) -> Self::AsBytesType {
         (self.0).to_bytes_be()
     }
 
@@ -199,15 +264,13 @@ impl ToFromBytesEndian for VirtualAddressHash {
     }
 }
 impl ToFromBytesEndian for GroupAddress {
-    fn byte_size() -> usize {
-        2
-    }
+    type AsBytesType = [u8; 2];
 
-    fn to_bytes_le(&self) -> &[u8] {
+    fn to_bytes_le(&self) -> Self::AsBytesType {
         (self.0).to_bytes_le()
     }
 
-    fn to_bytes_be(&self) -> &[u8] {
+    fn to_bytes_be(&self) -> Self::AsBytesType {
         (self.0).to_bytes_be()
     }
 
