@@ -141,8 +141,10 @@ impl ToFromBytesEndian for U24 {
         }
     }
 }
+#[derive(Copy, Clone, Eq, Ord, PartialOrd, PartialEq, Debug, Default, Hash)]
+pub struct IVIndex(pub u32);
 /// 24bit Sequence number
-#[derive(Copy, Clone, Eq, Ord, PartialOrd, PartialEq, Debug, Hash)]
+#[derive(Copy, Clone, Eq, Ord, PartialOrd, PartialEq, Debug, Default, Hash)]
 pub struct SequenceNumber(pub U24);
 
 impl ToFromBytesEndian for SequenceNumber {
