@@ -1,6 +1,7 @@
 use crate::bytes::ToFromBytesEndian;
 use crate::uuid::UUID;
 use core::convert::{TryFrom, TryInto};
+use core::ops::Deref;
 
 /// Mesh Addresses
 /// | Bits (16)             | Type          |
@@ -115,7 +116,7 @@ impl Address {
             _ => true,
         }
     }
-    fn value(self) -> u16 {
+    fn value(&self) -> u16 {
         self.into()
     }
 }
@@ -140,14 +141,14 @@ impl From<u16> for Address {
     }
 }
 
-impl From<Address> for u16 {
-    fn from(v: Address) -> Self {
+impl From<&Address> for u16 {
+    fn from(v: &Address) -> Self {
         match v {
             Address::Unassigned => 0,
-            Address::Unicast(u) => u.into(),
-            Address::Group(g) => g.into(),
-            Address::Virtual(v) => v.into(),
-            Address::VirtualHash(vh) => vh.into(),
+            Address::Unicast(u) => u.0,
+            Address::Group(g) => g.0,
+            Address::Virtual(v) => (v.0).0,
+            Address::VirtualHash(vh) => vh.0,
         }
     }
 }

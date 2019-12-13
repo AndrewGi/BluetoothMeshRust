@@ -1,3 +1,4 @@
+use crate::bytes::BufError::InvalidIndex;
 use core::convert::TryInto;
 use core::iter::Iterator;
 use core::ops::{Deref, DerefMut, Range, RangeBounds};
@@ -36,28 +37,35 @@ impl BytesMut<'_> {
         Self::new_with_length(data, data.len())
     }
 }
+pub enum BufError {
+    OutOfRange(usize),
+    OutOfSpace(usize),
+    InvalidIndex(usize),
+}
 pub trait Buf {
     fn length(&self) -> usize;
     /// Returns bytes trimmed to 0..capacity()
     fn bytes(&self) -> &[u8];
     fn capacity(&self) -> usize;
+    /// If adding `amount` overflows the length (length() > capacity(), cap it to capacity.
     fn add_length(&mut self, amount: usize);
+    /// If subtracting `amount` from length underflow it, set it to zero
     fn sub_length(&mut self, amount: usize);
-    fn remaining_space(&self) -> usize {
+    fn remaining_empty_space(&self) -> usize {
         self.capacity() - self.length()
     }
-    fn ensure_remaining_space(&self, amount: usize) {
-        if amount > self.remaining_space() {
-            panic!(
-                "buffer out of space {} > {}",
-                amount,
-                self.remaining_space()
-            )
+    fn ensure_remaining_empty_space(&self, amount: usize) -> Result<(), BufError> {
+        if amount > self.remaining_empty_space() {
+            Err(BufError::OutOfSpace(self.length() + amount))
+        } else {
+            Ok(())
         }
     }
-    fn ensure_in_range(&self, index: usize) {
+    fn ensure_in_range(&self, index: usize) -> Result<(), BufError> {
         if index > self.length() {
-            panic!("out of range {} > {}", index, self.remaining_space())
+            Err(BufError::OutOfRange(index))
+        } else {
+            Ok(())
         }
     }
     fn slice_to(&self, range: Range<usize>) -> Option<Bytes> {
@@ -67,31 +75,30 @@ pub trait Buf {
             Some(Bytes::new(&self.bytes()[range.start..range.end]))
         }
     }
-    fn get_n_bytes(&self, index: usize, amount: usize) -> &[u8] {
-        self.ensure_in_range(index + amount);
-        &self.bytes()[index..index + amount]
+    fn get_n_bytes(&self, index: usize, amount: usize) -> Result<&[u8], BufError> {
+        self.ensure_in_range(index + amount)?;
+        Ok(&self.bytes()[index..index + amount])
     }
-    fn peek_bytes(&self, amount: usize) -> &[u8] {
-        self.ensure_in_range(amount);
-        let b = &self.bytes()[self.length() - amount..];
-        b
+    fn peek_bytes(&self, amount: usize) -> Result<&[u8], BufError> {
+        if amount > self.length() {
+            Err(InvalidIndex(amount))
+        } else {
+            Ok(&self.bytes()[self.length() - amount..])
+        }
     }
-    fn pop_bytes(&mut self, amount: usize) -> &[u8] {
-        self.ensure_remaining_space(amount);
-        self.sub_length(amount);
-        self.peek_bytes(amount)
-    }
+    /// Has to be implemented per type because of lifetime issues
+    fn pop_bytes(&mut self, amount: usize) -> Result<&[u8], BufError>;
 
     fn get_at<T: ToFromBytesEndian>(&self, index: usize, endian: Endian) -> Option<T> {
         self.ensure_in_range(index + T::byte_size());
-        T::from_bytes_endian(self.get_n_bytes(index, T::byte_size()), endian)
+        T::from_bytes_endian(self.get_n_bytes(index, T::byte_size()).ok()?, endian)
     }
 
     fn peek_be<T: ToFromBytesEndian>(&self) -> Option<T> {
-        T::from_bytes_be(self.peek_bytes(T::byte_size()))
+        T::from_bytes_be(self.peek_bytes(T::byte_size()).ok()?)
     }
     fn peek_le<T: ToFromBytesEndian>(&self) -> Option<T> {
-        T::from_bytes_be(self.peek_bytes(T::byte_size()))
+        T::from_bytes_be(self.peek_bytes(T::byte_size()).ok()?)
     }
     fn pop_be<T: ToFromBytesEndian>(&mut self) -> Option<T> {
         let out = self.peek_be()?;
@@ -114,26 +121,53 @@ pub trait BufMut: Buf {
             Some(BytesMut::new(&mut self.bytes_mut()[range.start..range.end]))
         }
     }
-    fn push_u8(&mut self, value: u8);
-    fn push_bytes<'a, I: Iterator<Item = &'a u8>>(&mut self, value: I) {
-        let (low, high) = value.size_hint();
-        self.ensure_remaining_space(high.unwrap_or(low));
-        for v in value {
-            self.push_u8(*v)
+    fn push_u8(&mut self, value: u8) -> Result<(), BufError> {
+        self.ensure_remaining_empty_space(1)?;
+        self.add_length(1);
+        let l = self.length();
+        self.bytes_mut()[l - 1] = value;
+        Ok(())
+    }
+    fn peek_bytes_mut(&mut self, amount: usize) -> Result<&mut [u8], BufError> {
+        if amount > self.length() {
+            Err(InvalidIndex(amount))
+        } else {
+            let l = self.length();
+            Ok(&mut self.bytes_mut()[l - amount..])
         }
     }
-    fn get_n_bytes_mut(&mut self, index: usize, amount: usize) -> &mut [u8] {
+    fn push_bytes_slice(&mut self, slice: &[u8]) -> Result<&[u8], BufError> {
+        self.ensure_remaining_empty_space(slice.len())?;
+        self.add_length(slice.len());
+        let mut b = self.peek_bytes_mut(slice.len())?;
+        b.copy_from_slice(slice);
+        Ok(b)
+    }
+    fn push_bytes_iter<'a, I: Iterator<Item = &'a u8>>(
+        &mut self,
+        value: I,
+    ) -> Result<&[u8], BufError> {
+        let (low, high) = value.size_hint();
+        self.ensure_remaining_empty_space(high.unwrap_or(low))?;
+        let mut count = 0;
+        for v in value {
+            self.push_u8(*v)?;
+            count += 1;
+        }
+        self.peek_bytes(count)
+    }
+    fn get_n_bytes_mut(&mut self, index: usize, amount: usize) -> Result<&mut [u8], BufError> {
         self.ensure_in_range(index + amount);
-        &mut self.bytes_mut()[index..index + amount]
+        Ok(&mut self.bytes_mut()[index..index + amount])
     }
-    fn push_bytes_swapped(&mut self, value: &[u8]) {
-        self.push_bytes(value.iter().rev())
+    fn push_bytes_swapped(&mut self, value: &[u8]) -> Result<&[u8], BufError> {
+        self.push_bytes_iter(value.iter().rev())
     }
-    fn push_be(&mut self, b: impl ToFromBytesEndian) {
-        self.push_bytes(b.to_bytes_be().as_ref().iter())
+    fn push_be(&mut self, b: impl ToFromBytesEndian) -> Result<&[u8], BufError> {
+        self.push_bytes_slice(b.to_bytes_be().as_ref())
     }
-    fn push_le(&mut self, b: impl ToFromBytesEndian) {
-        self.push_bytes(b.to_bytes_le().as_ref().iter())
+    fn push_le(&mut self, b: impl ToFromBytesEndian) -> Result<&[u8], BufError> {
+        self.push_bytes_slice(b.to_bytes_le().as_ref())
     }
 }
 impl Deref for Bytes<'_> {
@@ -169,12 +203,23 @@ impl<'a> Buf for Bytes<'a> {
     }
 
     fn add_length(&mut self, amount: usize) {
-        self.ensure_remaining_space(amount);
+        self.ensure_remaining_empty_space(amount);
         self.length += amount;
     }
     fn sub_length(&mut self, amount: usize) {
         self.ensure_in_range(amount);
         self.length -= amount;
+    }
+
+    fn pop_bytes(&mut self, amount: usize) -> Result<&[u8], BufError> {
+        if amount > self.length {
+            Err(InvalidIndex(amount))
+        } else {
+            let end = self.length;
+            let start = self.length - amount;
+            self.length -= amount;
+            Ok(&self.data[start..end])
+        }
     }
 }
 impl<'a> From<&'a BytesMut<'a>> for Bytes<'a> {
@@ -199,23 +244,33 @@ impl Buf for BytesMut<'_> {
     }
 
     fn add_length(&mut self, amount: usize) {
-        self.ensure_remaining_space(amount);
-        self.length += amount;
+        if self.length + amount > self.capacity() {
+            self.length = self.capacity()
+        } else {
+            self.length += amount;
+        }
     }
     fn sub_length(&mut self, amount: usize) {
-        self.ensure_in_range(amount);
-        self.length -= amount;
+        if amount > self.length {
+            self.length = 0
+        } else {
+            self.length -= amount;
+        }
+    }
+    fn pop_bytes(&mut self, amount: usize) -> Result<&[u8], BufError> {
+        if amount > self.length {
+            Err(InvalidIndex(amount))
+        } else {
+            let end = self.length;
+            let start = self.length - amount;
+            self.length -= amount;
+            Ok(&self.data[start..end])
+        }
     }
 }
 impl BufMut for BytesMut<'_> {
     fn bytes_mut(&mut self) -> &mut [u8] {
         &mut self.data[..self.length]
-    }
-
-    fn push_u8(&mut self, value: u8) {
-        self.ensure_remaining_space(1);
-        self.data[self.length] = value;
-        self.length += 1;
     }
 }
 
@@ -268,41 +323,7 @@ pub trait ToFromBytesEndian: Sized {
         }
     }
 }
-/*
-impl<T, U> ToFromBytesEndian for U
-where
-    T: ToFromBytesEndian,
-    U: From<T> + Into<T> + Copy,
-{
-    fn byte_size() -> usize {
-        T::byte_size()
-    }
-
-    fn to_bytes_le(&self) -> &[u8] {
-        T::from(self).to_bytes_le()
-    }
-
-    fn to_bytes_be(&self) -> &[u8] {
-        T::from(self).to_bytes_be()
-    }
-
-    fn to_bytes_ne(&self) -> &[u8] {
-        T::from(self).to_bytes_ne()
-    }
-
-    fn from_bytes_le(bytes: &[u8]) -> Option<Self> {
-        Some(U::from(T::from_bytes_le(bytes)?))
-    }
-
-    fn from_bytes_be(bytes: &[u8]) -> Option<Self> {
-        Some(U::from(T::from_bytes_be(bytes)?))
-    }
-
-    fn from_bytes_ne(bytes: &[u8]) -> Option<Self> {
-        Some(U::from(T::from_bytes_ne(bytes)?))
-    }
-}
-*/
+/// Implement ToFromEndian for all primitive types (see beneath)
 macro_rules! implement_to_from_bytes {
     ( $( $t:ty ), *) => {
         $(

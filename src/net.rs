@@ -8,28 +8,79 @@ use crate::mesh::{SequenceNumber, CTL, IVI, MIC, NID, TTL};
 use crate::serializable::byte::{ByteSerializable, ByteSerializableError};
 use core::convert::TryFrom;
 
-pub struct Payload {
-    transport_pdu: [u8; 16], //FIXME: Give me a proper data type
+pub struct EncryptedTransportPDU {
+    transport_pdu: [u8; 16],
     transport_length: u8,
+}
+impl EncryptedTransportPDU {
+    pub fn len(&self) -> usize {
+        self.transport_length as usize
+    }
+    pub fn data(&self) -> &[u8] {
+        let l = self.len();
+        debug_assert!(
+            l <= self.transport_pdu.len(),
+            "transport_length is longer than max transport PDU size {} > {}",
+            l,
+            self.transport_pdu.len()
+        );
+        &self.transport_pdu[..l]
+    }
+    pub fn data_mut(&mut self) -> &mut [u8] {
+        let l = self.len();
+        debug_assert!(
+            l <= self.transport_pdu.len(),
+            "transport_length is longer than max transport PDU size {} > {}",
+            l,
+            self.transport_pdu.len()
+        );
+        &mut self.transport_pdu[..l]
+    }
+}
+impl AsRef<[u8]> for EncryptedTransportPDU {
+    fn as_ref(&self) -> &[u8] {
+        self.data()
+    }
+}
+impl AsMut<[u8]> for EncryptedTransportPDU {
+    fn as_mut(&mut self) -> &mut [u8] {
+        self.data_mut()
+    }
+}
+impl ByteSerializable for EncryptedTransportPDU {
+    type Error = ByteSerializableError;
+
+    fn serialize_to(&self, buf: &mut BytesMut) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
+
+    fn serialize_from(buf: &mut Bytes) -> Result<Self, Self::Error> {
+        unimplemented!()
+    }
+}
+pub struct Payload {
+    transport_pdu: EncryptedTransportPDU,
     net_mic: MIC,
 }
+
 impl Payload {
     pub fn size(&self) -> usize {
-        self.transport_length as usize + self.net_mic.byte_size()
+        self.transport_pdu.len() + self.net_mic.byte_size()
     }
 }
 impl ByteSerializable for Payload {
     type Error = ByteSerializableError;
     fn serialize_to(&self, buf: &mut BytesMut) -> Result<(), ByteSerializableError> {
-        if self.transport_length as usize > self.transport_pdu.len() {
+        let m = Self::map_byte_result;
+        if self.size() > self.transport_pdu.len() {
             Err(ByteSerializableError::IncorrectParameter)
-        } else if buf.remaining_space() < self.size() as usize {
+        } else if buf.remaining_empty_space() < self.size() as usize {
             Err(ByteSerializableError::OutOfSpace)
         } else {
-            buf.push_bytes(self.transport_pdu[..self.transport_length as usize].iter());
+            m(buf.push_bytes_slice(self.transport_pdu.data()))?;
             match self.net_mic {
-                MIC::Big(b) => buf.push_be(b),
-                MIC::Small(s) => buf.push_be(s),
+                MIC::Big(b) => m(buf.push_be(b))?,
+                MIC::Small(s) => m(buf.push_be(s))?,
             }
             Ok(())
         }
@@ -82,7 +133,7 @@ impl Header {
 impl ByteSerializable for Header {
     type Error = ByteSerializableError;
     fn serialize_to(&self, buf: &mut BytesMut) -> Result<(), ByteSerializableError> {
-        if buf.remaining_space() < PDU_HEADER_SIZE {
+        if buf.remaining_empty_space() < PDU_HEADER_SIZE {
             Err(ByteSerializableError::OutOfSpace)
         } else if let Address::Unassigned = self.dst {
             // Can't have a PDU destination be unassigned
@@ -104,7 +155,7 @@ impl ByteSerializable for Header {
     }
 
     fn serialize_from(buf: &mut Bytes) -> Result<Self, ByteSerializableError> {
-        if buf.remaining_space() < PDU_HEADER_SIZE as usize {
+        if buf.remaining_empty_space() < PDU_HEADER_SIZE as usize {
             Err(ByteSerializableError::IncorrectSize)
         } else {
             let dst: Address = buf.pop_be().expect("dst address is infallible");
@@ -134,7 +185,8 @@ pub struct PDU {
 impl ByteSerializable for PDU {
     type Error = ByteSerializableError;
     fn serialize_to(&self, buf: &mut BytesMut) -> Result<(), ByteSerializableError> {
-        if self.header.size() as usize + self.payload.size() as usize > buf.remaining_space() {
+        if self.header.size() as usize + self.payload.size() as usize > buf.remaining_empty_space()
+        {
             Err(ByteSerializableError::OutOfSpace)
         } else {
             self.header.serialize_to(buf)?;
@@ -167,9 +219,12 @@ mod tests {
         }
     }
     fn test_header_size() {}
+    /// Message #1 from Mesh Core v1.0 Sample Data
     fn message_1_header() -> Header {
-        unimplemented!()
+        unimplemented!();
     }
-
-    fn test_random_headers_to_from_bytes() {}
+    #[test]
+    fn test_random_headers_to_from_bytes() {
+        for i in 0..10 {}
+    }
 }
