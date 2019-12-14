@@ -3,14 +3,33 @@
 
 use crate::address::Address::{Unassigned, Unicast};
 use crate::address::{Address, UnicastAddress};
-use crate::bytes::{Buf, BufMut, Bytes, BytesMut};
+use crate::bytes::BufError::BadBytes;
+use crate::bytes::{Buf, BufError, BufMut, Bytes, BytesMut};
 use crate::mesh::{SequenceNumber, CTL, IVI, MIC, NID, TTL};
-use crate::serializable::byte::{ByteSerializable, ByteSerializableError};
-use core::convert::TryFrom;
+use crate::serializable::byte::ByteSerializable;
+use core::convert::{TryFrom, TryInto};
 
+const TRANSPORT_PDU_MAX_LENGTH: usize = 16;
 pub struct EncryptedTransportPDU {
-    transport_pdu: [u8; 16],
+    transport_pdu: [u8; TRANSPORT_PDU_MAX_LENGTH],
     transport_length: u8,
+}
+impl TryFrom<&[u8]> for EncryptedTransportPDU {
+    type Error = BufError;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        let l = value.len();
+        if l > Self::max_len() {
+            Err(BufError::OutOfRange(l))
+        } else {
+            let mut buf: [u8; TRANSPORT_PDU_MAX_LENGTH] = Default::default();
+            buf[..l].copy_from_slice(&value);
+            Ok(EncryptedTransportPDU {
+                transport_pdu: buf,
+                transport_length: l as u8,
+            })
+        }
+    }
 }
 impl EncryptedTransportPDU {
     pub fn len(&self) -> usize {
@@ -19,22 +38,25 @@ impl EncryptedTransportPDU {
     pub fn data(&self) -> &[u8] {
         let l = self.len();
         debug_assert!(
-            l <= self.transport_pdu.len(),
+            l <= Self::max_len(),
             "transport_length is longer than max transport PDU size {} > {}",
             l,
-            self.transport_pdu.len()
+            Self::max_len()
         );
         &self.transport_pdu[..l]
     }
     pub fn data_mut(&mut self) -> &mut [u8] {
         let l = self.len();
         debug_assert!(
-            l <= self.transport_pdu.len(),
+            l <= Self::max_len(),
             "transport_length is longer than max transport PDU size {} > {}",
             l,
-            self.transport_pdu.len()
+            Self::max_len()
         );
         &mut self.transport_pdu[..l]
+    }
+    pub fn max_len() -> usize {
+        TRANSPORT_PDU_MAX_LENGTH
     }
 }
 impl AsRef<[u8]> for EncryptedTransportPDU {
@@ -48,14 +70,20 @@ impl AsMut<[u8]> for EncryptedTransportPDU {
     }
 }
 impl ByteSerializable for EncryptedTransportPDU {
-    type Error = ByteSerializableError;
-
-    fn serialize_to(&self, buf: &mut BytesMut) -> Result<(), Self::Error> {
-        unimplemented!()
+    fn serialize_to(&self, buf: &mut BytesMut) -> Result<(), BufError> {
+        buf.push_bytes_slice(self.data())?;
+        Ok(())
     }
 
-    fn serialize_from(buf: &mut Bytes) -> Result<Self, Self::Error> {
-        unimplemented!()
+    fn serialize_from(buf: &mut Bytes) -> Result<Self, BufError> {
+        if buf.len() > Self::max_len() {
+            Err(BufError::OutOfRange(buf.len()))
+        } else {
+            Ok(buf
+                .pop_bytes(buf.len())?
+                .try_into()
+                .expect("slice should be small enough"))
+        }
     }
 }
 pub struct Payload {
@@ -67,26 +95,27 @@ impl Payload {
     pub fn size(&self) -> usize {
         self.transport_pdu.len() + self.net_mic.byte_size()
     }
+    pub fn max_size() -> usize {
+        EncryptedTransportPDU::max_len() + MIC::max_size()
+    }
 }
 impl ByteSerializable for Payload {
-    type Error = ByteSerializableError;
-    fn serialize_to(&self, buf: &mut BytesMut) -> Result<(), ByteSerializableError> {
-        let m = Self::map_byte_result;
-        if self.size() > self.transport_pdu.len() {
-            Err(ByteSerializableError::IncorrectParameter)
-        } else if buf.remaining_empty_space() < self.size() as usize {
-            Err(ByteSerializableError::OutOfSpace)
+    fn serialize_to(&self, buf: &mut BytesMut) -> Result<(), BufError> {
+        if self.size() > Self::max_size() {
+            Err(BufError::InvalidInput)
+        } else if buf.remaining_empty_space() < self.size() {
+            Err(BufError::OutOfSpace(self.size()))
         } else {
-            m(buf.push_bytes_slice(self.transport_pdu.data()))?;
+            buf.push_bytes_slice(self.transport_pdu.data())?;
             match self.net_mic {
-                MIC::Big(b) => m(buf.push_be(b))?,
-                MIC::Small(s) => m(buf.push_be(s))?,
-            }
+                MIC::Big(b) => buf.push_be(b)?,
+                MIC::Small(s) => buf.push_be(s)?,
+            };
             Ok(())
         }
     }
 
-    fn serialize_from(buf: &mut Bytes) -> Result<Self, ByteSerializableError> {
+    fn serialize_from(buf: &mut Bytes) -> Result<Self, BufError> {
         unimplemented!("serialize_from for payload depends on MIC length")
     }
 }
@@ -122,22 +151,28 @@ pub struct Header {
 const PDU_HEADER_SIZE: usize = 1 + 1 + 3 + 2 + 2;
 
 impl Header {
-    pub fn size(&self) -> usize {
+    pub fn size() -> usize {
         PDU_HEADER_SIZE
     }
     pub fn big_mic(&self) -> bool {
         self.ctl.into()
     }
+    pub fn mic_size(&self) -> usize {
+        if self.big_mic() {
+            MIC::big_size()
+        } else {
+            MIC::small_size()
+        }
+    }
 }
 
 impl ByteSerializable for Header {
-    type Error = ByteSerializableError;
-    fn serialize_to(&self, buf: &mut BytesMut) -> Result<(), ByteSerializableError> {
+    fn serialize_to(&self, buf: &mut BytesMut) -> Result<(), BufError> {
         if buf.remaining_empty_space() < PDU_HEADER_SIZE {
-            Err(ByteSerializableError::OutOfSpace)
+            Err(BufError::OutOfSpace(PDU_HEADER_SIZE))
         } else if let Address::Unassigned = self.dst {
             // Can't have a PDU destination be unassigned
-            Err(ByteSerializableError::IncorrectParameter)
+            Err(BufError::InvalidInput)
         } else {
             debug_assert_eq!(buf.length(), 0, "expecting empty buffer");
             buf.push_be(self.nid.with_flag(self.ivi.into()));
@@ -154,12 +189,12 @@ impl ByteSerializable for Header {
         }
     }
 
-    fn serialize_from(buf: &mut Bytes) -> Result<Self, ByteSerializableError> {
-        if buf.remaining_empty_space() < PDU_HEADER_SIZE as usize {
-            Err(ByteSerializableError::IncorrectSize)
+    fn serialize_from(buf: &mut Bytes) -> Result<Self, BufError> {
+        if buf.length() < PDU_HEADER_SIZE {
+            Err(BufError::InvalidInput)
         } else {
             let dst: Address = buf.pop_be().expect("dst address is infallible");
-            let src: UnicastAddress = buf.pop_be().ok_or(ByteSerializableError::BadBytes)?;
+            let src: UnicastAddress = buf.pop_be().ok_or(BufError::BadBytes(2))?;
             let seq: SequenceNumber = buf.pop_be().expect("sequence number is infallible");
             let (ttl, ctl_b) = TTL::new_with_flag(buf.pop_be().unwrap());
             let (nid, ivi_b) = NID::new_with_flag(buf.pop_be().unwrap());
@@ -181,13 +216,15 @@ pub struct PDU {
     header: Header,
     payload: Payload,
 }
-
+impl PDU {
+    pub fn max_size() -> usize {
+        Header::size() + Payload::max_size()
+    }
+}
 impl ByteSerializable for PDU {
-    type Error = ByteSerializableError;
-    fn serialize_to(&self, buf: &mut BytesMut) -> Result<(), ByteSerializableError> {
-        if self.header.size() as usize + self.payload.size() as usize > buf.remaining_empty_space()
-        {
-            Err(ByteSerializableError::OutOfSpace)
+    fn serialize_to(&self, buf: &mut BytesMut) -> Result<(), BufError> {
+        if Header::size() + self.payload.size() > buf.remaining_empty_space() {
+            Err(BufError::OutOfSpace(Header::size() + self.payload.size()))
         } else {
             self.header.serialize_to(buf)?;
             self.payload.serialize_to(buf)?;
@@ -195,8 +232,20 @@ impl ByteSerializable for PDU {
         }
     }
 
-    fn serialize_from(buf: &mut Bytes) -> Result<Self, ByteSerializableError> {
-        unimplemented!()
+    fn serialize_from(buf: &mut Bytes) -> Result<Self, BufError> {
+        if buf.length() > Self::max_size() {
+            Err(BufError::OutOfRange(buf.length()))
+        } else {
+            let header = Header::serialize_from(&mut buf.pop_front_bytes(Header::size())?)?;
+            let mic =
+                MIC::try_from_bytes_be(buf.pop_bytes(header.mic_size())?).ok_or(BadBytes(0))?;
+            let encrypted_payload = EncryptedTransportPDU::serialize_from(buf)?;
+            let payload = Payload {
+                transport_pdu: encrypted_payload,
+                net_mic: mic,
+            };
+            Ok(PDU { header, payload })
+        }
     }
 }
 

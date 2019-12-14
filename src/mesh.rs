@@ -170,18 +170,20 @@ pub enum MIC {
     Big(u64),
     Small(u32),
 }
+const BIG_MIC_SIZE: usize = 8;
+const SMALL_MIC_SIZE: usize = 4;
 impl MIC {
     pub fn try_from_bytes_be(bytes: &[u8]) -> Option<MIC> {
         match bytes.len() {
-            4 => Some(MIC::Small(u32::from_bytes_be(bytes)?)),
-            8 => Some(MIC::Big(u64::from_bytes_be(bytes)?)),
+            SMALL_MIC_SIZE => Some(MIC::Small(u32::from_bytes_be(bytes)?)),
+            BIG_MIC_SIZE => Some(MIC::Big(u64::from_bytes_be(bytes)?)),
             _ => None,
         }
     }
     pub fn try_from_bytes_le(bytes: &[u8]) -> Option<MIC> {
         match bytes.len() {
-            4 => Some(MIC::Small(u32::from_bytes_le(bytes)?)),
-            8 => Some(MIC::Big(u64::from_bytes_le(bytes)?)),
+            SMALL_MIC_SIZE => Some(MIC::Small(u32::from_bytes_le(bytes)?)),
+            BIG_MIC_SIZE => Some(MIC::Big(u64::from_bytes_le(bytes)?)),
             _ => None,
         }
     }
@@ -199,10 +201,19 @@ impl MIC {
     }
     pub fn byte_size(&self) -> usize {
         if self.is_big() {
-            8
+            BIG_MIC_SIZE
         } else {
-            4
+            SMALL_MIC_SIZE
         }
+    }
+    pub fn max_size() -> usize {
+        BIG_MIC_SIZE
+    }
+    pub fn small_size() -> usize {
+        SMALL_MIC_SIZE
+    }
+    pub fn big_size() -> usize {
+        BIG_MIC_SIZE
     }
 }
 

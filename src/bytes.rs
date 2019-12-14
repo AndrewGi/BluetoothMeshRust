@@ -1,4 +1,4 @@
-use crate::bytes::BufError::InvalidIndex;
+use crate::bytes::BufError::{InvalidIndex, OutOfRange};
 use core::convert::TryInto;
 use core::iter::Iterator;
 use core::ops::{Deref, DerefMut, Range, RangeBounds};
@@ -37,10 +37,13 @@ impl BytesMut<'_> {
         Self::new_with_length(data, data.len())
     }
 }
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Debug)]
 pub enum BufError {
     OutOfRange(usize),
     OutOfSpace(usize),
     InvalidIndex(usize),
+    BadBytes(usize),
+    InvalidInput,
 }
 pub trait Buf {
     fn length(&self) -> usize;
@@ -68,11 +71,12 @@ pub trait Buf {
             Ok(())
         }
     }
-    fn slice_to(&self, range: Range<usize>) -> Option<Bytes> {
+    fn pop_front_bytes(&mut self, amount: usize) -> Result<Bytes, BufError>;
+    fn slice_to(&self, range: Range<usize>) -> Result<Bytes, BufError> {
         if range.end > self.length() {
-            None
+            Err(BufError::OutOfRange(range.end))
         } else {
-            Some(Bytes::new(&self.bytes()[range.start..range.end]))
+            Ok(Bytes::new(&self.bytes()[range.start..range.end]))
         }
     }
     fn get_n_bytes(&self, index: usize, amount: usize) -> Result<&[u8], BufError> {
@@ -114,11 +118,11 @@ pub trait Buf {
 
 pub trait BufMut: Buf {
     fn bytes_mut(&mut self) -> &mut [u8];
-    fn slice_to_mut(&mut self, range: Range<usize>) -> Option<BytesMut> {
+    fn slice_to_mut(&mut self, range: Range<usize>) -> Result<BytesMut, BufError> {
         if range.end > self.length() {
-            None
+            Err(BufError::OutOfRange(range.end))
         } else {
-            Some(BytesMut::new(&mut self.bytes_mut()[range.start..range.end]))
+            Ok(BytesMut::new(&mut self.bytes_mut()[range.start..range.end]))
         }
     }
     fn push_u8(&mut self, value: u8) -> Result<(), BufError> {
@@ -211,6 +215,21 @@ impl<'a> Buf for Bytes<'a> {
         self.length -= amount;
     }
 
+    fn pop_front_bytes<'b>(&'b mut self, amount: usize) -> Result<Bytes, BufError> {
+        if amount > self.length() {
+            Err(OutOfRange(amount))
+        } else {
+            let (bytes, rest) = self.data.split_at(amount);
+            // Unsafe because we have to fix the lifetimes to set `self.data` to `rest`
+            let (bytes, rest) = unsafe {
+                core::mem::transmute::<(&'b [u8], &'b [u8]), (&'a [u8], &'a [u8])>((bytes, rest))
+            };
+            self.length -= amount;
+            self.data = rest;
+            Ok(Bytes::new(bytes))
+        }
+    }
+
     fn pop_bytes(&mut self, amount: usize) -> Result<&[u8], BufError> {
         if amount > self.length {
             Err(InvalidIndex(amount))
@@ -230,11 +249,22 @@ impl<'a> From<&'a BytesMut<'a>> for Bytes<'a> {
         }
     }
 }
-impl Buf for BytesMut<'_> {
+impl<'a> Buf for BytesMut<'a> {
     fn length(&self) -> usize {
         self.length
     }
-
+    fn pop_front_bytes<'b>(&'b mut self, amount: usize) -> Result<Bytes, BufError> {
+        let (bytes, rest) = self.data.split_at_mut(amount);
+        // Unsafe because we have to fix the lifetimes to set `self.data` to `rest`
+        let (bytes, rest) = unsafe {
+            core::mem::transmute::<(&'b mut [u8], &'b mut [u8]), (&'a mut [u8], &'a mut [u8])>((
+                bytes, rest,
+            ))
+        };
+        self.length -= amount;
+        self.data = rest;
+        Ok(Bytes::new(bytes))
+    }
     fn bytes(&self) -> &[u8] {
         &self.data[..self.length]
     }
