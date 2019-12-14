@@ -3,6 +3,8 @@
 #![allow(dead_code)]
 extern crate alloc;
 
+mod ble;
+
 mod bytes;
 mod random;
 mod serializable;
