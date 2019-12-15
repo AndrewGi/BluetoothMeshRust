@@ -28,12 +28,12 @@ impl From<bool> for CTL {
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct TTL(u8);
 
-const TTL_MAX: u8 = 127;
+const TTL_MASK: u8 = 127;
 
 impl TTL {
     pub fn new(v: u8) -> TTL {
-        if v > TTL_MAX {
-            panic!("TTL {} is bigger than max TTL {}", v, TTL_MAX);
+        if v > TTL_MASK {
+            panic!("TTL {} is bigger than max TTL {}", v, TTL_MASK);
         } else {
             TTL(v)
         }
@@ -43,11 +43,11 @@ impl TTL {
     }
     /// returns 7 bit TTL + 1 bit bool flag from 8bit uint.
     pub fn new_with_flag(v: u8) -> (TTL, bool) {
-        (TTL(v & 0x7F), v & 0x80 != 0)
+        (TTL(v & TTL_MASK), v & !TTL_MASK != 0)
     }
     /// Creates a 7 bit TTL by masking out the 8th bit from a u8
     pub fn from_masked_u8(v: u8) -> TTL {
-        TTL(v & 0x7F)
+        TTL(v & TTL_MASK)
     }
     pub fn should_relay(&self) -> bool {
         match self.0 {
@@ -56,10 +56,19 @@ impl TTL {
         }
     }
 }
-
+impl Display for TTL {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        write!(f, "TTL({})", self.0)
+    }
+}
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct NID(u8);
 
+impl Display for NID {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        write!(f, "NID({})", self.0)
+    }
+}
 const NID_MAX: u8 = 127;
 
 impl NID {
@@ -143,10 +152,20 @@ impl ToFromBytesEndian for U24 {
 }
 #[derive(Copy, Clone, Eq, Ord, PartialOrd, PartialEq, Debug, Default, Hash)]
 pub struct IVIndex(pub u32);
+impl Display for IVIndex {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        write!(f, "IVIndex({})", self.0)
+    }
+}
 /// 24bit Sequence number
 #[derive(Copy, Clone, Eq, Ord, PartialOrd, PartialEq, Debug, Default, Hash)]
 pub struct SequenceNumber(pub U24);
 
+impl Display for SequenceNumber {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        write!(f, "SequenceNumber({})", (self.0).value())
+    }
+}
 impl ToFromBytesEndian for SequenceNumber {
     type AsBytesType = [u8; 3];
 
@@ -166,6 +185,7 @@ impl ToFromBytesEndian for SequenceNumber {
         Some(SequenceNumber(U24::from_bytes_be(bytes)?))
     }
 }
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub enum MIC {
     Big(u64),
     Small(u32),
@@ -236,6 +256,15 @@ impl MIC {
     }
 }
 
+impl Display for MIC {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        let (name, value) = match self {
+            MIC::Big(b) => ("Big", *b),
+            MIC::Small(s) => ("Small", *s as u64),
+        };
+        write!(f, "{}({})", name, value)
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

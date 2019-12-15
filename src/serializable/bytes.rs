@@ -271,10 +271,18 @@ impl<'a> Buf for BytesMut<'a> {
     fn length(&self) -> usize {
         self.length
     }
-    fn pop_front_bytes<'b>(&'b mut self, amount: usize) -> Result<Bytes, BufError> {
+    fn pop_front_bytes<'b>(&'b mut self, amount: usize) -> Result<Bytes<'b>, BufError> {
+        if amount == 0 {
+            return Ok(Bytes::new(&self.bytes()[..0]));
+        }
+        if amount > self.length {
+            return Err(BufError::OutOfRange(amount));
+        }
         let (bytes, rest) = self.data.split_at_mut(amount);
         // Unsafe because we have to fix the lifetimes to set `self.data` to `rest`
         let (bytes, rest) = unsafe {
+            // Upgrade the lifetimes so we can replace `self.data` with `rest` without
+            // complaining about the temporary lifetime issue
             core::mem::transmute::<(&'b mut [u8], &'b mut [u8]), (&'a mut [u8], &'a mut [u8])>((
                 bytes, rest,
             ))
