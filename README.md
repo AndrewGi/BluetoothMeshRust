@@ -1,19 +1,23 @@
-### Bluetooth Mesh Rust
+# Bluetooth Mesh Rust
 Bluetooth Mesh stack implemented in Rust. In progress port/rewrite of Ero Bluetooth Mesh
 
+## 8 Layer system
+![The 8 Layer of the Bluetooth Mesh Stack](/mesh_layout.PNG)
 
-# Big Endian
-- Network, Lower, Upper, Beacon, Provisioning
+### Big Endian
+- Network
 - Lower
 - Upper
 - Beacons
 - Provisioning
-# Little Endian
+### Little Endian
 - Access
 - Foundation
 
 
 TODO:
+- [ ] Model
+  - [ ] Isolated SDK layer
 - [ ] Stack
   - [ ] Access
     - [ ] Elements
@@ -41,6 +45,9 @@ TODO:
       - [ ] Reassembly
       - [ ] Friend Queue
   - [ ] Net
+    - [ ] Encrypting
+    - [x] Payload
+    - [x] Header
   - [ ] Bearers
     - [ ] PB-ADV
       - [ ] Links for Provisioning
@@ -52,6 +59,7 @@ TODO:
 - [ ] Serialization
   - [ ] Wire Serialization
   - [ ] Text Serialization
+    - [x] Tests written
 
 - [ ] Models
   - [ ] Config
