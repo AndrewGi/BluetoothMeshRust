@@ -1,4 +1,4 @@
-use crate::bytes::ToFromBytesEndian;
+use crate::serializable::bytes::ToFromBytesEndian;
 use crate::uuid::UUID;
 use core::convert::{TryFrom, TryInto};
 use core::ops::Deref;

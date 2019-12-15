@@ -65,10 +65,7 @@ mod test {
             Microseconds::try_from(milli).unwrap(),
             Microseconds(1000 * 1000)
         );
-        assert_eq!(
-            Nanoseconds::try_from(milli).unwrap(),
-            Nanoseconds(1000 * 1000 * 1000)
-        );
+        assert_eq!(Nanoseconds::try_from(milli).unwrap(), nano);
 
         assert!(Microseconds::try_from(big_milli).is_ok());
         assert!(Nanoseconds::try_from(big_milli).is_err());

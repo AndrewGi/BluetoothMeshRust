@@ -3,10 +3,9 @@
 
 use crate::address::Address::{Unassigned, Unicast};
 use crate::address::{Address, UnicastAddress};
-use crate::bytes::BufError::BadBytes;
-use crate::bytes::{Buf, BufError, BufMut, Bytes, BytesMut};
 use crate::mesh::{SequenceNumber, CTL, IVI, MIC, NID, TTL};
-use crate::serializable::byte::ByteSerializable;
+use crate::serializable::bytes::{Buf, BufError, BufMut, Bytes, BytesMut};
+use crate::serializable::ByteSerializable;
 use core::convert::{TryFrom, TryInto};
 
 const TRANSPORT_PDU_MAX_LENGTH: usize = 16;
@@ -175,11 +174,11 @@ impl ByteSerializable for Header {
             Err(BufError::InvalidInput)
         } else {
             debug_assert_eq!(buf.length(), 0, "expecting empty buffer");
-            buf.push_be(self.nid.with_flag(self.ivi.into()));
-            buf.push_be(self.ttl.with_flag(self.ctl.into()));
-            buf.push_be(self.seq);
-            buf.push_be(self.src);
-            buf.push_be(self.dst);
+            buf.push_be(self.nid.with_flag(self.ivi.into()))?;
+            buf.push_be(self.ttl.with_flag(self.ctl.into()))?;
+            buf.push_be(self.seq)?;
+            buf.push_be(self.src)?;
+            buf.push_be(self.dst)?;
             debug_assert_eq!(
                 buf.length(),
                 PDU_HEADER_SIZE,
@@ -237,8 +236,8 @@ impl ByteSerializable for PDU {
             Err(BufError::OutOfRange(buf.length()))
         } else {
             let header = Header::serialize_from(&mut buf.pop_front_bytes(Header::size())?)?;
-            let mic =
-                MIC::try_from_bytes_be(buf.pop_bytes(header.mic_size())?).ok_or(BadBytes(0))?;
+            let mic = MIC::try_from_bytes_be(buf.pop_bytes(header.mic_size())?)
+                .ok_or(BufError::BadBytes(0))?;
             let encrypted_payload = EncryptedTransportPDU::serialize_from(buf)?;
             let payload = Payload {
                 transport_pdu: encrypted_payload,

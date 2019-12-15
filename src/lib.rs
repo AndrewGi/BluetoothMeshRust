@@ -5,7 +5,6 @@ extern crate alloc;
 
 mod ble;
 
-mod bytes;
 mod random;
 mod serializable;
 mod time;
@@ -13,6 +12,7 @@ mod uuid;
 
 //mod access;
 mod address;
+mod control;
 mod crypto;
 mod mesh;
 mod net;
