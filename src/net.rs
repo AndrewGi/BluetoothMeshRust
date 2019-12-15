@@ -173,17 +173,11 @@ impl ByteSerializable for Header {
             // Can't have a PDU destination be unassigned
             Err(BufError::InvalidInput)
         } else {
-            debug_assert_eq!(buf.length(), 0, "expecting empty buffer");
             buf.push_be(self.nid.with_flag(self.ivi.into()))?;
             buf.push_be(self.ttl.with_flag(self.ctl.into()))?;
             buf.push_be(self.seq)?;
             buf.push_be(self.src)?;
             buf.push_be(self.dst)?;
-            debug_assert_eq!(
-                buf.length(),
-                PDU_HEADER_SIZE,
-                "buffer should be filled with header"
-            );
             Ok(())
         }
     }
