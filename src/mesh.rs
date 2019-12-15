@@ -265,6 +265,53 @@ impl Display for MIC {
         write!(f, "{}({})", name, value)
     }
 }
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
+pub struct CompanyID(u16);
+impl ToFromBytesEndian for CompanyID {
+    type AsBytesType = [u8; 2];
+
+    fn to_bytes_le(&self) -> Self::AsBytesType {
+        (self.0).to_bytes_le()
+    }
+
+    fn to_bytes_be(&self) -> Self::AsBytesType {
+        (self.0).to_bytes_be()
+    }
+
+    fn from_bytes_le(bytes: &[u8]) -> Option<Self> {
+        Some(CompanyID(u16::from_bytes_le(bytes)?))
+    }
+
+    fn from_bytes_be(bytes: &[u8]) -> Option<Self> {
+        Some(CompanyID(u16::from_bytes_be(bytes)?))
+    }
+}
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
+pub struct ModelID(u16);
+impl ToFromBytesEndian for ModelID {
+    type AsBytesType = [u8; 2];
+
+    fn to_bytes_le(&self) -> Self::AsBytesType {
+        (self.0).to_bytes_le()
+    }
+
+    fn to_bytes_be(&self) -> Self::AsBytesType {
+        (self.0).to_bytes_be()
+    }
+
+    fn from_bytes_le(bytes: &[u8]) -> Option<Self> {
+        Some(ModelID(u16::from_bytes_le(bytes)?))
+    }
+
+    fn from_bytes_be(bytes: &[u8]) -> Option<Self> {
+        Some(ModelID(u16::from_bytes_be(bytes)?))
+    }
+}
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
+pub struct NetworkKeyIndex(u16);
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
+pub struct AppKeyIndex(u16);
 #[cfg(test)]
 mod tests {
     use super::*;
