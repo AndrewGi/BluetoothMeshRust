@@ -12,8 +12,11 @@ pub mod uuid;
 
 //pub mod access;
 pub mod address;
+pub mod bearer;
 pub mod control;
 pub mod crypto;
+pub mod foundation;
 pub mod mesh;
+pub mod model;
 pub mod net;
 pub mod transport;

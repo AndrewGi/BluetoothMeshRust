@@ -14,6 +14,5 @@ pub trait ByteSerializable: Sized {
     fn serialize_from(buf: &mut bytes::Bytes) -> Result<Self, bytes::BufError>;
 }
 
-//pub mod byte_derive;
 #[cfg(test)]
 pub mod tests;

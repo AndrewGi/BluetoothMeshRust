@@ -1,9 +1,9 @@
-use super::mesh::*;
 use super::crypto::*;
+use super::mesh::*;
 #[derive(Copy, Clone, Eq, PartialEq)]
-pub struct Opcode {
-    opcode: u16,
-    company_id: Option<CompanyID>,
+pub enum Opcode {
+    SIG(u16),
+    Vendor(u16, CompanyID),
 }
 impl Opcode {
     pub fn new_sig_u8(sig_opcode: u8) -> Opcode {
@@ -28,7 +28,7 @@ impl Opcode {
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub struct ModelIdentifier {
     model_id: ModelID,
-    company_id: Option<CompanyID>
+    company_id: Option<CompanyID>,
 }
 impl ModelIdentifier {
     pub fn new_sig(sig_model_id: ModelID) -> ModelIdentifier {
@@ -50,6 +50,4 @@ impl ModelIdentifier {
         !self.is_sig()
     }
 }
-pub struct Message {
-
-}
+pub struct Message {}

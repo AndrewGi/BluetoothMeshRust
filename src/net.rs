@@ -85,6 +85,7 @@ impl ByteSerializable for EncryptedTransportPDU {
         }
     }
 }
+
 pub struct Payload {
     transport_pdu: EncryptedTransportPDU,
     net_mic: MIC,
@@ -204,6 +205,49 @@ impl ByteSerializable for Header {
     }
 }
 
+const ENCRYPTED_PDU_MAX_SIZE: usize = TRANSPORT_PDU_MAX_LENGTH + PDU_HEADER_SIZE + 8;
+pub struct EncryptedNetworkPDU {
+    pdu_buffer: [u8; ENCRYPTED_PDU_MAX_SIZE],
+    length: u8,
+}
+impl EncryptedNetworkPDU {
+    /// Will Panic if `buf` won't fit into `pdu_buffer`.
+    /// See `ENCRYPTED_PDU_MAX_SIZE` for the max size.
+    pub fn new(buf: &[u8]) -> EncryptedNetworkPDU {
+        assert!(buf.len() <= ENCRYPTED_PDU_MAX_SIZE);
+        let mut pdu_buf: [u8; ENCRYPTED_PDU_MAX_SIZE] = [0u8; ENCRYPTED_PDU_MAX_SIZE];
+        pdu_buf[..buf.len()].copy_from_slice(&buf);
+        EncryptedNetworkPDU {
+            pdu_buffer: pdu_buf,
+            length: buf.len() as u8,
+        }
+    }
+    pub fn len(&self) -> usize {
+        self.length as usize
+    }
+    pub fn data(&self) -> &[u8] {
+        &self.pdu_buffer[..self.len()]
+    }
+    pub fn data_mut(&mut self) -> &mut [u8] {
+        let l = self.len();
+        &mut self.pdu_buffer[..l]
+    }
+}
+impl From<&[u8]> for EncryptedNetworkPDU {
+    fn from(b: &[u8]) -> Self {
+        EncryptedNetworkPDU::new(b)
+    }
+}
+impl AsRef<[u8]> for EncryptedNetworkPDU {
+    fn as_ref(&self) -> &[u8] {
+        self.data()
+    }
+}
+impl AsMut<[u8]> for EncryptedNetworkPDU {
+    fn as_mut(&mut self) -> &mut [u8] {
+        self.data_mut()
+    }
+}
 /// Mesh Network PDU Structure
 pub struct PDU {
     header: Header,
