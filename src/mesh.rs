@@ -199,6 +199,13 @@ impl MIC {
             MIC::Small(_) => false,
         }
     }
+    /// Return the size in bytes (4 or 8) needed to represent the MIC.
+    /// Depends on if the MIC is small or big
+    /// ```
+    /// use crate::bluetooth_mesh::mesh::MIC;
+    /// assert_eq!(MIC::Big(0u64).byte_size(), 8);
+    /// assert_eq!(MIC::Small(0u32).byte_size(), 4);
+    /// ```
     pub fn byte_size(&self) -> usize {
         if self.is_big() {
             BIG_MIC_SIZE
