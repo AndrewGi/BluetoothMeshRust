@@ -212,6 +212,7 @@ impl MIC {
     /// returns the small size of a mic
     /// example:
     /// ```
+    /// use bluetooth_mesh::mesh::MIC;
     /// assert_eq!(MIC::small_size(), MIC::Small(0).byte_size());
     /// ```
     pub fn small_size() -> usize {
@@ -220,6 +221,7 @@ impl MIC {
     /// returns the big size of a mic
     /// example:
     /// ```
+    /// use bluetooth_mesh::mesh::MIC;
     /// assert_eq!(MIC::big_size(), MIC::Big(0).byte_size());
     /// ```
     pub fn big_size() -> usize {
