@@ -1,4 +1,4 @@
-use crate::bytes::ToFromBytesEndian;
+use crate::serializable::bytes::ToFromBytesEndian;
 use core::fmt::{Display, Error, Formatter};
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
@@ -209,9 +209,19 @@ impl MIC {
     pub fn max_size() -> usize {
         BIG_MIC_SIZE
     }
+    /// returns the small size of a mic
+    /// example:
+    /// ```
+    /// assert_eq!(MIC::small_size(), MIC::Small(0).byte_size());
+    /// ```
     pub fn small_size() -> usize {
         SMALL_MIC_SIZE
     }
+    /// returns the big size of a mic
+    /// example:
+    /// ```
+    /// assert_eq!(MIC::big_size(), MIC::Big(0).byte_size());
+    /// ```
     pub fn big_size() -> usize {
         BIG_MIC_SIZE
     }
