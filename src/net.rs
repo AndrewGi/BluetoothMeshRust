@@ -7,6 +7,8 @@ use crate::mesh::{SequenceNumber, CTL, IVI, MIC, NID, TTL};
 use crate::serializable::bytes::{Buf, BufError, BufMut, Bytes, BytesMut};
 use crate::serializable::ByteSerializable;
 use core::convert::{TryFrom, TryInto};
+use core::fmt;
+use core::fmt::{Display, Formatter};
 
 const TRANSPORT_PDU_MAX_LENGTH: usize = 16;
 pub struct EncryptedTransportPDU {
@@ -139,7 +141,7 @@ impl ByteSerializable for Payload {
 /// NetMIC is 64 bit when CTL == 1
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Header {
-    ivi: IVI,
+    pub ivi: IVI,
     nid: NID,
     ctl: CTL,
     ttl: TTL,
@@ -147,7 +149,6 @@ pub struct Header {
     src: UnicastAddress,
     dst: Address,
 }
-
 const PDU_HEADER_SIZE: usize = 1 + 1 + 3 + 2 + 2;
 
 impl Header {
@@ -204,7 +205,11 @@ impl ByteSerializable for Header {
         }
     }
 }
-
+impl Display for Header {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        unimplemented!()
+    }
+}
 const ENCRYPTED_PDU_MAX_SIZE: usize = TRANSPORT_PDU_MAX_LENGTH + PDU_HEADER_SIZE + 8;
 pub struct EncryptedNetworkPDU {
     pdu_buffer: [u8; ENCRYPTED_PDU_MAX_SIZE],

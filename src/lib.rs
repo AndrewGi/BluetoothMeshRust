@@ -6,6 +6,7 @@ extern crate alloc;
 pub mod ble;
 
 pub mod random;
+pub mod scheduler;
 pub mod serializable;
 pub mod time;
 pub mod uuid;
@@ -20,3 +21,7 @@ pub mod mesh;
 pub mod model;
 pub mod net;
 pub mod transport;
+
+pub mod mesh_io;
+
+pub mod properties;

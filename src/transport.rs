@@ -93,7 +93,6 @@ impl LowerPDU {
         }
     }
 }
-
 pub struct UpperTransportPDU<'a> {
     encrypted_payload: &'a [u8],
     mic: MIC,

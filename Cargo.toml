@@ -6,4 +6,4 @@ edition = "2018"
 
 [dependencies]
 rand = "0.7"
-syn = "1.0.11"
+slotmap = "0.4.0"
