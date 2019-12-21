@@ -2,6 +2,7 @@ use crate::time::Timestamp;
 use alloc::collections::BinaryHeap;
 use core::cmp::Ordering;
 use core::time::Duration;
+use slotmap::DenseSlotMap;
 
 #[derive(Debug)]
 pub struct TimeQueueEntry<T> {
@@ -179,5 +180,23 @@ impl<T> SlottedTimeQueue<T> {
                 func(item)
             }
         });
+    }
+    pub fn slots_ref(&self) -> &DenseSlotMap<TimeQueueSlotKey, T> {
+        &self.slots
+    }
+    pub fn slots_mut(&mut self) -> &mut DenseSlotMap<TimeQueueSlotKey, T> {
+        &mut self.slots
+    }
+    pub fn remove(&mut self, key: TimeQueueSlotKey) -> Option<T> {
+        self.slots.remove(key)
+    }
+    /// Reschedules the item by canceling the current queue entry and inserting a new one.
+    /// The QueueEntry is still in the TimeQueue but its corresponding slot has moved and is invalid.
+    pub fn reschedule(
+        &mut self,
+        key: TimeQueueSlotKey,
+        new_timestamp: Timestamp,
+    ) -> Option<TimeQueueSlotKey> {
+        Some(self.push(new_timestamp, self.remove(key)?))
     }
 }

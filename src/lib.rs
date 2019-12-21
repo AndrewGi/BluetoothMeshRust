@@ -20,6 +20,7 @@ pub mod foundation;
 pub mod mesh;
 pub mod model;
 pub mod net;
+pub mod reassembler;
 pub mod transport;
 
 pub mod mesh_io;

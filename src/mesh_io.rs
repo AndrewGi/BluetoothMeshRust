@@ -1,5 +1,8 @@
-use crate::net::PDU;
+use crate::net::{EncryptedNetworkPDU, PDU};
 use crate::properties::characteristics::Characteristics::DescriptorValueChanged;
+use crate::scheduler::TimeQueueSlotKey;
+use crate::time::Timestamp;
+use core::convert::TryFrom;
 use core::time::Duration;
 
 #[derive(Copy, Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
@@ -100,14 +103,46 @@ impl AsMut<[u8]> for RawMeshPDU {
         self.data_mut()
     }
 }
+impl TryFrom<RawMeshPDU> for EncryptedNetworkPDU {
+    type Error = ();
+
+    fn try_from(value: RawMeshPDU) -> Result<Self, Self::Error> {
+        if value.pdu_type() == PDUType::Network {
+            Ok(EncryptedNetworkPDU::from(value.as_ref()))
+        } else {
+            Err(())
+        }
+    }
+}
 pub struct IOTransmitParameters {}
-pub struct MeshIOPDU {
+pub struct IOPDU {
     transmit_parameters: IOTransmitParameters,
     pdu: RawMeshPDU,
 }
 pub struct MeshPDUQueue {
-    queue: crate::scheduler::TimeQueue<MeshIOPDU>,
+    queue: crate::scheduler::SlottedTimeQueue<IOPDU>,
 }
+pub trait IOBearer {
+    type Error;
+    fn send_io_pdu(&mut self, pdu: IOPDU) -> Result<(), Self::Error>;
+}
+#[derive(Copy, Clone, Debug, Hash)]
+struct PDUQueueSlot(TimeQueueSlotKey);
 impl MeshPDUQueue {
-    pub fn add(delay: Duration, io_pdu: MeshIOPDU) {}
+    pub fn add(&mut self, delay: Duration, io_pdu: IOPDU) -> PDUQueueSlot {
+        PDUQueueSlot(self.queue.push(Timestamp::with_delay(delay), io_pdu))
+    }
+    pub fn cancel(&mut self, slot: PDUQueueSlot) -> Option<T> {
+        self.queue.remove(slot.0)
+    }
+
+    pub fn send_ready<Bearer>(&mut self, bearer: &mut Bearer) -> Result<(), Bearer::Error>
+    where
+        Bearer: IOBearer,
+    {
+        while let Some(pdu) = self.queue.pop_item() {
+            bearer.send_io_pdu(pdu)?
+        }
+        Ok(())
+    }
 }

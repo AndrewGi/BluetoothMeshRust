@@ -216,8 +216,10 @@ pub struct EncryptedNetworkPDU {
     length: u8,
 }
 impl EncryptedNetworkPDU {
-    /// Will Panic if `buf` won't fit into `pdu_buffer`.
+    /// Wrapped a raw bytes that represent an Encrypted Network PDU
     /// See `ENCRYPTED_PDU_MAX_SIZE` for the max size.
+    /// # Panics
+    /// Panics if `buf.len() > ENCRYPTED_PDU_MAX_SIZE`
     pub fn new(buf: &[u8]) -> EncryptedNetworkPDU {
         assert!(buf.len() <= ENCRYPTED_PDU_MAX_SIZE);
         let mut pdu_buf: [u8; ENCRYPTED_PDU_MAX_SIZE] = [0u8; ENCRYPTED_PDU_MAX_SIZE];
