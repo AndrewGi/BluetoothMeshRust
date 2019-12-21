@@ -1,12 +1,44 @@
 use crate::mesh::{MIC, U24};
 
+#[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct SZMIC(bool);
+//13 Bits SeqZero
+#[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct SeqZero(u16);
+#[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct SegO(u8);
+#[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct SegN(u8);
+#[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq, Default)]
 pub struct BlockAck(u32);
+impl BlockAck {
+    /// Sets the `bit` bit to 1. Does nothing if bit > 32
+    pub fn set(&mut self, bit: u8) {
+        debug_assert!(bit < 32, "{} index overflow into u32", bit);
+        if bit >= 32 {
+            return;
+        }
+        (self.0) |= (1u32 << bit as u32);
+    }
+    /// Returns the bit status (1 or 0) of the `bit` bit. Returns `False` for bit > 32
+    pub fn get(&self, bit: u8) -> bool {
+        debug_assert!(bit < 32, "{} index overflow into u32", bit);
+        if bit >= 32 {
+            false
+        } else {
+            (self.0 & (1u32 << bit as u32)) != 0
+        }
+    }
+    /// Returns if the block ack (up to `seg_n` bits) is all 1s. False if otherwise
+    pub fn all_acked(&self, seg_n: SegN) -> bool {
+        self.0 == (1u32 << (seg_n.0 as u32)).wrapping_sub(1)
+    }
+}
+#[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct SEG(bool);
+#[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct OBO(bool);
+#[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct SegmentHeader {
     flag: bool,
     seq_zero: SeqZero,

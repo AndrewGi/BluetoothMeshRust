@@ -18,11 +18,11 @@ use core::ops::Deref;
 const UNICAST_BIT: u16 = 0x8000;
 const UNICAST_MASK: u16 = !UNICAST_BIT;
 
-const VIRTUAL_BIT: u16 = 0x8000;
-const VIRTUAL_MASK: u16 = 0x3FFF;
-
 const GROUP_BIT: u16 = 0xC000;
-const GROUP_MASK: u16 = VIRTUAL_MASK;
+const GROUP_MASK: u16 = !GROUP_BIT;
+
+const VIRTUAL_BIT: u16 = 0x8000;
+const VIRTUAL_MASK: u16 = GROUP_MASK;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct UnicastAddress(u16);
@@ -131,9 +131,9 @@ impl From<u16> for Address {
     fn from(v: u16) -> Address {
         if v == 0 {
             Address::Unassigned
-        } else if v & 0x8000 == 0 {
+        } else if v & GROUP_MASK == 0 {
             Address::Unicast(UnicastAddress(v))
-        } else if v & 0xC000 == 0xC000 {
+        } else if v & GROUP_MASK == GROUP_BIT {
             Address::Group(GroupAddress(v))
         } else {
             Address::VirtualHash(VirtualAddressHash(v))
