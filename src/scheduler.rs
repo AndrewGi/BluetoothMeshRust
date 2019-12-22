@@ -94,11 +94,21 @@ impl<T> TimeQueue<T> {
         self.priority_queue
             .push(TimeQueueEntry::new(timestamp, item))
     }
-    pub fn pop(&mut self) -> Option<TimeQueueEntry<T>> {
+    pub fn pop_force(&mut self) -> Option<TimeQueueEntry<T>> {
         self.priority_queue.pop()
     }
-    pub fn pop_item(&mut self) -> Option<T> {
-        Some(self.pop()?.item)
+    pub fn pop_ready(&mut self) -> Option<TimeQueueEntry<T>> {
+        if self.next_is_ready() {
+            self.pop_force()
+        } else {
+            None
+        }
+    }
+    pub fn pop_item_ready(&mut self) -> Option<T> {
+        Some(self.pop_ready()?.item)
+    }
+    pub fn pop_item_force(&mut self) -> Option<T> {
+        Some(self.pop_force()?.item)
     }
     pub fn time_until_next(&self) -> Option<Duration> {
         self.peek_timestamp()?.duration_until(&Timestamp::now())
@@ -110,7 +120,7 @@ impl<T> TimeQueue<T> {
         !self.is_empty() && self.time_until_next().is_none()
     }
     pub fn map_ready_item(&mut self, mut func: impl FnMut(T)) {
-        while let Some(i) = self.pop_item() {
+        while let Some(i) = self.pop_item_ready() {
             func(i)
         }
     }
@@ -152,6 +162,10 @@ impl slotmap::Key for TimeQueueSlotKey {}
 
 slotmap::__serialize_key!(TimeQueueSlotKey);
 
+/// TimeQueue but its items `T` are stored in a slotmap and the keys are storing in the TimeQueue.
+/// When the binary heap in the TimeQueue needs to sift, its more efficient to sift small
+/// slotmap keys than `T`s (if `size_of::<T>()` is big). If `T` is small, just use a regular
+/// TimeQueue.
 pub struct SlottedTimeQueue<T> {
     queue: TimeQueue<TimeQueueSlotKey>,
     slots: slotmap::DenseSlotMap<TimeQueueSlotKey, T>,
@@ -181,6 +195,22 @@ impl<T> SlottedTimeQueue<T> {
             }
         });
     }
+    pub fn pop_force(&mut self) -> Option<(Timestamp, T)> {
+        let entry = self.queue.pop_force()?;
+        let timestamp = entry.timestamp;
+        let item = self.slots.remove(entry.item)?;
+        Some((timestamp, item))
+    }
+    pub fn pop_ready(&mut self) -> Option<(Timestamp, T)> {
+        if self.queue.next_is_ready() {
+            self.pop_force()
+        } else {
+            None
+        }
+    }
+    pub fn peek_timestamp(&self) -> Option<Timestamp> {
+        self.queue.peek_timestamp()
+    }
     pub fn slots_ref(&self) -> &DenseSlotMap<TimeQueueSlotKey, T> {
         &self.slots
     }
@@ -197,6 +227,8 @@ impl<T> SlottedTimeQueue<T> {
         key: TimeQueueSlotKey,
         new_timestamp: Timestamp,
     ) -> Option<TimeQueueSlotKey> {
-        Some(self.push(new_timestamp, self.remove(key)?))
+        //TODO: Write custom SlotMap so we can increment the Slot generation instead of remove/push.
+        let item = self.remove(key)?;
+        Some(self.push(new_timestamp, item))
     }
 }
