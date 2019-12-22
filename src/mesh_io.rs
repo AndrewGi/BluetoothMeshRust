@@ -1,5 +1,4 @@
-use crate::net::{EncryptedNetworkPDU, PDU};
-use crate::properties::characteristics::Characteristics::DescriptorValueChanged;
+use crate::net::EncryptedNetworkPDU;
 use crate::scheduler::TimeQueueSlotKey;
 use crate::time::Timestamp;
 use core::convert::TryFrom;
@@ -32,13 +31,13 @@ impl PDUType {
             _ => PDUType::Other(v),
         }
     }
-    pub fn is_other(&self) -> bool {
+    pub fn is_other(self) -> bool {
         match self {
             PDUType::Other(_) => true,
             _ => false,
         }
     }
-    pub fn is_mesh(&self) -> bool {
+    pub fn is_mesh(self) -> bool {
         !self.is_other()
     }
 }
@@ -84,13 +83,17 @@ impl RawMeshPDU {
         self.buffer[0].into()
     }
     pub fn len(&self) -> usize {
-        self.length as usize
+        usize::from(self.length)
+    }
+    pub fn is_empty(&self) -> bool {
+        self.length == 0
     }
     pub fn data(&self) -> &[u8] {
-        &self.buffer[..self.length as usize]
+        &self.buffer[..self.len()]
     }
     pub fn data_mut(&mut self) -> &mut [u8] {
-        &mut self.buffer[..self.length as usize]
+        let l = self.len();
+        &mut self.buffer[..l]
     }
 }
 impl AsRef<[u8]> for RawMeshPDU {

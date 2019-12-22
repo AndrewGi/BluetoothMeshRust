@@ -32,13 +32,16 @@ const TTL_MASK: u8 = 127;
 
 impl TTL {
     pub fn new(v: u8) -> TTL {
-        if v > TTL_MASK {
-            panic!("TTL {} is bigger than max TTL {}", v, TTL_MASK);
-        } else {
-            TTL(v)
-        }
+        assert!(
+            v <= TTL_MASK,
+            "TTL {} is bigger than max TTL {}",
+            v,
+            TTL_MASK
+        );
+        TTL(v)
     }
-    pub fn with_flag(&self, flag: bool) -> u8 {
+    /// Returns u8 with 7 lower bits being TTL and the 1 highest bit being a flag
+    pub fn with_flag(self, flag: bool) -> u8 {
         self.0 | ((flag as u8) << 7)
     }
     /// returns 7 bit TTL + 1 bit bool flag from 8bit uint.
@@ -49,7 +52,7 @@ impl TTL {
     pub fn from_masked_u8(v: u8) -> TTL {
         TTL(v & TTL_MASK)
     }
-    pub fn should_relay(&self) -> bool {
+    pub fn should_relay(self) -> bool {
         match self.0 {
             2..=127 => true,
             _ => false,
@@ -69,17 +72,19 @@ impl Display for NID {
         write!(f, "NID({})", self.0)
     }
 }
-const NID_MAX: u8 = 127;
+const NID_MASK: u8 = 127;
 
 impl NID {
     pub fn new(v: u8) -> NID {
-        if v > NID_MAX {
-            panic!("NID {} is bigger than max NID {}", v, NID_MAX);
-        } else {
-            NID(v)
-        }
+        assert!(
+            v <= NID_MASK,
+            "NID {} is bigger than max NID {}",
+            v,
+            NID_MASK
+        );
+        NID(v)
     }
-    pub fn with_flag(&self, flag: bool) -> u8 {
+    pub fn with_flag(self, flag: bool) -> u8 {
         self.0 | ((flag as u8) << 7)
     }
     /// Creates a 7 bit NID by masking out the 8th bit from a u8
@@ -94,7 +99,7 @@ impl NID {
 
 #[derive(Default, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct U24(u32);
-const U24_MAX: u32 = 16777215; // 2**24 - 1
+const U24_MAX: u32 = (1u32 << 24) - 1; // 2**24 - 1
 impl Display for U24 {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         write!(f, "U24({})", self.0)
@@ -110,15 +115,21 @@ impl U24 {
     }
     /// Creates a U24 by masking the 4th byte of 'v'
     pub fn new_masked(v: u32) -> U24 {
-        U24(v & 0xFFFFFF)
+        U24(v & U24_MAX)
     }
-    pub fn value(&self) -> u32 {
+    pub fn value(self) -> u32 {
         self.0
     }
 }
 impl From<(u8, u8, u8)> for U24 {
     fn from(b: (u8, u8, u8)) -> Self {
         U24(b.0 as u32 | ((b.1 as u32) << 8) | ((b.2 as u32) << 16))
+    }
+}
+impl From<U24> for (u8, u8, u8) {
+    fn from(i: U24) -> Self {
+        let b = i.value().to_ne_bytes();
+        (b[0], b[1], b[2])
     }
 }
 impl ToFromBytesEndian for U24 {

@@ -1,16 +1,15 @@
 //! Bluetooth Mesh
 //! Network Layer is BIG Endian
 
-use crate::address::Address::{Unassigned, Unicast};
 use crate::address::{Address, UnicastAddress};
 use crate::mesh::{SequenceNumber, CTL, IVI, MIC, NID, TTL};
 use crate::serializable::bytes::{Buf, BufError, BufMut, Bytes, BytesMut};
 use crate::serializable::ByteSerializable;
 use core::convert::{TryFrom, TryInto};
 use core::fmt;
-use core::fmt::{Display, Formatter};
 
 const TRANSPORT_PDU_MAX_LENGTH: usize = 16;
+
 pub struct EncryptedTransportPDU {
     transport_pdu: [u8; TRANSPORT_PDU_MAX_LENGTH],
     transport_length: u8,
@@ -35,6 +34,9 @@ impl TryFrom<&[u8]> for EncryptedTransportPDU {
 impl EncryptedTransportPDU {
     pub fn len(&self) -> usize {
         self.transport_length as usize
+    }
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
     pub fn data(&self) -> &[u8] {
         let l = self.len();
@@ -117,7 +119,7 @@ impl ByteSerializable for Payload {
         }
     }
 
-    fn serialize_from(buf: &mut Bytes) -> Result<Self, BufError> {
+    fn serialize_from(_buf: &mut Bytes) -> Result<Self, BufError> {
         unimplemented!("serialize_from for payload depends on MIC length")
     }
 }
@@ -205,9 +207,13 @@ impl ByteSerializable for Header {
         }
     }
 }
-impl Display for Header {
+impl fmt::Display for Header {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        unimplemented!()
+        write!(
+            f,
+            "(ivi:{} nid:{} ttl:{} ctl:{} seq:{} src:{:?} dst:{:?}",
+            self.ivi.0, self.nid, self.ttl, self.ctl.0, self.seq, self.src, self.dst
+        )
     }
 }
 const ENCRYPTED_PDU_MAX_SIZE: usize = TRANSPORT_PDU_MAX_LENGTH + PDU_HEADER_SIZE + 8;
@@ -231,6 +237,9 @@ impl EncryptedNetworkPDU {
     }
     pub fn len(&self) -> usize {
         self.length as usize
+    }
+    pub fn is_empty(&self) -> bool {
+        self.length == 0
     }
     pub fn data(&self) -> &[u8] {
         &self.pdu_buffer[..self.len()]

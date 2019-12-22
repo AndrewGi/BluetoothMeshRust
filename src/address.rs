@@ -1,7 +1,6 @@
 use crate::serializable::bytes::ToFromBytesEndian;
 use crate::uuid::UUID;
 use core::convert::{TryFrom, TryInto};
-use core::ops::Deref;
 
 /// Mesh Addresses
 /// | Bits (16)             | Type          |
@@ -131,9 +130,9 @@ impl From<u16> for Address {
     fn from(v: u16) -> Address {
         if v == 0 {
             Address::Unassigned
-        } else if v & GROUP_MASK == 0 {
+        } else if v & GROUP_BIT == 0 {
             Address::Unicast(UnicastAddress(v))
-        } else if v & GROUP_MASK == GROUP_BIT {
+        } else if v & GROUP_BIT == GROUP_BIT {
             Address::Group(GroupAddress(v))
         } else {
             Address::VirtualHash(VirtualAddressHash(v))
