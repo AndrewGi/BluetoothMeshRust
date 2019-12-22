@@ -18,10 +18,10 @@ impl BlockAck {
         if bit >= 32 {
             return;
         }
-        (self.0) |= (1u32 << bit as u32);
+        (self.0) |= 1u32 << bit as u32;
     }
     /// Returns the bit status (1 or 0) of the `bit` bit. Returns `False` for bit > 32
-    pub fn get(&self, bit: u8) -> bool {
+    pub fn get(self, bit: u8) -> bool {
         debug_assert!(bit < 32, "{} index overflow into u32", bit);
         if bit >= 32 {
             false
@@ -30,7 +30,7 @@ impl BlockAck {
         }
     }
     /// Returns if the block ack (up to `seg_n` bits) is all 1s. False if otherwise
-    pub fn all_acked(&self, seg_n: SegN) -> bool {
+    pub fn all_acked(self, seg_n: SegN) -> bool {
         self.0 == (1u32 << (seg_n.0 as u32)).wrapping_sub(1)
     }
 }
@@ -46,7 +46,7 @@ pub struct SegmentHeader {
     seg_n: SegN,
 }
 impl SegmentHeader {
-    pub fn pack_into_u24(&self) -> U24 {
+    pub fn pack_into_u24(self) -> U24 {
         unimplemented!()
     }
 }

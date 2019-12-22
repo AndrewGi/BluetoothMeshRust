@@ -20,7 +20,7 @@ impl<T> TimeQueueEntry<T> {
 impl<T: Clone> Clone for TimeQueueEntry<T> {
     fn clone(&self) -> Self {
         TimeQueueEntry {
-            timestamp: self.timestamp.clone(),
+            timestamp: self.timestamp,
             item: self.item.clone(),
         }
     }
@@ -111,7 +111,7 @@ impl<T> TimeQueue<T> {
         Some(self.pop_force()?.item)
     }
     pub fn time_until_next(&self) -> Option<Duration> {
-        self.peek_timestamp()?.duration_until(&Timestamp::now())
+        self.peek_timestamp()?.duration_until(Timestamp::now())
     }
     pub fn is_empty(&self) -> bool {
         self.priority_queue.is_empty()

@@ -1,6 +1,6 @@
 use core::convert::TryInto;
 use core::iter::Iterator;
-use core::ops::{Deref, DerefMut, Range, RangeBounds};
+use core::ops::{Deref, DerefMut, Range};
 
 #[derive(Copy, Clone)]
 pub enum Endian {
