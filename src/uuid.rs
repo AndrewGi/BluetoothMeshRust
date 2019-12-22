@@ -1,4 +1,4 @@
-use alloc::string::{String, ToString};
+use alloc::string::ToString;
 use core::convert::TryInto;
 use core::fmt::{Display, Error, Formatter};
 
