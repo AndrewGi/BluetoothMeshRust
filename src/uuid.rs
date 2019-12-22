@@ -1,3 +1,4 @@
+use alloc::string::{String, ToString};
 use core::convert::TryInto;
 use core::fmt::{Display, Error, Formatter};
 
@@ -87,7 +88,6 @@ impl Display for UUID {
         )
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
