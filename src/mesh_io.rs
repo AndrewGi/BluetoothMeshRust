@@ -127,12 +127,12 @@ pub trait IOBearer {
     fn send_io_pdu(&mut self, pdu: IOPDU) -> Result<(), Self::Error>;
 }
 #[derive(Copy, Clone, Debug, Hash)]
-struct PDUQueueSlot(TimeQueueSlotKey);
+pub struct PDUQueueSlot(TimeQueueSlotKey);
 impl MeshPDUQueue {
     pub fn add(&mut self, delay: Duration, io_pdu: IOPDU) -> PDUQueueSlot {
         PDUQueueSlot(self.queue.push(Timestamp::with_delay(delay), io_pdu))
     }
-    pub fn cancel(&mut self, slot: PDUQueueSlot) -> Option<T> {
+    pub fn cancel(&mut self, slot: PDUQueueSlot) -> Option<IOPDU> {
         self.queue.remove(slot.0)
     }
 
@@ -140,7 +140,7 @@ impl MeshPDUQueue {
     where
         Bearer: IOBearer,
     {
-        while let Some(pdu) = self.queue.pop_item() {
+        while let Some((_, pdu)) = self.queue.pop_ready() {
             bearer.send_io_pdu(pdu)?
         }
         Ok(())
