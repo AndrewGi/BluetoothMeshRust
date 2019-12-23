@@ -6,10 +6,10 @@ use alloc::string::ToString;
 
 use core::fmt::{Display, Error, Formatter};
 
-type Bytes = [u8; 16];
+type UUIDBytes = [u8; 16];
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
-pub struct UUID(Bytes);
+pub struct UUID(pub UUIDBytes);
 
 impl UUID {
     #[must_use]
