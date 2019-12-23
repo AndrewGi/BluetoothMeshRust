@@ -3,7 +3,7 @@
 /// compile without that import.
 #[allow(unused_imports)]
 use alloc::string::ToString;
-use core::convert::TryInto;
+
 use core::fmt::{Display, Error, Formatter};
 
 type Bytes = [u8; 16];

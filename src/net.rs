@@ -332,13 +332,13 @@ mod tests {
     /// Generates a random Network PDU Header. Helpful for testing.
     pub fn random_header() -> Header {
         Header {
-            ivi: random_bool().into(),
-            nid: NID::from_masked_u8(random_u8()),
-            ctl: random_bool().into(),
-            ttl: TTL::from_masked_u8(random_u8()),
-            seq: SequenceNumber(U24::new_masked(random_u32())),
-            src: UnicastAddress::from_mask_u16(random_u16()),
-            dst: random_u16().into(),
+            ivi: rand_bool().into(),
+            nid: NID::from_masked_u8(rand_u8()),
+            ctl: rand_bool().into(),
+            ttl: TTL::from_masked_u8(rand_u8()),
+            seq: SequenceNumber(U24::new_masked(rand_u32())),
+            src: UnicastAddress::from_mask_u16(rand_u16()),
+            dst: rand_u16().into(),
         }
     }
     fn test_header_size() {}
