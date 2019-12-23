@@ -23,7 +23,7 @@ impl TryFrom<&[u8]> for EncryptedTransportPDU {
             Err(BufError::OutOfRange(l))
         } else {
             let mut buf: [u8; TRANSPORT_PDU_MAX_LENGTH] = Default::default();
-            buf[..l].copy_from_slice(&value);
+            buf[..l].copy_from_slice(value);
             Ok(EncryptedTransportPDU {
                 transport_pdu: buf,
                 transport_length: l as u8,
@@ -32,12 +32,15 @@ impl TryFrom<&[u8]> for EncryptedTransportPDU {
     }
 }
 impl EncryptedTransportPDU {
-    pub fn len(&self) -> usize {
+    #[must_use]
+    pub const fn len(&self) -> usize {
         self.transport_length as usize
     }
-    pub fn is_empty(&self) -> bool {
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
         self.len() == 0
     }
+    #[must_use]
     pub fn data(&self) -> &[u8] {
         let l = self.len();
         debug_assert!(
@@ -48,6 +51,7 @@ impl EncryptedTransportPDU {
         );
         &self.transport_pdu[..l]
     }
+    #[must_use]
     pub fn data_mut(&mut self) -> &mut [u8] {
         let l = self.len();
         debug_assert!(
@@ -58,16 +62,19 @@ impl EncryptedTransportPDU {
         );
         &mut self.transport_pdu[..l]
     }
-    pub fn max_len() -> usize {
+    #[must_use]
+    pub const fn max_len() -> usize {
         TRANSPORT_PDU_MAX_LENGTH
     }
 }
 impl AsRef<[u8]> for EncryptedTransportPDU {
+    #[must_use]
     fn as_ref(&self) -> &[u8] {
         self.data()
     }
 }
 impl AsMut<[u8]> for EncryptedTransportPDU {
+    #[must_use]
     fn as_mut(&mut self) -> &mut [u8] {
         self.data_mut()
     }
@@ -96,10 +103,12 @@ pub struct Payload {
 }
 
 impl Payload {
+    #[must_use]
     pub fn size(&self) -> usize {
         self.transport_pdu.len() + self.net_mic.byte_size()
     }
-    pub fn max_size() -> usize {
+    #[must_use]
+    pub const fn max_size() -> usize {
         EncryptedTransportPDU::max_len() + MIC::max_size()
     }
 }
@@ -139,8 +148,8 @@ impl ByteSerializable for Payload {
 /// | Transport PDU | 8-128 | Transport PDU (1-16 Bytes)                                |
 /// | NetMIC        | 32,64 | Message Integrity check for Payload (4 or 8 bytes)        |
 ///
-/// NetMIC is 32 bit when CTL == 0
-/// NetMIC is 64 bit when CTL == 1
+/// `NetMIC` is 32 bit when CTL == 0
+/// `NetMIC` is 64 bit when CTL == 1
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Header {
     pub ivi: IVI,
@@ -154,12 +163,15 @@ pub struct Header {
 const PDU_HEADER_SIZE: usize = 1 + 1 + 3 + 2 + 2;
 
 impl Header {
-    pub fn size() -> usize {
+    #[must_use]
+    pub const fn size() -> usize {
         PDU_HEADER_SIZE
     }
+    #[must_use]
     pub fn big_mic(&self) -> bool {
         self.ctl.into()
     }
+    #[must_use]
     pub fn mic_size(&self) -> usize {
         if self.big_mic() {
             MIC::big_size()
@@ -226,40 +238,48 @@ impl EncryptedNetworkPDU {
     /// See `ENCRYPTED_PDU_MAX_SIZE` for the max size.
     /// # Panics
     /// Panics if `buf.len() > ENCRYPTED_PDU_MAX_SIZE`
+    #[must_use]
     pub fn new(buf: &[u8]) -> EncryptedNetworkPDU {
         assert!(buf.len() <= ENCRYPTED_PDU_MAX_SIZE);
         let mut pdu_buf: [u8; ENCRYPTED_PDU_MAX_SIZE] = [0u8; ENCRYPTED_PDU_MAX_SIZE];
-        pdu_buf[..buf.len()].copy_from_slice(&buf);
+        pdu_buf[..buf.len()].copy_from_slice(buf);
         EncryptedNetworkPDU {
             pdu_buffer: pdu_buf,
             length: buf.len() as u8,
         }
     }
-    pub fn len(&self) -> usize {
+    #[must_use]
+    pub const fn len(&self) -> usize {
         self.length as usize
     }
-    pub fn is_empty(&self) -> bool {
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
         self.length == 0
     }
+    #[must_use]
     pub fn data(&self) -> &[u8] {
         &self.pdu_buffer[..self.len()]
     }
+    #[must_use]
     pub fn data_mut(&mut self) -> &mut [u8] {
         let l = self.len();
         &mut self.pdu_buffer[..l]
     }
 }
 impl From<&[u8]> for EncryptedNetworkPDU {
+    #[must_use]
     fn from(b: &[u8]) -> Self {
         EncryptedNetworkPDU::new(b)
     }
 }
 impl AsRef<[u8]> for EncryptedNetworkPDU {
+    #[must_use]
     fn as_ref(&self) -> &[u8] {
         self.data()
     }
 }
 impl AsMut<[u8]> for EncryptedNetworkPDU {
+    #[must_use]
     fn as_mut(&mut self) -> &mut [u8] {
         self.data_mut()
     }
@@ -270,7 +290,8 @@ pub struct PDU {
     payload: Payload,
 }
 impl PDU {
-    pub fn max_size() -> usize {
+    #[must_use]
+    pub const fn max_size() -> usize {
         Header::size() + Payload::max_size()
     }
 }
@@ -327,6 +348,6 @@ mod tests {
     }
     #[test]
     fn test_random_headers_to_from_bytes() {
-        for i in 0..10 {}
+        for _i in 0..10 {}
     }
 }

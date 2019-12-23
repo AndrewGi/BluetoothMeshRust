@@ -1,3 +1,7 @@
+/// Have to allow unused_imports for `string::ToString`. We have to import it so the `Display` trait
+/// can also implement `ToString` automatically for us. Clippy complains its unused but it fails to
+/// compile without that import.
+#[allow(unused_imports)]
 use alloc::string::ToString;
 use core::convert::TryInto;
 use core::fmt::{Display, Error, Formatter};
@@ -8,6 +12,7 @@ type Bytes = [u8; 16];
 pub struct UUID(Bytes);
 
 impl UUID {
+    #[must_use]
     pub fn from_fields(
         time_low: u32,
         time_mid: u16,
@@ -26,18 +31,23 @@ impl UUID {
             nb[2], nb[3], nb[4], nb[5],
         ])
     }
+    #[must_use]
     pub fn time_low(self) -> u32 {
-        u32::from_be_bytes(self.0[..4].try_into().unwrap())
+        u32::from_be_bytes([self.0[0], self.0[1], self.0[2], self.0[3]])
     }
+    #[must_use]
     pub fn time_mid(self) -> u16 {
-        u16::from_be_bytes(self.0[4..6].try_into().unwrap())
+        u16::from_be_bytes([self.0[4], self.0[5]])
     }
+    #[must_use]
     pub fn time_high(self) -> u16 {
-        u16::from_be_bytes(self.0[6..8].try_into().unwrap())
+        u16::from_be_bytes([self.0[6], self.0[7]])
     }
+    #[must_use]
     pub fn clock_seq(self) -> u16 {
-        u16::from_be_bytes(self.0[8..10].try_into().unwrap())
+        u16::from_be_bytes([self.0[8], self.0[9]])
     }
+    #[must_use]
     pub fn node(self) -> u64 {
         u64::from_be_bytes([
             self.0[10], self.0[11], self.0[12], self.0[13], self.0[14], self.0[15], 0, 0,
@@ -48,28 +58,30 @@ impl UUID {
 pub struct UUIDFields {
     pub time_low: u32,
     pub time_mid: u16,
-    pub time_hi_and_version: u16,
+    pub time_high: u16,
     pub clock_seq: u16,
     pub node: u64,
 }
 
 impl Into<UUIDFields> for UUID {
+    #[must_use]
     fn into(self) -> UUIDFields {
         UUIDFields {
             time_low: self.time_low(),
             time_mid: self.time_mid(),
-            time_hi_and_version: self.time_high(),
+            time_high: self.time_high(),
             clock_seq: self.clock_seq(),
             node: self.node(),
         }
     }
 }
 impl Into<UUID> for UUIDFields {
+    #[must_use]
     fn into(self) -> UUID {
         UUID::from_fields(
             self.time_low,
             self.time_mid,
-            self.time_hi_and_version,
+            self.time_high,
             self.clock_seq,
             self.node,
         )
@@ -105,7 +117,7 @@ mod tests {
         let fields: UUIDFields = uuid.into();
         assert_eq!(time_low, fields.time_low);
         assert_eq!(time_mid, fields.time_mid);
-        assert_eq!(time_high, fields.time_hi_and_version);
+        assert_eq!(time_high, fields.time_high);
         assert_eq!(clock_seq, fields.clock_seq);
         assert_eq!(node, fields.node)
     }

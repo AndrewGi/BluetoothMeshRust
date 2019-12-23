@@ -1,6 +1,7 @@
 #![no_std]
 // Disable 'never constructed', 'never used', etc for now. It hides the more important warnings.
-#![allow(dead_code)]
+#![warn(clippy::all, clippy::pedantic, clippy::nursery, clippy::cargo)]
+#![allow(dead_code, cast_possible_truncation, use_self, doc_markdown)]
 extern crate alloc;
 
 pub mod ble;
