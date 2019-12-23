@@ -112,7 +112,7 @@ impl NID {
 
 #[derive(Default, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct U24(u32);
-const U24_MAX: u32 = (1u32 << 24) - 1; // 2**24 - 1
+const U24_MAX: u32 = (1_u32 << 24) - 1; // 2**24 - 1
 impl Display for U24 {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         write!(f, "U24({})", self.0)
@@ -167,19 +167,19 @@ impl ToFromBytesEndian for U24 {
 
     #[must_use]
     fn from_bytes_le(bytes: &[u8]) -> Option<Self> {
-        if bytes.len() != 3 {
-            None
-        } else {
+        if bytes.len() == 3 {
             Some(U24(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], 0])))
+        } else {
+            None
         }
     }
 
     #[must_use]
     fn from_bytes_be(bytes: &[u8]) -> Option<Self> {
-        if bytes.len() != 3 {
-            None
-        } else {
+        if bytes.len() == 3 {
             Some(U24(u32::from_be_bytes([bytes[0], bytes[1], bytes[2], 0])))
+        } else {
+            None
         }
     }
 }

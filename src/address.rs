@@ -165,7 +165,6 @@ impl From<&Address> for u16 {
 impl TryFrom<&Address> for UnicastAddress {
     type Error = ();
 
-    #[must_use]
     fn try_from(value: &Address) -> Result<Self, Self::Error> {
         match value {
             Address::Unicast(u) => Ok(*u),
@@ -209,7 +208,7 @@ impl ToFromBytesEndian for Address {
     #[must_use]
     fn to_bytes_le(&self) -> Self::AsBytesType {
         match self {
-            Address::Unassigned => 0u16.to_bytes_le(),
+            Address::Unassigned => 0_u16.to_bytes_le(),
             Address::Unicast(u) => (u.0).to_bytes_le(),
             Address::Group(g) => (g.0).to_bytes_le(),
             Address::Virtual(v) => ((v.0).0).to_bytes_le(),
@@ -220,7 +219,7 @@ impl ToFromBytesEndian for Address {
     #[must_use]
     fn to_bytes_be(&self) -> Self::AsBytesType {
         match self {
-            Address::Unassigned => 0u16.to_bytes_be(),
+            Address::Unassigned => 0_u16.to_bytes_be(),
             Address::Unicast(u) => (u.0).to_bytes_be(),
             Address::Group(g) => (g.0).to_bytes_be(),
             Address::Virtual(v) => ((v.0).0).to_bytes_be(),

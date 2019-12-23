@@ -1,1 +1,1 @@
-pub struct ControlPDU {}
+pub struct PDU {}

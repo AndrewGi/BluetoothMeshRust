@@ -241,7 +241,7 @@ impl EncryptedNetworkPDU {
     #[must_use]
     pub fn new(buf: &[u8]) -> EncryptedNetworkPDU {
         assert!(buf.len() <= ENCRYPTED_PDU_MAX_SIZE);
-        let mut pdu_buf: [u8; ENCRYPTED_PDU_MAX_SIZE] = [0u8; ENCRYPTED_PDU_MAX_SIZE];
+        let mut pdu_buf: [u8; ENCRYPTED_PDU_MAX_SIZE] = [0_u8; ENCRYPTED_PDU_MAX_SIZE];
         pdu_buf[..buf.len()].copy_from_slice(buf);
         EncryptedNetworkPDU {
             pdu_buffer: pdu_buf,

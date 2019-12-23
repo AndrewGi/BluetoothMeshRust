@@ -20,30 +20,37 @@ pub struct BytesMut<'a> {
 }
 
 impl Bytes<'_> {
-    pub fn new_with_length(data: &[u8], length: usize) -> Bytes {
+    #[must_use]
+    pub const fn new_with_length(data: &[u8], length: usize) -> Bytes {
         Bytes { data, length }
     }
-    pub fn new(data: &[u8]) -> Bytes {
+    #[must_use]
+    pub const fn new(data: &[u8]) -> Bytes {
         Self::new_with_length(data, data.len())
     }
 }
 impl<'a> From<&'a [u8]> for Bytes<'a> {
+    #[must_use]
     fn from(b: &'a [u8]) -> Self {
         Bytes::new(b)
     }
 }
 impl BytesMut<'_> {
+    #[must_use]
     pub fn new_with_length(data: &mut [u8], length: usize) -> BytesMut {
         BytesMut { data, length }
     }
+    #[must_use]
     pub fn new_empty(data: &mut [u8]) -> BytesMut {
         Self::new_with_length(data, 0)
     }
+    #[must_use]
     pub fn new_full(data: &mut [u8]) -> BytesMut {
         Self::new_with_length(data, data.len())
     }
 }
 impl<'a> From<&'a mut [u8]> for BytesMut<'a> {
+    #[must_use]
     fn from(b: &'a mut [u8]) -> Self {
         BytesMut::new_full(b)
     }
@@ -57,9 +64,12 @@ pub enum BufError {
     InvalidInput,
 }
 pub trait Buf {
+    #[must_use]
     fn length(&self) -> usize;
     /// Returns bytes trimmed to 0..capacity()
+    #[must_use]
     fn bytes(&self) -> &[u8];
+    #[must_use]
     fn capacity(&self) -> usize;
     /// If adding `amount` overflows the length (length() > capacity(), cap it to capacity.
     fn add_length(&mut self, amount: usize);
@@ -104,13 +114,16 @@ pub trait Buf {
     /// Has to be implemented per type because of lifetime issues
     fn pop_bytes(&mut self, amount: usize) -> Result<&[u8], BufError>;
 
+    #[must_use]
     fn get_at<T: ToFromBytesEndian>(&self, index: usize, endian: Endian) -> Option<T> {
         T::from_bytes_endian(self.get_n_bytes(index, T::byte_size()).ok()?, endian)
     }
 
+    #[must_use]
     fn peek_be<T: ToFromBytesEndian>(&self) -> Option<T> {
         T::from_bytes_be(self.peek_bytes(T::byte_size()).ok()?)
     }
+    #[must_use]
     fn peek_le<T: ToFromBytesEndian>(&self) -> Option<T> {
         T::from_bytes_be(self.peek_bytes(T::byte_size()).ok()?)
     }
@@ -127,6 +140,7 @@ pub trait Buf {
 }
 
 pub trait BufMut: Buf {
+    #[must_use]
     fn bytes_mut(&mut self) -> &mut [u8];
     fn slice_to_mut(&mut self, range: Range<usize>) -> Result<BytesMut, BufError> {
         if range.end > self.length() {
@@ -189,6 +203,7 @@ pub trait BufMut: Buf {
 impl Deref for Bytes<'_> {
     type Target = [u8];
 
+    #[must_use]
     fn deref(&self) -> &Self::Target {
         self.bytes()
     }
@@ -196,24 +211,29 @@ impl Deref for Bytes<'_> {
 impl Deref for BytesMut<'_> {
     type Target = [u8];
 
+    #[must_use]
     fn deref(&self) -> &Self::Target {
         self.bytes()
     }
 }
 impl DerefMut for BytesMut<'_> {
+    #[must_use]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.bytes_mut()
     }
 }
 impl<'a> Buf for Bytes<'a> {
+    #[must_use]
     fn length(&self) -> usize {
         self.length
     }
 
+    #[must_use]
     fn bytes(&self) -> &[u8] {
         &self.data[..self.length]
     }
 
+    #[must_use]
     fn capacity(&self) -> usize {
         self.data.len()
     }
@@ -260,6 +280,7 @@ impl<'a> Buf for Bytes<'a> {
     }
 }
 impl<'a> From<&'a BytesMut<'a>> for Bytes<'a> {
+    #[must_use]
     fn from(bytes: &'a BytesMut<'a>) -> Self {
         Bytes {
             data: bytes.data,
@@ -268,9 +289,11 @@ impl<'a> From<&'a BytesMut<'a>> for Bytes<'a> {
     }
 }
 impl<'a> Buf for BytesMut<'a> {
+    #[must_use]
     fn length(&self) -> usize {
         self.length
     }
+
     fn pop_front_bytes<'b>(&'b mut self, amount: usize) -> Result<Bytes<'b>, BufError> {
         if amount == 0 {
             return Ok(Bytes::new(&self.bytes()[..0]));
@@ -291,10 +314,12 @@ impl<'a> Buf for BytesMut<'a> {
         self.data = rest;
         Ok(Bytes::new(bytes))
     }
+    #[must_use]
     fn bytes(&self) -> &[u8] {
         &self.data[..self.length]
     }
 
+    #[must_use]
     fn capacity(&self) -> usize {
         self.data.len()
     }
@@ -332,11 +357,19 @@ impl BufMut for BytesMut<'_> {
 
 pub trait ToFromBytesEndian: Sized {
     type AsBytesType: AsRef<[u8]>;
+
+    #[must_use]
     fn byte_size() -> usize {
         core::mem::size_of::<Self::AsBytesType>()
     }
+
+    #[must_use]
     fn to_bytes_le(&self) -> Self::AsBytesType;
+
+    #[must_use]
     fn to_bytes_be(&self) -> Self::AsBytesType;
+
+    #[must_use]
     fn to_bytes_ne(&self) -> Self::AsBytesType {
         if cfg!(target_endian = "big") {
             self.to_bytes_be()
@@ -344,8 +377,13 @@ pub trait ToFromBytesEndian: Sized {
             self.to_bytes_le()
         }
     }
+    #[must_use]
     fn from_bytes_le(bytes: &[u8]) -> Option<Self>;
+
+    #[must_use]
     fn from_bytes_be(bytes: &[u8]) -> Option<Self>;
+
+    #[must_use]
     fn from_bytes_ne(bytes: &[u8]) -> Option<Self> {
         if cfg!(target_endian = "big") {
             Self::from_bytes_be(bytes)
@@ -353,6 +391,7 @@ pub trait ToFromBytesEndian: Sized {
             Self::from_bytes_le(bytes)
         }
     }
+    #[must_use]
     fn to_bytes_endian(&self, endian: Endian) -> Self::AsBytesType {
         match endian {
             Endian::Big => self.to_bytes_be(),
@@ -360,6 +399,7 @@ pub trait ToFromBytesEndian: Sized {
             Endian::Native => self.to_bytes_ne(),
         }
     }
+    #[must_use]
     fn from_bytes_endian(bytes: &[u8], endian: Endian) -> Option<Self> {
         match endian {
             Endian::Big => Self::from_bytes_be(bytes),
@@ -375,30 +415,37 @@ macro_rules! implement_to_from_bytes {
             impl ToFromBytesEndian for $t {
     type AsBytesType = [u8; core::mem::size_of::<Self>()];
 
+    #[must_use]
     fn byte_size() -> usize {
         core::mem::size_of::<Self>()
     }
 
+    #[must_use]
     fn to_bytes_le(&self) -> Self::AsBytesType {
         self.to_le_bytes()
     }
 
+    #[must_use]
     fn to_bytes_be(&self) -> Self::AsBytesType {
         self.to_be_bytes()
     }
 
+    #[must_use]
     fn to_bytes_ne(&self) -> Self::AsBytesType {
         self.to_ne_bytes()
     }
 
+    #[must_use]
     fn from_bytes_le(bytes: &[u8]) -> Option<Self> {
         Some(Self::from_le_bytes(bytes.try_into().ok()?))
     }
 
+    #[must_use]
     fn from_bytes_be(bytes: &[u8]) -> Option<Self> {
         Some(Self::from_be_bytes(bytes.try_into().ok()?))
     }
 
+    #[must_use]
     fn from_bytes_ne(bytes: &[u8]) -> Option<Self> {
         Some(Self::from_ne_bytes(bytes.try_into().ok()?))
     }

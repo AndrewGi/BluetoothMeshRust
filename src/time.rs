@@ -4,9 +4,11 @@ use core::time::Duration;
 pub struct Timestamp {}
 
 impl Timestamp {
+    #[must_use]
     pub fn now() -> Timestamp {
         unimplemented!()
     }
+    #[must_use]
     pub fn duration_since(self, other: Timestamp) -> Option<Duration> {
         if other > self {
             None
@@ -14,9 +16,11 @@ impl Timestamp {
             unimplemented!()
         }
     }
+    #[must_use]
     pub fn duration_until(self, other: Timestamp) -> Option<Duration> {
         other.duration_since(self)
     }
+    #[must_use]
     pub fn with_delay(delay: Duration) -> Timestamp {
         Self::now() + delay
     }
@@ -24,6 +28,7 @@ impl Timestamp {
 impl core::ops::Add<Duration> for Timestamp {
     type Output = Timestamp;
 
+    #[must_use]
     fn add(self, _rhs: Duration) -> Self::Output {
         unimplemented!()
     }
