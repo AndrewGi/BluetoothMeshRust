@@ -176,7 +176,6 @@ impl TryFrom<&Address> for UnicastAddress {
 impl TryFrom<&Address> for VirtualAddressHash {
     type Error = ();
 
-    #[must_use]
     fn try_from(value: &Address) -> Result<Self, Self::Error> {
         match value {
             Address::VirtualHash(h) => Ok(*h),
@@ -187,7 +186,6 @@ impl TryFrom<&Address> for VirtualAddressHash {
 impl TryFrom<&Address> for VirtualAddress {
     type Error = ();
 
-    #[must_use]
     fn try_from(value: &Address) -> Result<Self, Self::Error> {
         match value {
             Address::Virtual(v) => Ok(*v),
