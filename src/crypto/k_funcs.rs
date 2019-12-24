@@ -17,4 +17,6 @@ pub fn k2(key: NetKey) -> (NID, EncryptionKey, PrivacyKey) {
 pub fn k4(key: AppKey) -> AID {
     unimplemented!()
 }
-pub fn s1(m: &'static [u8]) -> Salt {}
+pub fn s1(m: &'static [u8]) -> Salt {
+    unimplemented!()
+}

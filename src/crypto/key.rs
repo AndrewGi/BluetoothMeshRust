@@ -19,7 +19,7 @@ impl Key {
     }
 }
 impl TryFrom<&[u8]> for Key {
-    type Error = ();
+    type Error = core::array::TryFromSliceError;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         Ok(Key::new(value.try_into()?))
@@ -44,7 +44,7 @@ impl NetKey {
     }
 }
 impl TryFrom<&[u8]> for NetKey {
-    type Error = ();
+    type Error = core::array::TryFromSliceError;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         Ok(NetKey::new(value.try_into()?))
@@ -69,7 +69,7 @@ impl IdentityKey {
     }
 }
 impl TryFrom<&[u8]> for IdentityKey {
-    type Error = ();
+    type Error = core::array::TryFromSliceError;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         Ok(IdentityKey::new(value.try_into()?))
@@ -94,7 +94,7 @@ impl BeaconKey {
     }
 }
 impl TryFrom<&[u8]> for BeaconKey {
-    type Error = ();
+    type Error = core::array::TryFromSliceError;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         Ok(BeaconKey::new(value.try_into()?))
@@ -119,7 +119,7 @@ impl EncryptionKey {
     }
 }
 impl TryFrom<&[u8]> for EncryptionKey {
-    type Error = ();
+    type Error = core::array::TryFromSliceError;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         Ok(EncryptionKey::new(value.try_into()?))
@@ -144,7 +144,7 @@ impl PrivacyKey {
     }
 }
 impl TryFrom<&[u8]> for PrivacyKey {
-    type Error = ();
+    type Error = core::array::TryFromSliceError;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         Ok(PrivacyKey::new(value.try_into()?))
@@ -172,9 +172,8 @@ impl DevKey {
         AKF(false)
     }
 }
-#[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
 impl TryFrom<&[u8]> for DevKey {
-    type Error = ();
+    type Error = core::array::TryFromSliceError;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         Ok(DevKey::new(value.try_into()?))
@@ -205,7 +204,7 @@ impl AppKey {
     }
 }
 impl TryFrom<&[u8]> for AppKey {
-    type Error = ();
+    type Error = core::array::TryFromSliceError;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         Ok(AppKey::new(value.try_into()?))
@@ -244,15 +243,8 @@ impl From<EncryptionKey> for Key {
         k.key()
     }
 }
-
-impl From<NetKey> for Key {
-    fn from(k: NetKey) -> Self {
-        k.key()
-    }
-}
-
 impl From<DevKey> for Key {
-    fn from(k: NetKey) -> Self {
+    fn from(k: DevKey) -> Self {
         k.key()
     }
 }
