@@ -381,6 +381,6 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_ttl_out_of_range() {
-        TTL::new(128);
+        let _ = TTL::new(128);
     }
 }
