@@ -6,10 +6,11 @@ use crate::crypto::aes_cmac::Cmac;
 use crate::crypto::key::Key;
 use crate::crypto::Salt;
 use aes_soft;
-use aes_soft::block_cipher_trait::generic_array::GenericArray;
+use aes_soft::block_cipher_trait::{generic_array::GenericArray, BlockCipher};
 use aes_soft::Aes128;
 use block_modes::block_padding::ZeroPadding;
 use block_modes::BlockMode;
+
 use core::convert::TryInto;
 use core::slice;
 use crypto_mac::Mac;
@@ -26,6 +27,11 @@ pub enum AesError {
 type AesEcb = block_modes::Ecb<aes_soft::Aes128, ZeroPadding>;
 pub struct AESCipher(aes_soft::Aes128);
 impl AESCipher {
+    pub fn new(key: Key) -> AESCipher {
+        AESCipher(aes_soft::Aes128::new(GenericArray::from_slice(
+            key.as_ref(),
+        )))
+    }
     #[must_use]
     fn cipher(&self) -> &aes_soft::Aes128 {
         &self.0
@@ -55,7 +61,7 @@ impl AESCipher {
         {
             let chunks = input.chunks_exact_mut(AES_BLOCK_LEN);
             for block_u8s in chunks {
-                let mut block_ga = GenericArray::from_mut_slice(block_u8s);
+                let block_ga = GenericArray::from_mut_slice(block_u8s);
                 ecb_cipher.encrypt_blocks(slice::from_mut(block_ga));
             }
         }
@@ -75,14 +81,33 @@ impl AESCipher {
         }
     }
     #[must_use]
-    pub fn aes_cmac(&self, m: &[u8]) -> Salt {
+    pub fn aes_cmac(&self, m: &[u8]) -> Key {
+        self.aes_cmac_slice(&[m])
+    }
+    #[must_use]
+    pub fn aes_cmac_slice(&self, ms: &[&[u8]]) -> Key {
         let mut cmac_context = self.cmac_cipher();
-        cmac_context.input(m);
+        for m in ms {
+            if !m.is_empty() {
+                cmac_context.input(m);
+            }
+        }
         cmac_context
             .result()
             .code()
             .as_ref()
             .try_into()
             .expect("cmac code should be 16 bytes (SALT_LEN)")
+    }
+}
+
+impl From<Key> for AESCipher {
+    fn from(k: Key) -> Self {
+        Self::new(k)
+    }
+}
+impl From<Salt> for AESCipher {
+    fn from(s: Salt) -> Self {
+        s.as_key().into()
     }
 }
