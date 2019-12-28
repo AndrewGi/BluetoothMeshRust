@@ -1,5 +1,5 @@
+use crate::crypto::k_funcs::{k1, s1};
 use crate::crypto::AKF;
-use crate::mesh::NID;
 use core::convert::{TryFrom, TryInto};
 
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
@@ -9,8 +9,10 @@ pub struct AppKeyIndex(u16);
 
 const KEY_LEN: usize = 16;
 
+/// 128-bit AES Key.
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
 pub struct Key([u8; KEY_LEN]);
+const ZERO_KEY: Key = Key([0_u8; KEY_LEN]);
 
 impl Key {
     #[must_use]
@@ -67,6 +69,12 @@ impl IdentityKey {
     pub const fn key(&self) -> Key {
         self.0
     }
+    pub fn from_net_key(key: NetKey) -> IdentityKey {
+        // From Mesh Core v1.0
+        let salt = s1("nkik");
+        const P: &str = "id128\x01";
+        k1(key.0.as_ref(), salt, P).into()
+    }
 }
 impl TryFrom<&[u8]> for IdentityKey {
     type Error = core::array::TryFromSliceError;
@@ -91,6 +99,11 @@ impl BeaconKey {
     #[must_use]
     pub const fn key(&self) -> Key {
         self.0
+    }
+    pub fn from_net_key(key: NetKey) -> BeaconKey {
+        let salt = s1("nkbk");
+        const P: &str = "id128\x01";
+        k1(key.0.as_ref(), salt, P).into()
     }
 }
 impl TryFrom<&[u8]> for BeaconKey {
