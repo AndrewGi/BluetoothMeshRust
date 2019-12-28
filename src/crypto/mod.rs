@@ -17,6 +17,13 @@ pub struct TryFromBlockError(());
 const SALT_LEN: usize = 16;
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
 pub struct Salt([u8; SALT_LEN]);
+
+impl Salt {
+    pub fn as_key(&self) -> Key {
+        Key::new(self.0)
+    }
+}
+
 impl TryFrom<&[u8]> for Salt {
     type Error = TryFromBlockError;
 
@@ -41,6 +48,7 @@ impl NetworkID {
     }
 }
 
+use crate::crypto::key::Key;
 use core::array::TryFromSliceError;
 use core::convert::TryFrom;
 pub use k_funcs::{k1, k2, k3, k4};

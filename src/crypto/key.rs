@@ -1,5 +1,5 @@
 use crate::crypto::k_funcs::{k1, s1};
-use crate::crypto::AKF;
+use crate::crypto::{Salt, AKF};
 use core::convert::{TryFrom, TryInto};
 
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
@@ -7,17 +7,20 @@ pub struct NetKeyIndex(u16);
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
 pub struct AppKeyIndex(u16);
 
-const KEY_LEN: usize = 16;
+pub const KEY_LEN: usize = 16;
 
 /// 128-bit AES Key.
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
 pub struct Key([u8; KEY_LEN]);
-const ZERO_KEY: Key = Key([0_u8; KEY_LEN]);
+pub const ZERO_KEY: Key = Key([0_u8; KEY_LEN]);
 
 impl Key {
     #[must_use]
     pub fn new(key_bytes: [u8; KEY_LEN]) -> Key {
         Key(key_bytes)
+    }
+    pub fn as_salt(&self) -> Salt {
+        Salt(self.0)
     }
 }
 impl TryFrom<&[u8]> for Key {
@@ -38,8 +41,13 @@ impl AsRef<[u8]> for Key {
 pub struct NetKey(Key);
 
 impl NetKey {
-    pub fn new(key_bytes: [u8; KEY_LEN]) -> NetKey {
-        NetKey(Key(key_bytes))
+    #[must_use]
+    pub fn new_bytes(key_bytes: [u8; KEY_LEN]) -> Self {
+        Self::new(Key(key_bytes))
+    }
+    #[must_use]
+    pub fn new(key: Key) -> Self {
+        Self(key)
     }
     pub const fn key(&self) -> Key {
         self.0
@@ -62,8 +70,12 @@ pub struct IdentityKey(Key);
 
 impl IdentityKey {
     #[must_use]
-    pub fn new(key_bytes: [u8; KEY_LEN]) -> IdentityKey {
-        IdentityKey(Key(key_bytes))
+    pub fn new_bytes(key_bytes: [u8; KEY_LEN]) -> Self {
+        Self::new(Key(key_bytes))
+    }
+    #[must_use]
+    pub fn new(key: Key) -> Self {
+        Self(key)
     }
     #[must_use]
     pub const fn key(&self) -> Key {
@@ -93,8 +105,12 @@ impl From<Key> for IdentityKey {
 pub struct BeaconKey(Key);
 impl BeaconKey {
     #[must_use]
-    pub fn new(key_bytes: [u8; KEY_LEN]) -> BeaconKey {
-        BeaconKey(Key(key_bytes))
+    pub fn new_bytes(key_bytes: [u8; KEY_LEN]) -> Self {
+        Self::new(Key(key_bytes))
+    }
+    #[must_use]
+    pub fn new(key: Key) -> Self {
+        Self(key)
     }
     #[must_use]
     pub const fn key(&self) -> Key {
@@ -123,8 +139,12 @@ pub struct EncryptionKey(Key);
 
 impl EncryptionKey {
     #[must_use]
-    pub fn new(key_bytes: [u8; KEY_LEN]) -> EncryptionKey {
-        EncryptionKey(Key(key_bytes))
+    pub fn new_bytes(key_bytes: [u8; KEY_LEN]) -> EncryptionKey {
+        Self::new(Key(key_bytes))
+    }
+    #[must_use]
+    pub fn new(key: Key) -> EncryptionKey {
+        EncryptionKey(key)
     }
     #[must_use]
     pub const fn key(&self) -> Key {
@@ -148,8 +168,12 @@ pub struct PrivacyKey(Key);
 
 impl PrivacyKey {
     #[must_use]
-    pub fn new(key_bytes: [u8; KEY_LEN]) -> PrivacyKey {
-        PrivacyKey(Key(key_bytes))
+    pub fn new_bytes(key_bytes: [u8; KEY_LEN]) -> Self {
+        Self::new(Key(key_bytes))
+    }
+    #[must_use]
+    pub fn new(key: Key) -> Self {
+        Self(key)
     }
     #[must_use]
     pub const fn key(&self) -> Key {
@@ -173,8 +197,12 @@ pub struct DevKey(Key);
 
 impl DevKey {
     #[must_use]
-    pub fn new(key_bytes: [u8; KEY_LEN]) -> DevKey {
-        DevKey(Key(key_bytes))
+    pub fn new_bytes(key_bytes: [u8; KEY_LEN]) -> Self {
+        Self::new(Key(key_bytes))
+    }
+    #[must_use]
+    pub fn new(key: Key) -> Self {
+        Self(key)
     }
     #[must_use]
     pub fn key(&self) -> Key {
@@ -203,8 +231,12 @@ pub struct AppKey(Key);
 
 impl AppKey {
     #[must_use]
-    pub fn new(key_bytes: [u8; KEY_LEN]) -> AppKey {
-        AppKey(Key(key_bytes))
+    pub fn new_bytes(key_bytes: [u8; KEY_LEN]) -> Self {
+        Self::new(Key(key_bytes))
+    }
+    #[must_use]
+    pub fn new(key: Key) -> Self {
+        Self(key)
     }
 
     #[must_use]
