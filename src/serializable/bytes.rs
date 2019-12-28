@@ -258,7 +258,7 @@ impl<'a> Buf for Bytes<'a> {
             Err(BufError::OutOfRange(amount))
         } else {
             let (bytes, rest) = self.data.split_at(amount);
-            // Unsafe because we have to fix the lifetimes to set `self.data` to `rest`
+            // Unsafe because we have to fix the lifetimes to set `self.data` to `rest`.
             let (bytes, rest) = unsafe {
                 core::mem::transmute::<(&'b [u8], &'b [u8]), (&'a [u8], &'a [u8])>((bytes, rest))
             };
@@ -302,10 +302,12 @@ impl<'a> Buf for BytesMut<'a> {
             return Err(BufError::OutOfRange(amount));
         }
         let (bytes, rest) = self.data.split_at_mut(amount);
-        // Unsafe because we have to fix the lifetimes to set `self.data` to `rest`
+        // Unsafe because we have to fix the lifetimes to set `self.data` to `rest`.
         let (bytes, rest) = unsafe {
             // Upgrade the lifetimes so we can replace `self.data` with `rest` without
-            // complaining about the temporary lifetime issue
+            // complaining about the temporary lifetime issue. The lifetimes of the split buffers
+            // should be the same as the parent buffer only when not using the parent buffer
+            // after splitting.
             core::mem::transmute::<(&'b mut [u8], &'b mut [u8]), (&'a mut [u8], &'a mut [u8])>((
                 bytes, rest,
             ))
