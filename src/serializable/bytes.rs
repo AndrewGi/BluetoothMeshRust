@@ -1,5 +1,6 @@
 use core::convert::TryInto;
 use core::iter::Iterator;
+use core::mem;
 use core::ops::{Deref, DerefMut, Range};
 
 #[derive(Copy, Clone)]
@@ -253,15 +254,12 @@ impl<'a> Buf for Bytes<'a> {
         }
     }
 
-    fn pop_front_bytes<'b>(&'b mut self, amount: usize) -> Result<Bytes, BufError> {
+    fn pop_front_bytes(&mut self, amount: usize) -> Result<Bytes, BufError> {
         if amount > self.length() {
             Err(BufError::OutOfRange(amount))
         } else {
-            let (bytes, rest) = self.data.split_at(amount);
-            // Unsafe because we have to fix the lifetimes to set `self.data` to `rest`.
-            let (bytes, rest) = unsafe {
-                core::mem::transmute::<(&'b [u8], &'b [u8]), (&'a [u8], &'a [u8])>((bytes, rest))
-            };
+            let tmp = mem::replace(&mut self.data, &[]);
+            let (bytes, rest) = tmp.split_at(amount);
             self.length -= amount;
             self.data = rest;
             Ok(Bytes::new(bytes))
@@ -294,24 +292,16 @@ impl<'a> Buf for BytesMut<'a> {
         self.length
     }
 
-    fn pop_front_bytes<'b>(&'b mut self, amount: usize) -> Result<Bytes<'b>, BufError> {
+    fn pop_front_bytes(&mut self, amount: usize) -> Result<Bytes, BufError> {
         if amount == 0 {
             return Ok(Bytes::new(&self.bytes()[..0]));
         }
         if amount > self.length {
             return Err(BufError::OutOfRange(amount));
         }
-        let (bytes, rest) = self.data.split_at_mut(amount);
-        // Unsafe because we have to fix the lifetimes to set `self.data` to `rest`.
-        let (bytes, rest) = unsafe {
-            // Upgrade the lifetimes so we can replace `self.data` with `rest` without
-            // complaining about the temporary lifetime issue. The lifetimes of the split buffers
-            // should be the same as the parent buffer only when not using the parent buffer
-            // after splitting.
-            core::mem::transmute::<(&'b mut [u8], &'b mut [u8]), (&'a mut [u8], &'a mut [u8])>((
-                bytes, rest,
-            ))
-        };
+
+        let tmp = mem::replace(&mut self.data, &mut []);
+        let (bytes, rest) = tmp.split_at_mut(amount);
         self.length -= amount;
         self.data = rest;
         Ok(Bytes::new(bytes))
