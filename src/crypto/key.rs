@@ -49,10 +49,11 @@ impl NetKey {
     pub fn new(key: Key) -> Self {
         Self(key)
     }
-    pub const fn key(&self) -> Key {
-        self.0
+    pub const fn key(&self) -> &Key {
+        &self.0
     }
 }
+
 impl TryFrom<&[u8]> for NetKey {
     type Error = core::array::TryFromSliceError;
 
@@ -85,7 +86,7 @@ impl IdentityKey {
         // From Mesh Core v1.0
         let salt = s1("nkik");
         const P: &str = "id128\x01";
-        k1(key.0.as_ref(), salt, P).into()
+        k1(&key.0, salt, P.as_bytes()).into()
     }
 }
 impl TryFrom<&[u8]> for IdentityKey {
@@ -119,7 +120,7 @@ impl BeaconKey {
     pub fn from_net_key(key: NetKey) -> BeaconKey {
         let salt = s1("nkbk");
         const P: &str = "id128\x01";
-        k1(key.0.as_ref(), salt, P).into()
+        k1(key.key(), salt, P.as_bytes()).into()
     }
 }
 impl TryFrom<&[u8]> for BeaconKey {
@@ -262,34 +263,76 @@ impl From<Key> for AppKey {
 }
 
 impl From<NetKey> for Key {
+    #[must_use]
     fn from(k: NetKey) -> Self {
-        k.key()
+        k.key().clone()
     }
 }
 impl From<AppKey> for Key {
+    #[must_use]
     fn from(k: AppKey) -> Self {
         k.key()
     }
 }
 impl From<IdentityKey> for Key {
+    #[must_use]
     fn from(k: IdentityKey) -> Self {
         k.key()
     }
 }
 
 impl From<BeaconKey> for Key {
+    #[must_use]
     fn from(k: BeaconKey) -> Self {
         k.key()
     }
 }
 
 impl From<EncryptionKey> for Key {
+    #[must_use]
     fn from(k: EncryptionKey) -> Self {
         k.key()
     }
 }
 impl From<DevKey> for Key {
+    #[must_use]
     fn from(k: DevKey) -> Self {
         k.key()
+    }
+}
+
+impl AsRef<Key> for AppKey {
+    fn as_ref(&self) -> &Key {
+        &self.0
+    }
+}
+impl AsRef<Key> for DevKey {
+    #[must_use]
+    fn as_ref(&self) -> &Key {
+        &self.0
+    }
+}
+impl AsRef<Key> for IdentityKey {
+    #[must_use]
+    fn as_ref(&self) -> &Key {
+        &self.0
+    }
+}
+impl AsRef<Key> for BeaconKey {
+    #[must_use]
+    fn as_ref(&self) -> &Key {
+        &self.0
+    }
+}
+impl AsRef<Key> for PrivacyKey {
+    #[must_use]
+    fn as_ref(&self) -> &Key {
+        &self.0
+    }
+}
+impl AsRef<Key> for EncryptionKey {
+    #[must_use]
+    fn as_ref(&self) -> &Key {
+        &self.0
     }
 }
