@@ -1,3 +1,6 @@
+use crate::crypto::key::Key;
+use core::convert::TryFrom;
+
 pub mod aes;
 mod aes_cmac;
 pub mod k_funcs;
@@ -37,18 +40,20 @@ impl TryFrom<&[u8]> for Salt {
         }
     }
 }
+impl AsRef<[u8]> for Salt {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
 pub struct ECDHSecret();
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
-pub struct NetworkID();
+pub struct NetworkID(u64);
 impl NetworkID {
     /// Derives `NetworkID` from `key::NetKey` by calling `k3` on `key`.
     pub fn from_net_key(key: key::NetKey) -> NetworkID {
-        k3(key)
+        NetworkID(k3(key.key()))
     }
 }
 
-use crate::crypto::key::Key;
-use core::array::TryFromSliceError;
-use core::convert::TryFrom;
 pub use k_funcs::{k1, k2, k3, k4};
