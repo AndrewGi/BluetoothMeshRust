@@ -46,6 +46,7 @@ pub fn k4(key: &AppKey) -> AID {
     let t = AESCipher::from(salt).aes_cmac(key.as_ref().as_ref());
     AID(AESCipher::from(t).aes_cmac(b"id6\x01").as_ref()[15] & 0x3F)
 }
+// TODO: Cache common salts ("smk1"-"smk4")
 #[must_use]
 pub fn s1(m: impl AsRef<[u8]>) -> Salt {
     s1_bytes(m.as_ref())
