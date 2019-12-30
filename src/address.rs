@@ -1,3 +1,5 @@
+use crate::crypto::aes::AESCipher;
+use crate::crypto::k_funcs::s1;
 use crate::serializable::bytes::ToFromBytesEndian;
 use crate::uuid::UUID;
 use core::convert::{TryFrom, TryInto};
@@ -27,14 +29,37 @@ const VIRTUAL_MASK: u16 = GROUP_MASK;
 pub struct UnicastAddress(u16);
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct GroupAddress(u16);
+const VIRTUAL_ADDRESS_HASH_MAX: u16 = (1_u16 << 14) - 1;
 /// Only stores the 14 bit hash of the virtual UUID.
 /// For the full 128 bit UUID, look at [`VirtualAddress`]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct VirtualAddressHash(u16);
+impl VirtualAddressHash {
+    /// Create a 14 bit `VirtualAddressHash` from the 16 bit input.
+    /// # Panics
+    /// Panics if `address > VIRTUAL_ADDRESS_HASH_MAX`.
+    pub fn new(address: u16) -> VirtualAddressHash {
+        assert!(address <= VIRTUAL_ADDRESS_HASH_MAX);
+        VirtualAddressHash(address)
+    }
+    /// Creates a 14 bit `VirtualAddressHash` by masking a u16 to a u14.
+    pub fn new_masked(address: u16) -> VirtualAddressHash {
+        VirtualAddressHash(address & VIRTUAL_ADDRESS_HASH_MAX)
+    }
+}
 /// Stores the 14 bit hash and full 128 bit virtual UUID.
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct VirtualAddress(VirtualAddressHash, UUID);
-
+impl VirtualAddress {
+    pub fn hash_uuid(uuid: &UUID) -> VirtualAddressHash {
+        let salt = s1("vtad");
+        let k = AESCipher::from(salt).aes_cmac(uuid.as_ref());
+        VirtualAddressHash::new_masked(u16::from_be_bytes([k.as_ref()[15], k.as_ref()[14]]))
+    }
+    pub fn new(uuid: &UUID) -> VirtualAddress {
+        VirtualAddress(Self::hash_uuid(uuid), uuid.clone())
+    }
+}
 impl UnicastAddress {
     /// Creates a Unicast address by masking any u16 into it.
     #[must_use]
