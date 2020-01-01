@@ -12,6 +12,7 @@ type UUIDBytes = [u8; 16];
 pub struct UUID(pub UUIDBytes);
 
 impl UUID {
+    // TODO: Write new UUID functions (versions 1-4)
     #[must_use]
     pub fn from_fields(
         time_low: u32,
@@ -32,23 +33,23 @@ impl UUID {
         ])
     }
     #[must_use]
-    pub fn time_low(self) -> u32 {
+    pub fn time_low(&self) -> u32 {
         u32::from_le_bytes([self.0[0], self.0[1], self.0[2], self.0[3]])
     }
     #[must_use]
-    pub fn time_mid(self) -> u16 {
+    pub fn time_mid(&self) -> u16 {
         u16::from_le_bytes([self.0[4], self.0[5]])
     }
     #[must_use]
-    pub fn time_high(self) -> u16 {
+    pub fn time_high(&self) -> u16 {
         u16::from_le_bytes([self.0[6], self.0[7]])
     }
     #[must_use]
-    pub fn clock_seq(self) -> u16 {
+    pub fn clock_seq(&self) -> u16 {
         u16::from_le_bytes([self.0[8], self.0[9]])
     }
     #[must_use]
-    pub fn node(self) -> u64 {
+    pub fn node(&self) -> u64 {
         u64::from_le_bytes([
             self.0[10], self.0[11], self.0[12], self.0[13], self.0[14], self.0[15], 0, 0,
         ])
@@ -64,6 +65,7 @@ impl AsMut<[u8]> for UUID {
         &mut self.0
     }
 }
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct UUIDFields {
     pub time_low: u32,
     pub time_mid: u16,

@@ -33,4 +33,6 @@ pub mod transport;
 
 pub mod mesh_io;
 
+pub mod provisioning;
+
 pub mod properties;
