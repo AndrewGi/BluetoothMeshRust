@@ -1,5 +1,5 @@
-use crate::crypto::{AID, AKF};
-use crate::mesh::{MIC, U24};
+use crate::crypto::{AID, AKF, MIC};
+use crate::mesh::U24;
 use core::convert::TryFrom;
 
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
