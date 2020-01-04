@@ -64,7 +64,7 @@ pub struct TransactionStartPDU {
 /// FCS 3GPP TS 27.010
 /// Polynomial x^8 x^2 + x +1
 pub fn fcs(data: &[u8]) -> FCS {
-    todo!("implement fcs with polynomial x^8 + x^2 + x + 1")
+    unimplemented!("implement fcs with polynomial x^8 + x^2 + x + 1")
 }
 impl TransactionStartPDU {
     pub fn new(seg_n: SegmentIndex, length: u16, fcs: FCS) -> Self {
@@ -75,7 +75,7 @@ impl TransactionStartPDU {
         }
     }
     pub fn from_data(data: &[u8]) -> TransactionStartPDU {
-        todo!()
+        unimplemented!()
     }
 }
 pub struct TransactionContinuationPDU {
