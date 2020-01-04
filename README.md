@@ -25,7 +25,7 @@ TODO:
     - [ ] Models
     - [ ] States
     - [ ] Messages
-    - [ ] Acknoledgements
+    - [ ] Acknowledgements
   - [ ] Transport
     - [ ] Upper
       - [ ] Control
@@ -61,6 +61,7 @@ TODO:
     - [x] k3
     - [x] k4
     - [x] s1
+    - [x] Tests for k1-k4, s1
     - [x] id128
     - [ ] ECDH
     - [x] AES-CMAC
@@ -76,8 +77,8 @@ TODO:
     
 - [ ] Serialization
   - [ ] Wire Serialization
-  - [ ] Text Serialization
     - [x] Tests written
+  - [ ] Text Serialization
 
 - [ ] Models
   - [ ] Config
