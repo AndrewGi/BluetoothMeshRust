@@ -4,13 +4,19 @@
 
 use crate::crypto::aes_cmac::Cmac;
 use crate::crypto::key::Key;
-use crate::crypto::Salt;
-use aes_soft;
-use aes_soft::block_cipher_trait::{generic_array::GenericArray, BlockCipher};
-use aes_soft::Aes128;
+use crate::crypto::{Nonce, Salt, MIC};
+use aes::block_cipher_trait::{
+    generic_array::{
+        typenum::consts::{U4, U8},
+        GenericArray,
+    },
+    BlockCipher,
+};
+use aes::Aes128;
 use block_modes::block_padding::ZeroPadding;
 use block_modes::BlockMode;
 
+use aead::Aead;
 use core::convert::TryInto;
 use core::slice;
 use crypto_mac::Mac;
@@ -24,16 +30,21 @@ pub enum AesError {
     InvalidLength,
     InvalidPadding,
 }
-type AesEcb = block_modes::Ecb<aes_soft::Aes128, ZeroPadding>;
-pub struct AESCipher(aes_soft::Aes128);
+type AesEcb = block_modes::Ecb<Aes128, ZeroPadding>;
+type AesCcmBigMic = crate::crypto::aes_ccm::AesCcm<U8>;
+type AesCcmSmallMic = crate::crypto::aes_ccm::AesCcm<U4>;
+#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Debug, Hash)]
+pub enum MicSize {
+    Big,
+    Small,
+}
+pub struct AESCipher(Aes128);
 impl AESCipher {
     pub fn new(key: Key) -> AESCipher {
-        AESCipher(aes_soft::Aes128::new(GenericArray::from_slice(
-            key.as_ref(),
-        )))
+        AESCipher(Aes128::new(GenericArray::from_slice(key.as_ref())))
     }
     #[must_use]
-    fn cipher(&self) -> &aes_soft::Aes128 {
+    fn cipher(&self) -> &Aes128 {
         &self.0
     }
     #[must_use]
@@ -43,6 +54,14 @@ impl AESCipher {
     #[must_use]
     fn cmac_cipher(&self) -> Cmac<Aes128> {
         Cmac::from_cipher(self.cipher().clone())
+    }
+    #[must_use]
+    fn ccm_big_mic_cipher(&self) -> AesCcmBigMic {
+        self.cipher().into()
+    }
+    #[must_use]
+    fn ccm_small_mic_cipher(&self) -> AesCcmSmallMic {
+        self.cipher().into()
     }
     /// Decrypts `input` in-place with 128-bit `key` back into `input`.
     #[must_use]
@@ -98,6 +117,31 @@ impl AESCipher {
             .as_ref()
             .try_into()
             .expect("cmac code should be 16 bytes (SALT_LEN)")
+    }
+    pub fn aes_ccm(
+        &self,
+        nonce: Nonce,
+        associated_data: &[u8],
+        payload: &mut [u8],
+        mic_size: MicSize,
+    ) -> MIC {
+        let nonce = nonce.as_ref().into();
+        match mic_size {
+            MicSize::Big => self
+                .ccm_big_mic_cipher()
+                .encrypt_in_place_detached(nonce, associated_data, payload)
+                .expect("ccm encrypt error")
+                .as_slice()
+                .try_into()
+                .unwrap(),
+            MicSize::Small => self
+                .ccm_small_mic_cipher()
+                .encrypt_in_place_detached(nonce, associated_data, payload)
+                .expect("ccm encrypt error")
+                .as_slice()
+                .try_into()
+                .unwrap(),
+        }
     }
 }
 

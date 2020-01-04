@@ -2,7 +2,8 @@
 //! Network Layer is BIG Endian
 
 use crate::address::{Address, UnicastAddress};
-use crate::mesh::{SequenceNumber, CTL, IVI, MIC, NID, TTL};
+use crate::crypto::MIC;
+use crate::mesh::{SequenceNumber, CTL, IVI, NID, TTL};
 use crate::serializable::bytes::{Buf, BufError, BufMut, Bytes, BytesMut};
 use crate::serializable::ByteSerializable;
 use core::convert::{TryFrom, TryInto};
