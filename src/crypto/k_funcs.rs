@@ -16,9 +16,7 @@ pub fn k2(key: &Key, p: impl AsRef<[u8]>) -> (NID, EncryptionKey, PrivacyKey) {
 #[must_use]
 pub fn k2_bytes(n: &Key, p: &[u8]) -> (NID, EncryptionKey, PrivacyKey) {
     assert!(!p.is_empty(), "p must have at least one byte");
-    let salt = s1("smk2"); //From Mesh Core v1.0 Part 3.8.2.6
-                           // Copied from Ero Bluetooth Mesh on github (I wrote it)
-    let t = AESCipher::from(salt).aes_cmac(n.as_ref());
+    let t = AESCipher::from(SMK2).aes_cmac(n.as_ref());
     let cipher = AESCipher::from(t);
     let t_1 = cipher.aes_cmac_slice(&[p, &[0x01]]);
     let t_2 = cipher.aes_cmac_slice(&[t_1.as_ref(), p, &[0x02]]);
@@ -32,8 +30,7 @@ pub fn k2_bytes(n: &Key, p: &[u8]) -> (NID, EncryptionKey, PrivacyKey) {
 }
 #[must_use]
 pub fn k3(key: &Key) -> u64 {
-    let salt = s1("smk3");
-    let t = AESCipher::from(salt).aes_cmac(key.as_ref());
+    let t = AESCipher::from(SMK3).aes_cmac(key.as_ref());
     u64::from_be_bytes(
         AESCipher::from(t).aes_cmac(b"id64\x01".as_ref()).as_ref()[8..]
             .try_into()
@@ -42,15 +39,30 @@ pub fn k3(key: &Key) -> u64 {
 }
 #[must_use]
 pub fn k4(key: &AppKey) -> AID {
-    let salt = s1("smk4");
-    let t = AESCipher::from(salt).aes_cmac(key.as_ref().as_ref());
+    let t = AESCipher::from(SMK4).aes_cmac(key.as_ref().as_ref());
     AID(AESCipher::from(t).aes_cmac(b"id6\x01").as_ref()[15] & 0x3F)
 }
-// TODO: Cache common salts ("smk1"-"smk4")
+
+/// Calculates Bluetooth Mesh's `s1` on bytes. Common values are precomputed and
+/// hardcore to avoid recalculating `s1` unneededly.
 #[must_use]
 pub fn s1(m: impl AsRef<[u8]>) -> Salt {
     s1_bytes(m.as_ref())
 }
+
+const SMK1: Salt = Salt([
+    0xaa, 0x20, 0x18, 0xc6, 0x98, 0xe8, 0xb2, 0xef, 0x77, 0x75, 0x37, 0x19, 0xe9, 0xf1, 0xa8, 0x4,
+]);
+const SMK2: Salt = Salt([
+    0x4f, 0x90, 0x48, 0xc, 0x18, 0x71, 0xbf, 0xbf, 0xfd, 0x16, 0x97, 0x1f, 0x4d, 0x8d, 0x10, 0xb1,
+]);
+
+const SMK3: Salt = Salt([
+    0x0, 0x36, 0x44, 0x35, 0x3, 0xf1, 0x95, 0xcc, 0x8a, 0x71, 0x6e, 0x13, 0x62, 0x91, 0xc3, 0x2,
+]);
+const SMK4: Salt = Salt([
+    0xe, 0x9a, 0xc1, 0xb7, 0xce, 0xfa, 0x66, 0x87, 0x4c, 0x97, 0xee, 0x54, 0xac, 0x5f, 0x49, 0xbe,
+]);
 #[must_use]
 pub fn s1_bytes(m: &[u8]) -> Salt {
     AESCipher::new(ZERO_KEY).aes_cmac(m).as_salt()
@@ -83,6 +95,15 @@ mod tests {
             Salt::from_hex("b73cefbd641ef2ea598c2b6efb62f79c").unwrap()
         );
     }
+
+    #[test]
+    fn test_s1_precomputed() {
+        assert_eq!(s1("smk1"), SMK1);
+        assert_eq!(s1("smk2"), SMK2);
+        assert_eq!(s1("smk3"), SMK3);
+        assert_eq!(s1("smk4"), SMK4);
+    }
+
     #[test]
     fn test_k1() {
         let key = Key::from_hex("3216d1509884b533248541792b877f98").unwrap();
