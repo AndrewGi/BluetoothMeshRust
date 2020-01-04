@@ -1,4 +1,6 @@
+use crate::crypto::{AID, AKF};
 use crate::mesh::{MIC, U24};
+use core::convert::TryFrom;
 
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct SZMIC(bool);
@@ -68,12 +70,33 @@ impl ControlOpcode {}
 /// |  1  |  1  | Segmented Control		|
 ///
 ///
-
-pub struct UnsegmentedAccessPDU {}
+const UNSEGMENTED_ACCESS_PDU_LEN: usize = 15;
+pub struct UnsegmentedAccessPDU {
+    akf: AKF,
+    aid: AID,
+    access_pdu_buf: [u8; UNSEGMENTED_ACCESS_PDU_LEN],
+    access_pdu_len: u8,
+}
+impl UnsegmentedAccessPDU {
+    /// # Panics
+    /// Panics if `data.len() > UNSEGMENTED_ACCESS_PDU_LEN` (15)
+    pub fn new(akf: AKF, aid: AID, data: &[u8]) -> UnsegmentedAccessPDU {
+        assert!(data.len() <= UNSEGMENTED_ACCESS_PDU_LEN);
+        // If the assert passes, data.len() should fit in a u8.
+        let len = u8::try_from(data.len()).unwrap();
+        let buf = [0_u8; UNSEGMENTED_ACCESS_PDU_LEN];
+        UnsegmentedAccessPDU {
+            akf,
+            aid,
+            access_pdu_buf: buf,
+            access_pdu_len: len,
+        }
+    }
+}
 pub struct SegmentedAccessPDU {}
-const MAX_UNSEGMENTED_CONTROL_PDU: usize = 11;
+const UNSEGMENTED_CONTROL_PDU_LEN: usize = 11;
 pub struct UnsegmentedControlPDU {
-    parameters_buf: [u8; MAX_UNSEGMENTED_CONTROL_PDU],
+    parameters_buf: [u8; UNSEGMENTED_CONTROL_PDU_LEN],
     parameters_len: u8,
     opcode: ControlOpcode,
 }
@@ -81,12 +104,12 @@ impl UnsegmentedControlPDU {
     #[must_use]
     pub fn new(opcode: ControlOpcode, parameters: &[u8]) -> UnsegmentedControlPDU {
         assert!(
-            parameters.len() <= MAX_UNSEGMENTED_CONTROL_PDU,
+            parameters.len() <= UNSEGMENTED_CONTROL_PDU_LEN,
             "parameter overflow ({} > {})",
             parameters.len(),
-            MAX_UNSEGMENTED_CONTROL_PDU
+            UNSEGMENTED_CONTROL_PDU_LEN
         );
-        let mut buf = [0_u8; MAX_UNSEGMENTED_CONTROL_PDU];
+        let mut buf = [0_u8; UNSEGMENTED_CONTROL_PDU_LEN];
         buf[..parameters.len()].copy_from_slice(parameters);
         UnsegmentedControlPDU {
             parameters_buf: buf,
@@ -113,10 +136,10 @@ impl UnsegmentedControlPDU {
     }
     #[must_use]
     pub const fn max_parameters_size() -> usize {
-        MAX_UNSEGMENTED_CONTROL_PDU // 0-88 Bits
+        UNSEGMENTED_CONTROL_PDU_LEN // 0-88 Bits
     }
 }
-///
+/// Segmented Control PDU Lengths
 /// | # Packets  | PDU Size |
 /// |      1     |     8    |
 /// |      2     |    16    |

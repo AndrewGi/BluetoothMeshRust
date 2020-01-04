@@ -1,5 +1,5 @@
 use crate::crypto::k_funcs::{k1, s1};
-use crate::crypto::{Salt, AKF};
+use crate::crypto::{hex_16_to_array, Salt, AKF};
 use core::convert::{TryFrom, TryInto};
 
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
@@ -18,6 +18,9 @@ impl Key {
     #[must_use]
     pub fn new(key_bytes: [u8; KEY_LEN]) -> Key {
         Key(key_bytes)
+    }
+    pub fn from_hex(hex: &str) -> Option<Key> {
+        Some(Key::new(hex_16_to_array(hex)?))
     }
     pub fn as_salt(&self) -> Salt {
         Salt(self.0)
@@ -49,6 +52,10 @@ impl NetKey {
     pub fn new(key: Key) -> Self {
         Self(key)
     }
+    #[must_use]
+    pub fn from_hex(hex: &str) -> Option<Self> {
+        Some(Self::new_bytes(hex_16_to_array(hex)?))
+    }
     pub const fn key(&self) -> &Key {
         &self.0
     }
@@ -77,6 +84,10 @@ impl IdentityKey {
     #[must_use]
     pub fn new(key: Key) -> Self {
         Self(key)
+    }
+    #[must_use]
+    pub fn from_hex(hex: &str) -> Option<Self> {
+        Some(Self::new_bytes(hex_16_to_array(hex)?))
     }
     #[must_use]
     pub const fn key(&self) -> Key {
@@ -114,6 +125,10 @@ impl BeaconKey {
         Self(key)
     }
     #[must_use]
+    pub fn from_hex(hex: &str) -> Option<Self> {
+        Some(Self::new_bytes(hex_16_to_array(hex)?))
+    }
+    #[must_use]
     pub const fn key(&self) -> Key {
         self.0
     }
@@ -148,6 +163,10 @@ impl EncryptionKey {
         EncryptionKey(key)
     }
     #[must_use]
+    pub fn from_hex(hex: &str) -> Option<Self> {
+        Some(Self::new_bytes(hex_16_to_array(hex)?))
+    }
+    #[must_use]
     pub const fn key(&self) -> Key {
         self.0
     }
@@ -177,6 +196,10 @@ impl PrivacyKey {
         Self(key)
     }
     #[must_use]
+    pub fn from_hex(hex: &str) -> Option<Self> {
+        Some(Self::new_bytes(hex_16_to_array(hex)?))
+    }
+    #[must_use]
     pub const fn key(&self) -> Key {
         self.0
     }
@@ -204,6 +227,10 @@ impl DevKey {
     #[must_use]
     pub fn new(key: Key) -> Self {
         Self(key)
+    }
+    #[must_use]
+    pub fn from_hex(hex: &str) -> Option<Self> {
+        Some(Self::new_bytes(hex_16_to_array(hex)?))
     }
     #[must_use]
     pub fn key(&self) -> Key {
@@ -238,6 +265,10 @@ impl AppKey {
     #[must_use]
     pub fn new(key: Key) -> Self {
         Self(key)
+    }
+    #[must_use]
+    pub fn from_hex(hex: &str) -> Option<Self> {
+        Some(Self::new_bytes(hex_16_to_array(hex)?))
     }
 
     #[must_use]

@@ -1,6 +1,26 @@
 use crate::crypto::key::Key;
 use core::convert::TryFrom;
 
+/// Helper function to convert a 16 byte (32 character) hex string to 16 byte array.
+/// Returns `None` if `hex.len() != 32` or if `hex` contains non-hex characters.
+pub fn hex_16_to_array(hex: &str) -> Option<[u8; 16]> {
+    if hex.len() != 32 {
+        None
+    } else {
+        let mut out = [0_u8; 16];
+        for (pos, c) in hex.chars().enumerate() {
+            let value = u8::try_from(c.to_digit(16)?).ok()?;
+            let byte_pos = pos / 2;
+            if pos % 2 == 1 {
+                out[byte_pos] |= value;
+            } else {
+                out[byte_pos] |= value << 4;
+            }
+        }
+        Some(out)
+    }
+}
+
 pub mod aes;
 mod aes_cmac;
 pub mod k_funcs;
@@ -22,6 +42,12 @@ const SALT_LEN: usize = 16;
 pub struct Salt([u8; SALT_LEN]);
 
 impl Salt {
+    pub fn new(salt: [u8; SALT_LEN]) -> Salt {
+        Salt(salt)
+    }
+    pub fn from_hex(hex: &str) -> Option<Salt> {
+        Some(Salt::new(hex_16_to_array(hex)?))
+    }
     pub fn as_key(&self) -> Key {
         Key::new(self.0)
     }
