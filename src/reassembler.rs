@@ -1,4 +1,4 @@
-use crate::transport::{BlockAck, SegN, SegmentHeader};
+use crate::lower::{BlockAck, SegN};
 use alloc::boxed::Box;
 
 pub struct ContextHeader {

@@ -1,5 +1,5 @@
 use crate::crypto::k_funcs::{k1, s1};
-use crate::crypto::{hex_16_to_array, Salt, AKF};
+use crate::crypto::{hex_16_to_array, ECDHSecret, ProvisioningSalt, Salt, AID, AKF};
 use core::convert::{TryFrom, TryInto};
 
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
@@ -233,6 +233,10 @@ impl DevKey {
         Some(Self::new_bytes(hex_16_to_array(hex)?))
     }
     #[must_use]
+    pub fn from_salt_and_secret(salt: ProvisioningSalt, secret: ECDHSecret) -> Self {
+        Self::new(super::k1(&salt.0.as_key(), Salt(secret.0), b"prdk"))
+    }
+    #[must_use]
     pub fn key(&self) -> Key {
         self.0
     }
@@ -270,7 +274,10 @@ impl AppKey {
     pub fn from_hex(hex: &str) -> Option<Self> {
         Some(Self::new_bytes(hex_16_to_array(hex)?))
     }
-
+    #[must_use]
+    pub fn aid(&self) -> AID {
+        super::k4(self)
+    }
     #[must_use]
     pub const fn key(&self) -> Key {
         self.0
@@ -280,6 +287,7 @@ impl AppKey {
         AKF(true)
     }
 }
+
 impl TryFrom<&[u8]> for AppKey {
     type Error = core::array::TryFromSliceError;
 

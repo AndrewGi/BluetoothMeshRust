@@ -1,5 +1,5 @@
 use crate::crypto::aes::AESCipher;
-use crate::crypto::k_funcs::{s1, VTAD};
+use crate::crypto::k_funcs::VTAD;
 use crate::serializable::bytes::ToFromBytesEndian;
 use crate::uuid::UUID;
 use core::convert::{TryFrom, TryInto};
@@ -57,6 +57,14 @@ impl VirtualAddress {
     }
     pub fn new(uuid: &UUID) -> VirtualAddress {
         VirtualAddress(Self::hash_uuid(uuid), uuid.clone())
+    }
+    pub fn uuid(&self) -> &UUID {
+        &self.1
+    }
+}
+impl AsRef<UUID> for VirtualAddress {
+    fn as_ref(&self) -> &UUID {
+        &self.1
     }
 }
 impl UnicastAddress {
