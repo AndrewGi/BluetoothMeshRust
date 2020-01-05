@@ -2,41 +2,31 @@
 //! Network Layer is BIG Endian
 
 use crate::address::{Address, UnicastAddress};
-use crate::crypto::nonce::NetworkNonce;
+use crate::crypto::aes::{AESCipher, Error};
+use crate::crypto::key::{EncryptionKey, PrivacyKey};
+use crate::crypto::nonce::{NetworkNonce, NetworkNonceParts};
 use crate::crypto::MIC;
-use crate::mesh::{SequenceNumber, CTL, IVI, NID, TTL};
-use crate::serializable::bytes::{Buf, BufError, BufMut, Bytes, BytesMut};
+use crate::mesh::{IVIndex, SequenceNumber, CTL, IVI, NID, TTL};
+use crate::lower;
+use crate::serializable::bytes::{Buf, BufError, BufMut, Bytes, BytesMut, ToFromBytesEndian};
 use crate::serializable::ByteSerializable;
 use core::convert::{TryFrom, TryInto};
 use core::fmt;
+use core::num::flt2dec::Part;
 
 const TRANSPORT_PDU_MAX_LENGTH: usize = 16;
 
-pub struct EncryptedTransportPDU {
-    transport_pdu: [u8; TRANSPORT_PDU_MAX_LENGTH],
-    transport_length: u8,
+/// Holds the encrypted destination address, transport PDU and MIC.
+pub struct EncryptedData {
+    data: [u8; TRANSPORT_PDU_MAX_LENGTH+2],
+    length: u8,
+    mic: MIC
 }
-impl TryFrom<&[u8]> for EncryptedTransportPDU {
-    type Error = BufError;
 
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        let l = value.len();
-        if l > Self::max_len() {
-            Err(BufError::OutOfRange(l))
-        } else {
-            let mut buf: [u8; TRANSPORT_PDU_MAX_LENGTH] = Default::default();
-            buf[..l].copy_from_slice(value);
-            Ok(EncryptedTransportPDU {
-                transport_pdu: buf,
-                transport_length: l as u8,
-            })
-        }
-    }
-}
-impl EncryptedTransportPDU {
+impl EncryptedData {
     #[must_use]
     pub const fn len(&self) -> usize {
-        self.transport_length as usize
+        self.length as usize
     }
     #[must_use]
     pub const fn is_empty(&self) -> bool {
@@ -45,95 +35,31 @@ impl EncryptedTransportPDU {
     #[must_use]
     pub fn data(&self) -> &[u8] {
         let l = self.len();
-        debug_assert!(
-            l <= Self::max_len(),
-            "transport_length is longer than max transport PDU size {} > {}",
-            l,
-            Self::max_len()
-        );
-        &self.transport_pdu[..l]
+        &self.data[..l]
     }
     #[must_use]
     pub fn data_mut(&mut self) -> &mut [u8] {
         let l = self.len();
-        debug_assert!(
-            l <= Self::max_len(),
-            "transport_length is longer than max transport PDU size {} > {}",
-            l,
-            Self::max_len()
-        );
         &mut self.transport_pdu[..l]
     }
     #[must_use]
     pub const fn max_len() -> usize {
-        TRANSPORT_PDU_MAX_LENGTH
+        TRANSPORT_PDU_MAX_LENGTH+2
     }
 }
-impl AsRef<[u8]> for EncryptedTransportPDU {
+impl AsRef<[u8]> for EncryptedData {
     #[must_use]
     fn as_ref(&self) -> &[u8] {
         self.data()
     }
 }
-impl AsMut<[u8]> for EncryptedTransportPDU {
+impl AsMut<[u8]> for EncryptedData {
     #[must_use]
     fn as_mut(&mut self) -> &mut [u8] {
         self.data_mut()
     }
 }
-impl ByteSerializable for EncryptedTransportPDU {
-    fn serialize_to(&self, buf: &mut BytesMut) -> Result<(), BufError> {
-        buf.push_bytes_slice(self.data())?;
-        Ok(())
-    }
 
-    fn serialize_from(buf: &mut Bytes) -> Result<Self, BufError> {
-        if buf.len() > Self::max_len() {
-            Err(BufError::OutOfRange(buf.len()))
-        } else {
-            Ok(buf
-                .pop_bytes(buf.len())?
-                .try_into()
-                .expect("slice should be small enough"))
-        }
-    }
-}
-
-pub struct Payload {
-    transport_pdu: EncryptedTransportPDU,
-    net_mic: MIC,
-}
-
-impl Payload {
-    #[must_use]
-    pub fn size(&self) -> usize {
-        self.transport_pdu.len() + self.net_mic.byte_size()
-    }
-    #[must_use]
-    pub const fn max_size() -> usize {
-        EncryptedTransportPDU::max_len() + MIC::max_size()
-    }
-}
-impl ByteSerializable for Payload {
-    fn serialize_to(&self, buf: &mut BytesMut) -> Result<(), BufError> {
-        if self.size() > Self::max_size() {
-            Err(BufError::InvalidInput)
-        } else if buf.remaining_empty_space() < self.size() {
-            Err(BufError::OutOfSpace(self.size()))
-        } else {
-            buf.push_bytes_slice(self.transport_pdu.data())?;
-            match self.net_mic {
-                MIC::Big(b) => buf.push_be(b)?,
-                MIC::Small(s) => buf.push_be(s)?,
-            };
-            Ok(())
-        }
-    }
-
-    fn serialize_from(_buf: &mut Bytes) -> Result<Self, BufError> {
-        unimplemented!("serialize_from for payload depends on MIC length")
-    }
-}
 
 /// Mesh Network PDU Header
 /// Network layer is Big Endian.
@@ -154,7 +80,7 @@ impl ByteSerializable for Payload {
 /// `NetMIC` is 64 bit when CTL == 1
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Header {
-    pub ivi: IVI,
+    ivi: IVI,
     nid: NID,
     ctl: CTL,
     ttl: TTL,
@@ -162,6 +88,7 @@ pub struct Header {
     src: UnicastAddress,
     dst: Address,
 }
+// (IVI + NID) (1) + (CTL + TTL) (1) + Seq (3) + Src (2) + Dst (2)
 const PDU_HEADER_SIZE: usize = 1 + 1 + 3 + 2 + 2;
 
 impl Header {
@@ -231,21 +158,21 @@ impl fmt::Display for Header {
     }
 }
 const ENCRYPTED_PDU_MAX_SIZE: usize = TRANSPORT_PDU_MAX_LENGTH + PDU_HEADER_SIZE + 8;
-pub struct EncryptedNetworkPDU {
+pub struct EncryptedPDU {
     pdu_buffer: [u8; ENCRYPTED_PDU_MAX_SIZE],
     length: u8,
 }
-impl EncryptedNetworkPDU {
+impl EncryptedPDU {
     /// Wrapped a raw bytes that represent an Encrypted Network PDU
     /// See `ENCRYPTED_PDU_MAX_SIZE` for the max size.
     /// # Panics
     /// Panics if `buf.len() > ENCRYPTED_PDU_MAX_SIZE`
     #[must_use]
-    pub fn new(buf: &[u8]) -> EncryptedNetworkPDU {
+    pub fn new(buf: &[u8]) -> EncryptedPDU {
         assert!(buf.len() <= ENCRYPTED_PDU_MAX_SIZE);
         let mut pdu_buf: [u8; ENCRYPTED_PDU_MAX_SIZE] = [0_u8; ENCRYPTED_PDU_MAX_SIZE];
         pdu_buf[..buf.len()].copy_from_slice(buf);
-        EncryptedNetworkPDU {
+        EncryptedPDU {
             pdu_buffer: pdu_buf,
             length: buf.len() as u8,
         }
@@ -268,19 +195,19 @@ impl EncryptedNetworkPDU {
         &mut self.pdu_buffer[..l]
     }
 }
-impl From<&[u8]> for EncryptedNetworkPDU {
+impl From<&[u8]> for EncryptedPDU {
     #[must_use]
     fn from(b: &[u8]) -> Self {
-        EncryptedNetworkPDU::new(b)
+        EncryptedPDU::new(b)
     }
 }
-impl AsRef<[u8]> for EncryptedNetworkPDU {
+impl AsRef<[u8]> for EncryptedPDU {
     #[must_use]
     fn as_ref(&self) -> &[u8] {
         self.data()
     }
 }
-impl AsMut<[u8]> for EncryptedNetworkPDU {
+impl AsMut<[u8]> for EncryptedPDU {
     #[must_use]
     fn as_mut(&mut self) -> &mut [u8] {
         self.data_mut()
@@ -289,7 +216,7 @@ impl AsMut<[u8]> for EncryptedNetworkPDU {
 /// Mesh Network PDU Structure
 pub struct PDU {
     header: Header,
-    payload: Payload,
+    payload: lower::PDU,
 }
 impl PDU {
     #[must_use]
@@ -325,15 +252,20 @@ impl ByteSerializable for PDU {
     }
 }
 
+const OBFUSCATED_LEN: usize = 6;
+#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
+pub struct ObfuscatedHeader([u8; OBFUSCATED_LEN]);
+
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
 pub struct DeobfuscatedHeader {
     ctl: CTL,
+    ttl: TTL,
     seq: SequenceNumber,
     src: UnicastAddress,
 }
 impl DeobfuscatedHeader {
-    pub fn new(ctl: CTL, seq: SequenceNumber, src: UnicastAddress) -> Self {
-        Self { ctl, seq, src }
+    pub fn new(ctl: CTL, ttl: TTL, seq: SequenceNumber, src: UnicastAddress) -> Self {
+        Self { ctl, ttl, seq, src }
     }
     pub fn ctl(&self) -> CTL {
         self.ctl
@@ -344,15 +276,48 @@ impl DeobfuscatedHeader {
     pub fn src(&self) -> UnicastAddress {
         self.src
     }
-    pub fn obfuscate(&self, _nonce: NetworkNonce) {
-        unimplemented!();
+    /// Returns un-obfuscated plaintext header packed into bytes.
+    pub fn pack(&self) -> [u8; OBFUSCATED_LEN] {
+        let seq = self.seq.to_bytes_be();
+        let src = self.src.to_bytes_be();
+        [
+            self.ttl.with_flag(self.ctl.0),
+            seq[2],
+            seq[1],
+            seq[0],
+            src[1],
+            src[0],
+        ]
+    }
+    pub fn obfuscate(&self, pecb: PECB) -> ObfuscatedHeader {
+        ObfuscatedHeader(self.pack() ^ pecb.0)
     }
 }
+const PECB_LEN: usize = 6;
+pub struct PECB([u8; PECB_LEN]);
+impl PECB {
+    pub fn new(bytes: [u8; PECB_LEN]) -> Self {
+        Self(bytes)
+    }
+    pub fn from_privacy(
+        privacy_key: PrivacyKey,
+        privacy_random: PrivacyRandom,
+        iv_index: IVIndex,
+    ) -> Self {
+        let mut buf_out = [0_u8; PECB_LEN];
 
-const OBFUSCATED_LEN: usize = 5;
-#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
-pub struct ObfuscatedHeader([u8; OBFUSCATED_LEN]);
-
+    }
+}
+impl AsRef<[u8]> for PECB {
+    fn as_ref(&self) -> &[u8] {
+        &self.0[..]
+    }
+}
+const PRIVACY_RANDOM_LEN: usize = 7;
+pub struct PrivacyRandom([u8; PRIVACY_RANDOM_LEN]);
+impl PrivacyRandom {
+    pub fn new()
+}
 #[cfg(test)]
 mod tests {
     use super::super::random::*;

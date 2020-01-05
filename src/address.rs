@@ -52,7 +52,7 @@ impl VirtualAddressHash {
 pub struct VirtualAddress(VirtualAddressHash, UUID);
 impl VirtualAddress {
     pub fn hash_uuid(uuid: &UUID) -> VirtualAddressHash {
-        let k = AESCipher::from(VTAD).aes_cmac(uuid.as_ref());
+        let k = AESCipher::from(VTAD).cmac(uuid.as_ref());
         VirtualAddressHash::new_masked(u16::from_be_bytes([k.as_ref()[15], k.as_ref()[14]]))
     }
     pub fn new(uuid: &UUID) -> VirtualAddress {
