@@ -143,7 +143,7 @@ where
         self.cipher
             .encrypt_block(GenericArray::from_mut_slice(&mut b));
         let mut t = GenericArray::default();
-        for i in 0..TagSize::to_usize() {
+        for i in 0..tlen {
             t[i] = tag[i] ^ b[i];
         }
 
@@ -244,7 +244,7 @@ fn ccm_cbc_mac(t: &mut [u8; 16], data: &[u8], flag: bool, cipher: &Aes128) {
     } else {
         0
     };
-
+    let dlen = dlen;
     let mut data = data.iter();
     while i < dlen {
         t[i % AES_BLOCK_SIZE] ^= data.next().unwrap();

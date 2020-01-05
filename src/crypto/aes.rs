@@ -96,11 +96,11 @@ impl AESCipher {
         }
     }
     #[must_use]
-    pub fn aes_cmac(&self, m: &[u8]) -> Key {
-        self.aes_cmac_slice(&[m])
+    pub fn cmac(&self, m: &[u8]) -> Key {
+        self.cmac_slice(&[m])
     }
     #[must_use]
-    pub fn aes_cmac_slice(&self, ms: &[&[u8]]) -> Key {
+    pub fn cmac_slice(&self, ms: &[&[u8]]) -> Key {
         let mut cmac_context = self.cmac_cipher();
         for m in ms {
             if !m.is_empty() {

@@ -1,4 +1,4 @@
-use crate::net::EncryptedNetworkPDU;
+use crate::net::EncryptedPDU;
 use crate::scheduler::TimeQueueSlotKey;
 //use crate::timestamp::Timestamp;
 use crate::timestamp::TimestampTrait;
@@ -128,7 +128,7 @@ impl AsMut<[u8]> for RawMeshPDU {
         self.data_mut()
     }
 }
-impl TryFrom<RawMeshPDU> for EncryptedNetworkPDU {
+impl TryFrom<RawMeshPDU> for EncryptedPDU {
     type Error = ();
 
     fn try_from(value: RawMeshPDU) -> Result<Self, Self::Error> {
