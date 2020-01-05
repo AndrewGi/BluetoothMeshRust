@@ -324,6 +324,31 @@ impl ByteSerializable for PDU {
     }
 }
 
+#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
+pub struct DeobfuscatedHeader {
+    ctl: CTL,
+    seq: SequenceNumber,
+    src: UnicastAddress,
+}
+impl DeobfuscatedHeader {
+    pub fn new(ctl: CTL, seq: SequenceNumber, src: UnicastAddress) -> Self {
+        Self { ctl, seq, src }
+    }
+    pub fn ctl(&self) -> CTL {
+        self.ctl
+    }
+    pub fn seq(&self) -> SequenceNumber {
+        self.seq
+    }
+    pub fn src(&self) -> UnicastAddress {
+        self.src
+    }
+}
+
+const OBFUSCATED_LEN: usize = 5;
+#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
+pub struct ObfuscatedHeader([u8; OBFUSCATED_LEN]);
+
 #[cfg(test)]
 mod tests {
     use super::super::random::*;
