@@ -1,6 +1,7 @@
 use crate::net::EncryptedNetworkPDU;
 use crate::scheduler::TimeQueueSlotKey;
-use crate::time::Timestamp;
+//use crate::timestamp::Timestamp;
+use crate::timestamp::TimestampTrait;
 use core::convert::TryFrom;
 use core::time::Duration;
 
@@ -143,8 +144,8 @@ pub struct IOPDU {
     transmit_parameters: IOTransmitParameters,
     pdu: RawMeshPDU,
 }
-pub struct MeshPDUQueue {
-    queue: crate::scheduler::SlottedTimeQueue<IOPDU>,
+pub struct MeshPDUQueue<Timestamp: TimestampTrait> {
+    queue: crate::scheduler::SlottedTimeQueue<IOPDU, Timestamp>,
 }
 pub trait IOBearer {
     type Error;
@@ -152,7 +153,7 @@ pub trait IOBearer {
 }
 #[derive(Copy, Clone, Debug, Hash)]
 pub struct PDUQueueSlot(TimeQueueSlotKey);
-impl MeshPDUQueue {
+impl<Timestamp: TimestampTrait> MeshPDUQueue<Timestamp> {
     pub fn add(&mut self, delay: Duration, io_pdu: IOPDU) -> PDUQueueSlot {
         PDUQueueSlot(self.queue.push(Timestamp::with_delay(delay), io_pdu))
     }

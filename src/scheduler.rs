@@ -1,25 +1,25 @@
-use crate::time::Timestamp;
+use crate::timestamp::TimestampTrait;
 use alloc::collections::BinaryHeap;
 use core::cmp::Ordering;
 use core::time::Duration;
 use slotmap::DenseSlotMap;
 
 #[derive(Debug)]
-pub struct TimeQueueEntry<T> {
+pub struct TimeQueueEntry<T, Timestamp: TimestampTrait> {
     timestamp: Timestamp,
     item: T,
 }
-impl<T> TimeQueueEntry<T> {
+impl<T, Timestamp: TimestampTrait> TimeQueueEntry<T, Timestamp> {
     #[must_use]
-    pub const fn new(timestamp: Timestamp, item: T) -> TimeQueueEntry<T> {
+    pub fn new(timestamp: Timestamp, item: T) -> TimeQueueEntry<T, Timestamp> {
         TimeQueueEntry { timestamp, item }
     }
     #[must_use]
-    pub const fn timestamp(&self) -> Timestamp {
+    pub fn timestamp(&self) -> Timestamp {
         self.timestamp
     }
 }
-impl<T: Clone> Clone for TimeQueueEntry<T> {
+impl<T: Clone, Timestamp: TimestampTrait> Clone for TimeQueueEntry<T, Timestamp> {
     #[must_use]
     fn clone(&self) -> Self {
         TimeQueueEntry {
@@ -28,42 +28,42 @@ impl<T: Clone> Clone for TimeQueueEntry<T> {
         }
     }
 }
-impl<T> AsRef<T> for TimeQueueEntry<T> {
+impl<T, Timestamp: TimestampTrait> AsRef<T> for TimeQueueEntry<T, Timestamp> {
     #[must_use]
     fn as_ref(&self) -> &T {
         &self.item
     }
 }
-impl<T> AsMut<T> for TimeQueueEntry<T> {
+impl<T, Timestamp: TimestampTrait> AsMut<T> for TimeQueueEntry<T, Timestamp> {
     #[must_use]
     fn as_mut(&mut self) -> &mut T {
         &mut self.item
     }
 }
-impl<T> PartialOrd for TimeQueueEntry<T> {
+impl<T, Timestamp: TimestampTrait> PartialOrd for TimeQueueEntry<T, Timestamp> {
     #[must_use]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.timestamp.partial_cmp(&other.timestamp)
     }
 }
-impl<T> PartialEq for TimeQueueEntry<T> {
+impl<T, Timestamp: TimestampTrait> PartialEq for TimeQueueEntry<T, Timestamp> {
     #[must_use]
     fn eq(&self, other: &Self) -> bool {
         self.timestamp.eq(&other.timestamp)
     }
 }
-impl<T> Eq for TimeQueueEntry<T> {}
-impl<T> Ord for TimeQueueEntry<T> {
+impl<T, Timestamp: TimestampTrait> Eq for TimeQueueEntry<T, Timestamp> {}
+impl<T, Timestamp: TimestampTrait> Ord for TimeQueueEntry<T, Timestamp> {
     #[must_use]
     fn cmp(&self, other: &Self) -> Ordering {
         self.timestamp.cmp(&other.timestamp)
     }
 }
 #[derive(Debug, Default)]
-pub struct TimeQueue<T> {
-    priority_queue: BinaryHeap<TimeQueueEntry<T>>,
+pub struct TimeQueue<T, Timestamp: TimestampTrait> {
+    priority_queue: BinaryHeap<TimeQueueEntry<T, Timestamp>>,
 }
-impl<T: Clone> Clone for TimeQueue<T> {
+impl<T: Clone, Timestamp: TimestampTrait> Clone for TimeQueue<T, Timestamp> {
     #[must_use]
     fn clone(&self) -> Self {
         TimeQueue {
@@ -71,15 +71,15 @@ impl<T: Clone> Clone for TimeQueue<T> {
         }
     }
 }
-impl<T> TimeQueue<T> {
+impl<T, Timestamp: TimestampTrait> TimeQueue<T, Timestamp> {
     #[must_use]
-    pub fn new() -> TimeQueue<T> {
+    pub fn new() -> TimeQueue<T, Timestamp> {
         TimeQueue {
             priority_queue: BinaryHeap::default(),
         }
     }
     #[must_use]
-    pub fn with_capacity(capacity: usize) -> TimeQueue<T> {
+    pub fn with_capacity(capacity: usize) -> TimeQueue<T, Timestamp> {
         TimeQueue {
             priority_queue: BinaryHeap::with_capacity(capacity),
         }
@@ -89,7 +89,7 @@ impl<T> TimeQueue<T> {
         self.priority_queue.len()
     }
     #[must_use]
-    pub fn peek(&self) -> Option<&TimeQueueEntry<T>> {
+    pub fn peek(&self) -> Option<&TimeQueueEntry<T, Timestamp>> {
         self.priority_queue.peek()
     }
     #[must_use]
@@ -109,10 +109,10 @@ impl<T> TimeQueue<T> {
         self.priority_queue
             .push(TimeQueueEntry::new(timestamp, item))
     }
-    pub fn pop_force(&mut self) -> Option<TimeQueueEntry<T>> {
+    pub fn pop_force(&mut self) -> Option<TimeQueueEntry<T, Timestamp>> {
         self.priority_queue.pop()
     }
-    pub fn pop_ready(&mut self) -> Option<TimeQueueEntry<T>> {
+    pub fn pop_ready(&mut self) -> Option<TimeQueueEntry<T, Timestamp>> {
         if self.next_is_ready() {
             self.pop_force()
         } else {
@@ -127,7 +127,11 @@ impl<T> TimeQueue<T> {
     }
     #[must_use]
     pub fn time_until_next(&self) -> Option<Duration> {
-        self.peek_timestamp()?.duration_until(Timestamp::now())
+        Some(
+            self.peek_timestamp()?
+                .until(Timestamp::now())
+                .unwrap_or(Duration::default()),
+        )
     }
     #[must_use]
     pub fn is_empty(&self) -> bool {
@@ -152,11 +156,11 @@ impl<T> TimeQueue<T> {
         self.priority_queue.shrink_to_fit()
     }
     #[must_use]
-    pub fn into_heap(self) -> BinaryHeap<TimeQueueEntry<T>> {
+    pub fn into_heap(self) -> BinaryHeap<TimeQueueEntry<T, Timestamp>> {
         self.priority_queue
     }
     #[must_use]
-    pub const fn from_heap(heap: BinaryHeap<TimeQueueEntry<T>>) -> TimeQueue<T> {
+    pub fn from_heap(heap: BinaryHeap<TimeQueueEntry<T, Timestamp>>) -> TimeQueue<T, Timestamp> {
         TimeQueue {
             priority_queue: heap,
         }
@@ -188,14 +192,14 @@ slotmap::__serialize_key!(TimeQueueSlotKey);
 /// When the binary heap in the TimeQueue needs to sift, its more efficient to sift small
 /// slotmap keys than `T`s (if `size_of::<T>()` is big). If `T` is small, just use a regular
 /// TimeQueue.
-pub struct SlottedTimeQueue<T> {
-    queue: TimeQueue<TimeQueueSlotKey>,
+pub struct SlottedTimeQueue<T, Timestamp: TimestampTrait> {
+    queue: TimeQueue<TimeQueueSlotKey, Timestamp>,
     slots: slotmap::DenseSlotMap<TimeQueueSlotKey, T>,
 }
 
-impl<T> SlottedTimeQueue<T> {
+impl<T, Timestamp: TimestampTrait> SlottedTimeQueue<T, Timestamp> {
     #[must_use]
-    pub fn with_capacity(capacity: usize) -> SlottedTimeQueue<T> {
+    pub fn with_capacity(capacity: usize) -> SlottedTimeQueue<T, Timestamp> {
         SlottedTimeQueue {
             queue: TimeQueue::with_capacity(capacity),
             slots: slotmap::DenseSlotMap::with_capacity_and_key(capacity),
@@ -237,7 +241,7 @@ impl<T> SlottedTimeQueue<T> {
         self.queue.peek_timestamp()
     }
     #[must_use]
-    pub const fn slots_ref(&self) -> &DenseSlotMap<TimeQueueSlotKey, T> {
+    pub fn slots_ref(&self) -> &DenseSlotMap<TimeQueueSlotKey, T> {
         &self.slots
     }
     #[must_use]

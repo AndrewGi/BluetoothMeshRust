@@ -16,7 +16,7 @@ pub mod ble;
 pub mod random;
 pub mod scheduler;
 pub mod serializable;
-pub mod time;
+pub mod timestamp;
 pub mod uuid;
 
 //pub mod access;
