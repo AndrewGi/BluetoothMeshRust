@@ -26,6 +26,7 @@ mod aes_ccm;
 mod aes_cmac;
 pub mod k_funcs;
 pub mod key;
+pub mod nonce;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub enum MIC {
@@ -169,7 +170,19 @@ impl AsRef<[u8]> for Salt {
     }
 }
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
-pub struct ECDHSecret();
+pub struct ProvisioningSalt(Salt);
+impl ProvisioningSalt {
+    pub fn as_salt(&self) -> Salt {
+        self.0
+    }
+}
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
+pub struct ECDHSecret([u8; 16]);
+impl AsRef<[u8]> for ECDHSecret {
+    fn as_ref(&self) -> &[u8] {
+        &self.0[..]
+    }
+}
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
 pub struct NetworkID(u64);
 impl NetworkID {
@@ -178,20 +191,6 @@ impl NetworkID {
         NetworkID(k3(key.key()))
     }
 }
-const NONCE_LEN: usize = 13;
-#[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
-pub struct Nonce([u8; NONCE_LEN]);
-impl Nonce {
-    pub fn new(bytes: [u8; NONCE_LEN]) -> Nonce {
-        Nonce(bytes)
-    }
-}
-impl AsRef<[u8]> for Nonce {
-    fn as_ref(&self) -> &[u8] {
-        &self.0[..]
-    }
-}
-
 use crate::serializable::bytes::ToFromBytesEndian;
 use core::fmt::{Display, Error, Formatter};
-pub use k_funcs::{k1, k2, k3, k4};
+pub use k_funcs::{k1, k2, k3, k4, s1};

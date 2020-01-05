@@ -2,6 +2,7 @@
 //! Network Layer is BIG Endian
 
 use crate::address::{Address, UnicastAddress};
+use crate::crypto::nonce::NetworkNonce;
 use crate::crypto::MIC;
 use crate::mesh::{SequenceNumber, CTL, IVI, NID, TTL};
 use crate::serializable::bytes::{Buf, BufError, BufMut, Bytes, BytesMut};
@@ -342,6 +343,9 @@ impl DeobfuscatedHeader {
     }
     pub fn src(&self) -> UnicastAddress {
         self.src
+    }
+    pub fn obfuscate(&self, _nonce: NetworkNonce) {
+        unimplemented!();
     }
 }
 

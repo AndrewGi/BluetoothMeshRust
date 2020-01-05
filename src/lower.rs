@@ -1,6 +1,5 @@
-use crate::crypto::{AID, AKF, MIC};
+use crate::crypto::{AID, AKF};
 use crate::mesh::U24;
-use crate::reassembler::Context;
 use core::convert::TryFrom;
 
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
@@ -211,29 +210,25 @@ impl SegmentAckPDU {
         ControlOpcode::SegmentAck
     }
 }
-pub enum LowerPDU {
+pub enum PDU {
     UnsegmentedAccess(UnsegmentedAccessPDU),
     SegmentedAccess(SegmentedAccessPDU),
     UnsegmentedControl(UnsegmentedControlPDU),
     SegmentedControl(SegmentedControlPDU),
 }
-impl LowerPDU {
+impl PDU {
     #[must_use]
     pub fn is_seg(&self) -> bool {
         match self {
-            LowerPDU::UnsegmentedAccess(_) | LowerPDU::UnsegmentedControl(_) => false,
-            LowerPDU::SegmentedAccess(_) | LowerPDU::SegmentedControl(_) => true,
+            PDU::UnsegmentedAccess(_) | PDU::UnsegmentedControl(_) => false,
+            PDU::SegmentedAccess(_) | PDU::SegmentedControl(_) => true,
         }
     }
     #[must_use]
     pub fn is_control(&self) -> bool {
         match self {
-            LowerPDU::UnsegmentedAccess(_) | LowerPDU::SegmentedAccess(_) => false,
-            LowerPDU::UnsegmentedControl(_) | LowerPDU::SegmentedControl(_) => true,
+            PDU::UnsegmentedAccess(_) | PDU::SegmentedAccess(_) => false,
+            PDU::UnsegmentedControl(_) | PDU::SegmentedControl(_) => true,
         }
     }
-}
-pub struct UpperTransportPDU<'a> {
-    encrypted_payload: &'a [u8],
-    mic: MIC,
 }

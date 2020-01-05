@@ -190,6 +190,29 @@ impl Display for IVIndex {
         write!(f, "IVIndex({})", self.0)
     }
 }
+impl ToFromBytesEndian for IVIndex {
+    type AsBytesType = [u8; 4];
+
+    #[must_use]
+    fn to_bytes_le(&self) -> Self::AsBytesType {
+        (self.0).to_bytes_le()
+    }
+
+    #[must_use]
+    fn to_bytes_be(&self) -> Self::AsBytesType {
+        (self.0).to_bytes_be()
+    }
+
+    #[must_use]
+    fn from_bytes_le(bytes: &[u8]) -> Option<Self> {
+        Some(Self(u32::from_bytes_le(bytes)?))
+    }
+
+    #[must_use]
+    fn from_bytes_be(bytes: &[u8]) -> Option<Self> {
+        Some(Self(u32::from_bytes_be(bytes)?))
+    }
+}
 /// 24bit Sequence number
 #[derive(Copy, Clone, Eq, Ord, PartialOrd, PartialEq, Debug, Default, Hash)]
 pub struct SequenceNumber(pub U24);

@@ -4,7 +4,7 @@
 
 use crate::crypto::aes_cmac::Cmac;
 use crate::crypto::key::Key;
-use crate::crypto::{Nonce, Salt, MIC};
+use crate::crypto::{nonce::Nonce, Salt, MIC};
 use aes::block_cipher_trait::{
     generic_array::{
         typenum::consts::{U4, U8},
@@ -16,6 +16,7 @@ use aes::Aes128;
 use block_modes::block_padding::ZeroPadding;
 use block_modes::BlockMode;
 
+use crate::serializable::bytes::ToFromBytesEndian;
 use aead::Aead;
 use core::convert::TryInto;
 use core::slice;
@@ -24,12 +25,9 @@ use crypto_mac::Mac;
 const AES_BLOCK_LEN: usize = 16;
 type AesBlock = [u8; AES_BLOCK_LEN];
 const ZERO_BLOCK: AesBlock = [0_u8; AES_BLOCK_LEN];
-pub enum AesError {
-    InvalidOutputBuffer,
-    BlockModeError,
-    InvalidLength,
-    InvalidPadding,
-}
+/// Returned when a key can't be used to decrypt. (Wrong Key?)
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct Error;
 type AesEcb = block_modes::Ecb<Aes128, ZeroPadding>;
 type AesCcmBigMic = crate::crypto::aes_ccm::AesCcm<U8>;
 type AesCcmSmallMic = crate::crypto::aes_ccm::AesCcm<U4>;
@@ -65,10 +63,8 @@ impl AESCipher {
     }
     /// Decrypts `input` in-place with 128-bit `key` back into `input`.
     #[must_use]
-    pub fn ecb_decrypt(&self, input: &mut [u8]) -> Result<(), AesError> {
-        self.ecb_cipher()
-            .decrypt(input)
-            .map_err(|_| AesError::BlockModeError)?;
+    pub fn ecb_decrypt(&self, input: &mut [u8]) -> Result<(), Error> {
+        self.ecb_cipher().decrypt(input).or(Err(Error))?;
         Ok(())
     }
     /// Encrypt `input` in-place with 128-bit `key` back into `input`.
@@ -118,9 +114,9 @@ impl AESCipher {
             .try_into()
             .expect("cmac code should be 16 bytes (SALT_LEN)")
     }
-    pub fn aes_ccm(
+    pub fn ccm_encrypt(
         &self,
-        nonce: Nonce,
+        nonce: &Nonce,
         associated_data: &[u8],
         payload: &mut [u8],
         mic_size: MicSize,
@@ -130,17 +126,46 @@ impl AESCipher {
             MicSize::Big => self
                 .ccm_big_mic_cipher()
                 .encrypt_in_place_detached(nonce, associated_data, payload)
-                .expect("ccm encrypt error")
+                .expect("payload or associated data too big")
                 .as_slice()
                 .try_into()
                 .unwrap(),
             MicSize::Small => self
                 .ccm_small_mic_cipher()
                 .encrypt_in_place_detached(nonce, associated_data, payload)
-                .expect("ccm encrypt error")
+                .expect("payload or associated data too big")
                 .as_slice()
                 .try_into()
                 .unwrap(),
+        }
+    }
+    pub fn ccm_decrypt(
+        &self,
+        nonce: &Nonce,
+        associated_data: &[u8],
+        payload: &mut [u8],
+        mic: MIC,
+    ) -> Result<(), Error> {
+        let nonce = nonce.as_ref().into();
+        match mic {
+            MIC::Big(b) => self
+                .ccm_small_mic_cipher()
+                .decrypt_in_place_detached(
+                    nonce,
+                    associated_data,
+                    payload,
+                    b.to_bytes_be().as_ref().into(),
+                )
+                .or(Err(Error)),
+            MIC::Small(s) => self
+                .ccm_small_mic_cipher()
+                .decrypt_in_place_detached(
+                    nonce,
+                    associated_data,
+                    payload,
+                    s.to_bytes_be().as_ref().into(),
+                )
+                .or(Err(Error)),
         }
     }
 }
