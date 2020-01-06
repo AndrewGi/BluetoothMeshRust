@@ -117,6 +117,7 @@ pub struct NetworkNonceParts {
 }
 
 impl NetworkNonceParts {
+    #[must_use]
     pub fn new(
         ctl: CTL,
         ttl: TTL,
@@ -132,6 +133,7 @@ impl NetworkNonceParts {
             iv_index,
         }
     }
+    #[must_use]
     pub fn to_nonce(&self) -> NetworkNonce {
         let seq = self.seq.to_bytes_be();
         let src = self.src.to_bytes_be();

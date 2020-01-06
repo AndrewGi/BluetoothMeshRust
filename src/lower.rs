@@ -1,5 +1,5 @@
 use crate::crypto::{AID, AKF};
-use crate::mesh::U24;
+use crate::mesh::{CTL, U24};
 use core::convert::TryFrom;
 
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
@@ -40,6 +40,16 @@ impl BlockAck {
 }
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct SEG(bool);
+impl From<SEG> for bool {
+    fn from(s: SEG) -> Self {
+        s.0
+    }
+}
+impl From<bool> for SEG {
+    fn from(b: bool) -> Self {
+        SEG(b)
+    }
+}
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct OBO(bool);
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
@@ -92,8 +102,28 @@ impl UnsegmentedAccessPDU {
             access_pdu_len: len,
         }
     }
+    #[must_use]
+    pub fn to_bytes(&self) -> PDUBytes {
+        unimplemented!()
+    }
+    #[must_use]
+    pub fn from_bytes(bytes: PDUBytes) -> Self {
+        unimplemented!()
+    }
 }
 pub struct SegmentedAccessPDU {}
+
+impl SegmentedAccessPDU {
+    #[must_use]
+    pub fn to_bytes(&self) -> PDUBytes {
+        unimplemented!()
+    }
+    #[must_use]
+    pub fn from_bytes(bytes: PDUBytes) -> Self {
+        unimplemented!()
+    }
+}
+
 const UNSEGMENTED_CONTROL_PDU_LEN: usize = 11;
 pub struct UnsegmentedControlPDU {
     parameters_buf: [u8; UNSEGMENTED_CONTROL_PDU_LEN],
@@ -137,6 +167,14 @@ impl UnsegmentedControlPDU {
     #[must_use]
     pub const fn max_parameters_size() -> usize {
         UNSEGMENTED_CONTROL_PDU_LEN // 0-88 Bits
+    }
+    #[must_use]
+    pub fn to_bytes(&self) -> PDUBytes {
+        unimplemented!()
+    }
+    #[must_use]
+    pub fn from_bytes(bytes: PDUBytes) -> Self {
+        unimplemented!()
     }
 }
 /// Segmented Control PDU Lengths
@@ -198,6 +236,14 @@ impl SegmentedControlPDU {
     pub const fn header(&self) -> &SegmentHeader {
         &self.segment_header
     }
+    #[must_use]
+    pub fn to_bytes(&self) -> PDUBytes {
+        unimplemented!()
+    }
+    #[must_use]
+    pub fn from_bytes(bytes: PDUBytes) -> Self {
+        unimplemented!()
+    }
 }
 pub struct SegmentAckPDU {
     seq_zero: SeqZero,
@@ -230,5 +276,41 @@ impl PDU {
             PDU::UnsegmentedAccess(_) | PDU::SegmentedAccess(_) => false,
             PDU::UnsegmentedControl(_) | PDU::SegmentedControl(_) => true,
         }
+    }
+    /// Number of bytes required to hold any serialized `Lower::PDU` in a byte buffer.
+    pub const fn max_len() -> usize {
+        16
+    }
+    pub fn to_bytes(&self) -> PDUBytes {
+        match self {
+            PDU::UnsegmentedAccess(p) => p.to_bytes(),
+            PDU::SegmentedAccess(p) => p.to_bytes(),
+            PDU::UnsegmentedControl(p) => p.to_bytes(),
+            PDU::SegmentedControl(p) => p.to_bytes(),
+        }
+    }
+    pub fn from_bytes(bytes: PDUBytes, ctl: CTL) -> Self {
+        match (bool::from(ctl), bool::from(bytes.seg())) {
+            (true, true) => PDU::SegmentedControl(SegmentedControlPDU::from_bytes(bytes)),
+            (true, false) => PDU::UnsegmentedControl(UnsegmentedControlPDU::from_bytes(bytes)),
+            (false, false) => PDU::UnsegmentedAccess(UnsegmentedAccessPDU::from_bytes(bytes)),
+            (false, true) => PDU::SegmentedAccess(SegmentedAccessPDU::from_bytes(bytes)),
+        }
+    }
+}
+pub struct PDUBytes {
+    buf: [u8; PDU::max_len()],
+    buf_len: usize,
+}
+impl PDUBytes {
+    pub fn len(&self) -> usize {
+        self.buf_len
+    }
+    pub fn is_empty(&self) -> bool {
+        self.buf_len == 0
+    }
+    pub fn seg(&self) -> SEG {
+        debug_assert!(!self.is_empty());
+        SEG(self.buf[0] & 0x80 != 0)
     }
 }
