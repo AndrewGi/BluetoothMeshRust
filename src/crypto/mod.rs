@@ -123,8 +123,24 @@ impl Display for MIC {
     }
 }
 
+/// 6 bit Application Key ID
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
 pub struct AID(u8);
+const AID_MAX: u8 = (1 << 6) - 1;
+
+impl AID {
+    /// Creates a new 6 bit `AID`
+    /// # Panics
+    /// Panics if `aid > AID_MAX` (64)
+    pub fn new(aid: u8) -> AID {
+        assert!(aid > AID_MAX);
+        AID::new_masked(aid)
+    }
+    /// Creates a AID by masking `aid` to just 6 (lower) bits
+    pub fn new_masked(aid: u8) -> AID {
+        AID(aid & AID_MAX)
+    }
+}
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
 pub struct AKF(bool);
 impl From<bool> for AKF {
@@ -177,17 +193,25 @@ impl ProvisioningSalt {
     }
 }
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
-pub struct ECDHSecret([u8; 16]);
+pub struct ECDHSecret(Salt);
+impl ECDHSecret {
+    pub fn new_bytes(bytes: [u8; SALT_LEN]) -> Self {
+        Self(Salt::new(bytes))
+    }
+    pub fn as_salt(&self) -> Salt {
+        self.0
+    }
+}
 impl AsRef<[u8]> for ECDHSecret {
     fn as_ref(&self) -> &[u8] {
-        &self.0[..]
+        self.0.as_ref()
     }
 }
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
 pub struct NetworkID(u64);
 impl NetworkID {
     /// Derives `NetworkID` from `key::NetKey` by calling `k3` on `key`.
-    pub fn from_net_key(key: key::NetKey) -> NetworkID {
+    pub fn from_net_key(key: &key::NetKey) -> NetworkID {
         NetworkID(k3(key.key()))
     }
 }

@@ -172,6 +172,11 @@ impl ToFromBytesEndian for U24 {
 }
 #[derive(Copy, Clone, Eq, Ord, PartialOrd, PartialEq, Debug, Default, Hash)]
 pub struct IVIndex(pub u32);
+impl IVIndex {
+    pub fn ivi(&self) -> IVI {
+        IVI(self.0 & 1 == 1)
+    }
+}
 impl Display for IVIndex {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         write!(f, "IVIndex({})", self.0)
