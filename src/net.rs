@@ -72,7 +72,7 @@ impl AsMut<[u8]> for EncryptedData {
 /// | SRC           | 16    | Source Unicast Address                                    |
 /// | DST           | 16    | Destination Address (Unicast, Group or Virtual            |
 /// | Transport PDU | 8-128 | Transport PDU (1-16 Bytes)                                |
-/// | NetMIC        | 32,64 | Message Integrity check for Payload (4 or 8 bytes)        |
+/// | NetMIC        | 32,64 | -Message Integrity check for Payload (4 or 8 bytes)        |
 ///
 /// `NetMIC` is 32 bit when CTL == 0
 /// `NetMIC` is 64 bit when CTL == 1
@@ -159,6 +159,7 @@ impl fmt::Display for Header {
     }
 }
 const ENCRYPTED_PDU_MAX_SIZE: usize = TRANSPORT_PDU_MAX_LENGTH + PDU_HEADER_SIZE + 8;
+#[derive(Copy, Clone)]
 pub struct EncryptedPDU {
     pdu_buffer: [u8; ENCRYPTED_PDU_MAX_SIZE],
     length: u8,
@@ -215,6 +216,7 @@ impl AsMut<[u8]> for EncryptedPDU {
     }
 }
 /// Mesh Network PDU Structure
+#[derive(Eq, PartialEq, Copy, Clone, Hash, Debug)]
 pub struct PDU {
     header: Header,
     payload: lower::PDU,
@@ -268,20 +270,16 @@ impl DeobfuscatedHeader {
         pecb.xor(out.as_mut());
         ObfuscatedHeader(out)
     }
+    pub fn nonce(&self, iv_index: IVIndex) -> NetworkNonce {
+        NetworkNonceParts::new(self.ctl, self.ttl, self.src, self.seq, iv_index).to_nonce()
+    }
 }
 const PECB_LEN: usize = 6;
+#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
 pub struct PECB([u8; PECB_LEN]);
 impl PECB {
     pub fn new(bytes: [u8; PECB_LEN]) -> Self {
         Self(bytes)
-    }
-    pub fn from_privacy(
-        privacy_key: PrivacyKey,
-        privacy_random: PrivacyRandom,
-        iv_index: IVIndex,
-    ) -> Self {
-        let mut buf_out = [0_u8; PECB_LEN];
-        unimplemented!()
     }
     /// XOR PECB with `bytes` in-place.
     /// # Panics
@@ -299,6 +297,7 @@ impl AsRef<[u8]> for PECB {
     }
 }
 const PRIVACY_RANDOM_LEN: usize = 7;
+#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
 pub struct PrivacyRandom([u8; PRIVACY_RANDOM_LEN]);
 impl PrivacyRandom {
     pub fn new_bytes(bytes: [u8; PRIVACY_RANDOM_LEN]) -> Self {
@@ -314,11 +313,15 @@ impl PrivacyRandom {
 
 /// 0x00_00_00_00_00 (5) + IV_INDEX (4) + PRIVACY_RANDOM (7)
 const PACKED_PRIVACY_LEN: usize = 5 + 4 + PRIVACY_RANDOM_LEN;
+#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
 pub struct PackedPrivacy([u8; PACKED_PRIVACY_LEN]);
 
 impl PackedPrivacy {
     pub fn new_bytes(bytes: [u8; PACKED_PRIVACY_LEN]) -> Self {
         Self(bytes)
+    }
+    pub fn encrypt(self, key: PrivacyKey) -> PECB {
+        unimplemented!()
     }
 }
 impl AsRef<[u8]> for PackedPrivacy {

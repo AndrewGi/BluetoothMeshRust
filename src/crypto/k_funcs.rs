@@ -53,6 +53,10 @@ pub fn s1(m: impl AsRef<[u8]>) -> Salt {
 pub const VTAD: Salt = Salt([
     0xce, 0xf7, 0xfa, 0x9d, 0xc4, 0x7b, 0xaf, 0x5d, 0xaa, 0xee, 0xd1, 0x94, 0x6, 0x9, 0x4f, 0x37,
 ]);
+/// `PRDK == s1("prdk")`
+pub const PRDK: Salt = Salt([
+    234, 68, 121, 239, 105, 21, 232, 251, 128, 106, 70, 188, 231, 231, 229, 72,
+]);
 /// `SMK1 == s1("smk1")`
 pub const SMK1: Salt = Salt([
     0xaa, 0x20, 0x18, 0xc6, 0x98, 0xe8, 0xb2, 0xef, 0x77, 0x75, 0x37, 0x19, 0xe9, 0xf1, 0xa8, 0x4,
@@ -104,6 +108,7 @@ mod tests {
 
     #[test]
     fn test_s1_precomputed() {
+        assert_eq!(s1("prkd"), PRDK);
         assert_eq!(s1("vtad"), VTAD);
         assert_eq!(s1("smk1"), SMK1);
         assert_eq!(s1("smk2"), SMK2);
