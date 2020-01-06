@@ -39,6 +39,7 @@ where
     /// Tag size.
     tag_size: PhantomData<TagSize>,
 }
+/// Added the ability to clone a cipher to avoid having to recalculate the cipher from the key.
 impl<TagSize: CcmTagSize> From<&Aes128> for AesCcm<TagSize> {
     fn from(cipher: &Aes128) -> Self {
         AesCcm {
