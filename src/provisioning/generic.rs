@@ -1,10 +1,24 @@
 use super::bearer_control;
+use core::convert::TryFrom;
+
 /// 6 bit Segment Number
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub struct SegmentIndex(u8);
-
+const SEGMENT_INDEX_MAX: u8 = (1_u8 << 6) - 1;
+impl SegmentIndex {
+    /// Creates a new 6 bit Segment Index from a u8.
+    /// # Panics
+    /// Panics if `index` is greater than 6 bits (`index` > `SEGMENT_INDEX_MAX`).
+    pub fn new(index: u8) -> SegmentIndex {
+        assert!(index < SEGMENT_INDEX_MAX);
+        Self(index)
+    }
+}
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub struct FCS(u8);
+
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
+pub struct MTU(u8);
 
 #[repr(u8)]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
@@ -66,7 +80,19 @@ pub struct TransactionStartPDU {
 pub fn fcs(data: &[u8]) -> FCS {
     todo!("implement fcs with polynomial x^8 + x^2 + x + 1")
 }
+const START_PDU_HEADER_SIZE: u16 = 4;
+const ACK_PDU_HEADER_SIZE: u16 = 1;
+const CONTINUATION_PDU_SIZE: u16 = 1;
 impl TransactionStartPDU {
+    pub fn calculate_seg_n(data_len: u16, max_mtu: MTU) -> SegmentIndex {
+        let mtu = u16::from(max_mtu.0);
+        let total_len = data_len + START_PDU_HEADER_SIZE + ACK_PDU_HEADER_SIZE;
+        let mut seg_i = total_len / mtu;
+        if seg_i * mtu < total_len {
+            seg_i += 1;
+        }
+        SegmentIndex::new(u8::try_from(seg_i).expect("segment index overflow"))
+    }
     pub fn new(seg_n: SegmentIndex, length: u16, fcs: FCS) -> Self {
         Self {
             seg_n,
@@ -74,8 +100,17 @@ impl TransactionStartPDU {
             fcs,
         }
     }
-    pub fn from_data(data: &[u8]) -> TransactionStartPDU {
-        Self::new()
+    /// Calculates fcs and total length on the `data`. Uses `max_mtu` to calculate `seg_n`.
+    /// The returned PDU !DOES NOT! have any data attachted to it. Data is contained in the
+    /// `Payload` field of `PDU`.
+    pub fn from_data(data: &[u8], max_mtu: MTU) -> TransactionStartPDU {
+        let data_len = u16::try_from(data.len()).expect("data.len() must fit in a u16");
+
+        Self::new(
+            Self::calculate_seg_n(data_len, max_mtu),
+            data_len,
+            fcs(data),
+        )
     }
 }
 pub struct TransactionContinuationPDU {

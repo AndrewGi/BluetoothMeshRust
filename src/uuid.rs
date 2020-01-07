@@ -8,7 +8,7 @@ use core::fmt::{Display, Error, Formatter};
 
 type UUIDBytes = [u8; 16];
 
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Default)]
 pub struct UUID(pub UUIDBytes);
 
 impl UUID {

@@ -16,8 +16,11 @@ pub mod ble;
 pub mod random;
 pub mod scheduler;
 pub mod serializable;
-pub mod time;
 pub mod uuid;
+
+// Timestamp depends on std or some other provided clock.
+pub mod time;
+mod timestamp;
 
 //pub mod access;
 pub mod address;
