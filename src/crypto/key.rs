@@ -63,17 +63,17 @@ impl NetKey {
     /// Derives `IdentityKey` from `self` by using `crypto::k1`.
     #[must_use]
     pub fn derive_identity_key(&self) -> IdentityKey {
-        IdentityKey::from_net_key(self)
+        self.into()
     }
     /// Derives `BeaconKey` from `self` by using `crypto::k1`.
     #[must_use]
     pub fn derive_beacon_key(&self) -> BeaconKey {
-        BeaconKey::from_net_key(self)
+        self.into()
     }
     /// Derives `NetworkID` from `self` by using `crypto::k3`.
     #[must_use]
     pub fn derive_network_id(&self) -> NetworkID {
-        NetworkID::from_net_key(self)
+        self.into()
     }
 }
 
@@ -109,11 +109,12 @@ impl IdentityKey {
     pub const fn key(&self) -> Key {
         self.0
     }
-    pub fn from_net_key(key: &NetKey) -> IdentityKey {
-        // From Mesh Core v1.0
+}
+impl From<&NetKey> for IdentityKey {
+    fn from(k: &NetKey) -> Self {
         let salt = s1("nkik");
         const P: &str = "id128\x01";
-        k1(key.key(), salt, P.as_bytes()).into()
+        k1(k.key(), salt, P.as_bytes()).into()
     }
 }
 impl TryFrom<&[u8]> for IdentityKey {
@@ -148,10 +149,12 @@ impl BeaconKey {
     pub const fn key(&self) -> Key {
         self.0
     }
-    pub fn from_net_key(key: &NetKey) -> BeaconKey {
+}
+impl From<&NetKey> for BeaconKey {
+    fn from(k: &NetKey) -> Self {
         let salt = s1("nkbk");
         const P: &str = "id128\x01";
-        k1(key.key(), salt, P.as_bytes()).into()
+        k1(k.key(), salt, P.as_bytes()).into()
     }
 }
 impl TryFrom<&[u8]> for BeaconKey {
@@ -389,29 +392,5 @@ impl AsRef<Key> for EncryptionKey {
     #[must_use]
     fn as_ref(&self) -> &Key {
         &self.0
-    }
-}
-
-pub struct NetworkKeys {
-    nid: NID,
-    encryption: EncryptionKey,
-    privacy: PrivacyKey,
-}
-impl NetworkKeys {
-    pub fn new(nid: NID, encryption: EncryptionKey, privacy: PrivacyKey) -> Self {
-        Self {
-            nid,
-            encryption,
-            privacy,
-        }
-    }
-    pub fn nid(&self) -> NID {
-        self.nid
-    }
-    pub fn encryption_key(&self) -> EncryptionKey {
-        self.encryption
-    }
-    pub fn privacy_key(&self) -> PrivacyKey {
-        self.privacy
     }
 }

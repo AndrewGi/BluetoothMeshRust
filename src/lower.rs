@@ -358,8 +358,4 @@ impl TryFrom<&[u8]> for PDUBytes {
             Ok(Self { buf, buf_len: l })
         }
     }
-    #[must_use]
-    pub fn ctl(&self) -> CTL {
-        CTL(self.is_control())
-    }
 }
