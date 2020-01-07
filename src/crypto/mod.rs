@@ -1,4 +1,4 @@
-use crate::crypto::key::Key;
+use crate::crypto::key::{Key, NetKey};
 use core::convert::TryFrom;
 
 /// Helper function to convert a 16 byte (32 character) hex string to 16 byte array.
@@ -26,8 +26,8 @@ mod aes_ccm;
 mod aes_cmac;
 pub mod k_funcs;
 pub mod key;
+pub mod materials;
 pub mod nonce;
-
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub enum MIC {
     Big(u64),
@@ -209,11 +209,22 @@ impl AsRef<[u8]> for ECDHSecret {
 }
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
 pub struct NetworkID(u64);
-impl NetworkID {
-    /// Derives `NetworkID` from `key::NetKey` by calling `k3` on `key`.
-    pub fn from_net_key(key: &key::NetKey) -> NetworkID {
-        NetworkID(k3(key.key()))
+impl From<&key::NetKey> for NetworkID {
+    fn from(k: &NetKey) -> Self {
+        NetworkID(k3(k.key()))
     }
+}
+#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Debug, Hash)]
+pub struct NetKeyIndex(u16);
+#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Debug, Hash)]
+pub struct AppKeyIndex(u16);
+
+#[repr(u8)]
+pub enum KeyRefreshPhases {
+    Normal,
+    First,
+    Second,
+    Third,
 }
 use crate::serializable::bytes::ToFromBytesEndian;
 use core::fmt::{Display, Error, Formatter};

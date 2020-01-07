@@ -16,6 +16,8 @@ use core::convert::{TryFrom, TryInto};
 /// Little: Access/Foundation
 /// Big: Everything else
 
+pub const ADDRESS_LEN: usize = 2;
+
 const UNICAST_BIT: u16 = 0x8000;
 const UNICAST_MASK: u16 = !UNICAST_BIT;
 

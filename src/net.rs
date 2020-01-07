@@ -1,28 +1,27 @@
 //! Bluetooth Mesh
 //! Network Layer is BIG Endian
 
-use crate::address::{Address, UnicastAddress};
+use crate::address::{Address, UnicastAddress, ADDRESS_LEN};
 use crate::crypto::aes::{AESCipher, Error};
-use crate::crypto::key::{EncryptionKey, PrivacyKey};
+use crate::crypto::key::PrivacyKey;
 use crate::crypto::nonce::{NetworkNonce, NetworkNonceParts};
 use crate::crypto::MIC;
 use crate::lower;
 use crate::mesh::{IVIndex, SequenceNumber, CTL, IVI, NID, TTL};
 use crate::serializable::bytes::{Buf, BufError, BufMut, Bytes, BytesMut, ToFromBytesEndian};
 use crate::serializable::ByteSerializable;
-use core::convert::{TryFrom, TryInto};
 use core::fmt;
 
 const TRANSPORT_PDU_MAX_LENGTH: usize = 16;
 
 /// Holds the encrypted destination address, transport PDU and MIC.
-pub struct EncryptedData {
-    data: [u8; TRANSPORT_PDU_MAX_LENGTH + 2],
+pub struct EncryptedPayload {
+    data: [u8; TRANSPORT_PDU_MAX_LENGTH + ADDRESS_LEN],
     length: u8,
     mic: MIC,
 }
 
-impl EncryptedData {
+impl EncryptedPayload {
     #[must_use]
     pub const fn len(&self) -> usize {
         self.length as usize
@@ -42,17 +41,21 @@ impl EncryptedData {
         &mut self.data[..l]
     }
     #[must_use]
+    pub fn mic(&self) -> MIC {
+        self.mic
+    }
+    #[must_use]
     pub const fn max_len() -> usize {
-        TRANSPORT_PDU_MAX_LENGTH + 2
+        TRANSPORT_PDU_MAX_LENGTH + ADDRESS_LEN
     }
 }
-impl AsRef<[u8]> for EncryptedData {
+impl AsRef<[u8]> for EncryptedPayload {
     #[must_use]
     fn as_ref(&self) -> &[u8] {
         self.data()
     }
 }
-impl AsMut<[u8]> for EncryptedData {
+impl AsMut<[u8]> for EncryptedPayload {
     #[must_use]
     fn as_mut(&mut self) -> &mut [u8] {
         self.data_mut()
@@ -106,11 +109,13 @@ impl Header {
             MIC::small_size()
         }
     }
-    pub fn deobfuscated_part(&self) -> DeobfuscatedHeader {
-        DeobfuscatedHeader::new(self.ctl, self.ttl, self.seq, self.src)
+}
+impl From<&Header> for DeobfuscatedHeader {
+    #[must_use]
+    fn from(h: &Header) -> Self {
+        DeobfuscatedHeader::new(h.ctl, h.ttl, h.seq, h.src)
     }
 }
-
 impl ByteSerializable for Header {
     fn serialize_to(&self, buf: &mut BytesMut) -> Result<(), BufError> {
         if buf.remaining_empty_space() < PDU_HEADER_SIZE {

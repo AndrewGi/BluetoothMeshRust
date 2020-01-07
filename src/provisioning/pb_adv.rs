@@ -65,6 +65,7 @@ impl From<u8> for TransactionNumber {
     }
 }
 impl From<TransactionNumber> for u8 {
+    #[must_use]
     fn from(num: TransactionNumber) -> Self {
         num.0
     }
