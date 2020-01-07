@@ -1,5 +1,5 @@
 use crate::crypto::aes::AESCipher;
-use crate::crypto::k_funcs::s1;
+use crate::crypto::k_funcs::VTAD;
 use crate::serializable::bytes::ToFromBytesEndian;
 use crate::uuid::UUID;
 use core::convert::{TryFrom, TryInto};
@@ -52,12 +52,19 @@ impl VirtualAddressHash {
 pub struct VirtualAddress(VirtualAddressHash, UUID);
 impl VirtualAddress {
     pub fn hash_uuid(uuid: &UUID) -> VirtualAddressHash {
-        let salt = s1("vtad");
-        let k = AESCipher::from(salt).aes_cmac(uuid.as_ref());
+        let k = AESCipher::from(VTAD).cmac(uuid.as_ref());
         VirtualAddressHash::new_masked(u16::from_be_bytes([k.as_ref()[15], k.as_ref()[14]]))
     }
     pub fn new(uuid: &UUID) -> VirtualAddress {
         VirtualAddress(Self::hash_uuid(uuid), uuid.clone())
+    }
+    pub fn uuid(&self) -> &UUID {
+        &self.1
+    }
+}
+impl AsRef<UUID> for VirtualAddress {
+    fn as_ref(&self) -> &UUID {
+        &self.1
     }
 }
 impl UnicastAddress {

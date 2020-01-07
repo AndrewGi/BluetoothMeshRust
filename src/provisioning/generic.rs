@@ -77,8 +77,8 @@ pub struct TransactionStartPDU {
 }
 /// FCS 3GPP TS 27.010
 /// Polynomial x^8 x^2 + x +1
-pub fn fcs(data: &[u8]) -> FCS {
-    todo!("implement fcs with polynomial x^8 + x^2 + x + 1")
+pub fn fcs(_data: &[u8]) -> FCS {
+    unimplemented!("implement fcs with polynomial x^8 + x^2 + x + 1")
 }
 const START_PDU_HEADER_SIZE: u16 = 4;
 const ACK_PDU_HEADER_SIZE: u16 = 1;

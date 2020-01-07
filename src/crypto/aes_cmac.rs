@@ -4,8 +4,8 @@ pub use crypto_mac::Mac;
 use crypto_mac::{InvalidKeyLength, MacResult};
 use dbl::Dbl;
 
-use aes_soft::block_cipher_trait::generic_array::{typenum::Unsigned, ArrayLength, GenericArray};
-use aes_soft::block_cipher_trait::BlockCipher;
+use aes::block_cipher_trait::generic_array::{typenum::Unsigned, ArrayLength, GenericArray};
+use aes::block_cipher_trait::BlockCipher;
 use core::fmt;
 
 type Block<N> = GenericArray<u8, N>;

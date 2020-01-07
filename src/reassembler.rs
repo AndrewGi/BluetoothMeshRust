@@ -1,11 +1,19 @@
-use crate::transport::{BlockAck, SegN};
+use crate::lower::{BlockAck, SegN};
+use alloc::boxed::Box;
 
-pub struct SegmentsContext {
+pub struct ContextHeader {
     is_control: bool,
     seg_n: SegN,
     block_ack: BlockAck,
 }
-impl SegmentsContext {
+impl ContextHeader {
+    pub fn new(seg_n: SegN, is_control: bool) -> Self {
+        Self {
+            is_control,
+            seg_n,
+            block_ack: Default::default(),
+        }
+    }
     #[must_use]
     pub fn all_acked(&self) -> bool {
         self.block_ack.all_acked(self.seg_n)
@@ -25,5 +33,25 @@ impl SegmentsContext {
     #[must_use]
     pub const fn block_ack(&self) -> BlockAck {
         self.block_ack
+    }
+}
+pub struct Context {
+    storage: Box<[u8]>,
+    header: ContextHeader,
+}
+impl Context {
+    pub fn new(header: ContextHeader) -> Self {
+        Self {
+            storage: Box::new([]),
+            header,
+        }
+    }
+}
+impl Context {
+    pub fn data(&self) -> &[u8] {
+        self.storage.as_ref()
+    }
+    pub fn is_ready(&self) -> bool {
+        self.header.all_acked()
     }
 }
