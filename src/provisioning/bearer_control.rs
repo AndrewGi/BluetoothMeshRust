@@ -9,7 +9,7 @@ pub enum Opcode {
     LinkAck = 0x01,
     LinkClose = 0x02,
 }
-
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Ord, PartialOrd, Hash)]
 pub struct LinkOpen(pub UUID);
 
 impl LinkOpen {
@@ -25,12 +25,14 @@ impl Display for LinkOpen {
         write!(f, "LinkOpen({})", self.0)
     }
 }
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Ord, PartialOrd, Hash)]
 pub struct LinkAck();
 impl Display for LinkAck {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         f.write_str("LinkAck")
     }
 }
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Ord, PartialOrd, Hash)]
 pub enum CloseReason {
     Success = 0x00,
     Timeout = 0x01,
@@ -46,6 +48,7 @@ impl Display for CloseReason {
     }
 }
 
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Ord, PartialOrd, Hash)]
 pub struct LinkClose(CloseReason);
 impl LinkClose {
     pub fn new(reason: CloseReason) -> LinkClose {
@@ -57,7 +60,7 @@ impl Display for LinkClose {
         write!(f, "LinkClose{}", self.0)
     }
 }
-#[derive(Clone, Copy, Eq, Hash)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Hash)]
 pub enum PDU {
     LinkOpen(LinkOpen),
     LinkAck(LinkAck),

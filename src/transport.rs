@@ -1,4 +1,4 @@
-use crate::mesh::{MIC, U24};
+use crate::mesh::{CTL, MIC, U24};
 
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct SZMIC(bool);
@@ -34,6 +34,9 @@ impl BlockAck {
     #[must_use]
     pub fn all_acked(self, seg_n: SegN) -> bool {
         self.0 == (1_u32 << u32::from(seg_n.0)).wrapping_sub(1)
+    }
+    pub const fn max_len() -> usize {
+        32
     }
 }
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
@@ -187,6 +190,7 @@ impl SegmentAckPDU {
         ControlOpcode::SegmentAck
     }
 }
+#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
 pub enum LowerPDU {
     UnsegmentedAccess(UnsegmentedAccessPDU),
     SegmentedAccess(SegmentedAccessPDU),
@@ -208,8 +212,8 @@ impl LowerPDU {
             LowerPDU::UnsegmentedControl(_) | LowerPDU::SegmentedControl(_) => true,
         }
     }
-}
-pub struct UpperTransportPDU<'a> {
-    encrypted_payload: &'a [u8],
-    mic: MIC,
+    #[must_use]
+    pub fn ctl(&self) -> CTL {
+        CTL(self.is_control())
+    }
 }

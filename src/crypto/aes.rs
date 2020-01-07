@@ -1,6 +1,6 @@
 //! A module for crypto AES functions. Essentially a wrapper around a 3rd party AES crypto lib
 //! (aes_soft in this case). This lets the rest of the library code to not have a hard dependence
-//! on any 3rd party libs.
+//! on any 3rd party libs. Bluetooth Mesh uses 128-bit exclusively as its Key bit size.
 
 use crate::crypto::aes_cmac::Cmac;
 use crate::crypto::key::Key;
@@ -27,6 +27,7 @@ pub enum AesError {
 type AesEcb = block_modes::Ecb<aes_soft::Aes128, ZeroPadding>;
 pub struct AESCipher(aes_soft::Aes128);
 impl AESCipher {
+    #[must_use]
     pub fn new(key: Key) -> AESCipher {
         AESCipher(aes_soft::Aes128::new(GenericArray::from_slice(
             key.as_ref(),
