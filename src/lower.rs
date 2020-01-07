@@ -1,4 +1,6 @@
-use crate::mesh::{CTL, MIC, U24};
+use crate::crypto::{AID, AKF};
+use crate::mesh::{CTL, U24};
+use core::convert::{TryFrom, TryInto};
 
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct SZMIC(bool);
@@ -41,6 +43,16 @@ impl BlockAck {
 }
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct SEG(bool);
+impl From<SEG> for bool {
+    fn from(s: SEG) -> Self {
+        s.0
+    }
+}
+impl From<bool> for SEG {
+    fn from(b: bool) -> Self {
+        SEG(b)
+    }
+}
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct OBO(bool);
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
@@ -71,12 +83,63 @@ impl ControlOpcode {}
 /// |  1  |  1  | Segmented Control		|
 ///
 ///
-
-pub struct UnsegmentedAccessPDU {}
+const UNSEGMENTED_ACCESS_PDU_LEN: usize = 15;
+#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
+pub struct UnsegmentedAccessPDU {
+    akf: AKF,
+    aid: AID,
+    access_pdu_buf: [u8; UNSEGMENTED_ACCESS_PDU_LEN],
+    access_pdu_len: u8,
+}
+impl UnsegmentedAccessPDU {
+    /// # Panics
+    /// Panics if `data.len() > UNSEGMENTED_ACCESS_PDU_LEN` (15)
+    pub fn new(akf: AKF, aid: AID, data: &[u8]) -> UnsegmentedAccessPDU {
+        assert!(data.len() <= UNSEGMENTED_ACCESS_PDU_LEN);
+        // If the assert passes, data.len() should fit in a u8.
+        let len = u8::try_from(data.len()).unwrap();
+        let buf = [0_u8; UNSEGMENTED_ACCESS_PDU_LEN];
+        UnsegmentedAccessPDU {
+            akf,
+            aid,
+            access_pdu_buf: buf,
+            access_pdu_len: len,
+        }
+    }
+    #[must_use]
+    pub fn to_bytes(&self) -> PDUBytes {
+        unimplemented!()
+    }
+    #[must_use]
+    pub fn from_bytes(bytes: PDUBytes) -> Option<Self> {
+        if bool::from(bytes.seg()) {
+            // SEG is set (1) so it is a segmented message
+            None
+        } else {
+            let b = bytes.as_ref();
+            let akf = b[0] & 0x40 != 0;
+            unimplemented!();
+        }
+    }
+}
+#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
 pub struct SegmentedAccessPDU {}
-const MAX_UNSEGMENTED_CONTROL_PDU: usize = 11;
+
+impl SegmentedAccessPDU {
+    #[must_use]
+    pub fn to_bytes(&self) -> PDUBytes {
+        unimplemented!()
+    }
+    #[must_use]
+    pub fn from_bytes(bytes: PDUBytes) -> Self {
+        unimplemented!()
+    }
+}
+
+const UNSEGMENTED_CONTROL_PDU_LEN: usize = 11;
+#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
 pub struct UnsegmentedControlPDU {
-    parameters_buf: [u8; MAX_UNSEGMENTED_CONTROL_PDU],
+    parameters_buf: [u8; UNSEGMENTED_CONTROL_PDU_LEN],
     parameters_len: u8,
     opcode: ControlOpcode,
 }
@@ -84,12 +147,12 @@ impl UnsegmentedControlPDU {
     #[must_use]
     pub fn new(opcode: ControlOpcode, parameters: &[u8]) -> UnsegmentedControlPDU {
         assert!(
-            parameters.len() <= MAX_UNSEGMENTED_CONTROL_PDU,
+            parameters.len() <= UNSEGMENTED_CONTROL_PDU_LEN,
             "parameter overflow ({} > {})",
             parameters.len(),
-            MAX_UNSEGMENTED_CONTROL_PDU
+            UNSEGMENTED_CONTROL_PDU_LEN
         );
-        let mut buf = [0_u8; MAX_UNSEGMENTED_CONTROL_PDU];
+        let mut buf = [0_u8; UNSEGMENTED_CONTROL_PDU_LEN];
         buf[..parameters.len()].copy_from_slice(parameters);
         UnsegmentedControlPDU {
             parameters_buf: buf,
@@ -116,10 +179,18 @@ impl UnsegmentedControlPDU {
     }
     #[must_use]
     pub const fn max_parameters_size() -> usize {
-        MAX_UNSEGMENTED_CONTROL_PDU // 0-88 Bits
+        UNSEGMENTED_CONTROL_PDU_LEN // 0-88 Bits
+    }
+    #[must_use]
+    pub fn to_bytes(&self) -> PDUBytes {
+        unimplemented!()
+    }
+    #[must_use]
+    pub fn from_bytes(bytes: PDUBytes) -> Self {
+        unimplemented!()
     }
 }
-///
+/// Segmented Control PDU Lengths
 /// | # Packets  | PDU Size |
 /// |      1     |     8    |
 /// |      2     |    16    |
@@ -127,6 +198,7 @@ impl UnsegmentedControlPDU {
 /// |      n     |    n*8   |
 /// |     32     |    256   |
 const MAX_SEGMENTED_CONTROL_PDU_LEN: usize = 8;
+#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
 pub struct SegmentedControlPDU {
     opcode: ControlOpcode,
     segment_header: SegmentHeader,
@@ -178,7 +250,16 @@ impl SegmentedControlPDU {
     pub const fn header(&self) -> &SegmentHeader {
         &self.segment_header
     }
+    #[must_use]
+    pub fn to_bytes(&self) -> PDUBytes {
+        unimplemented!()
+    }
+    #[must_use]
+    pub fn from_bytes(bytes: PDUBytes) -> Self {
+        unimplemented!()
+    }
 }
+#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
 pub struct SegmentAckPDU {
     seq_zero: SeqZero,
     block_ack: BlockAck,
@@ -190,26 +271,91 @@ impl SegmentAckPDU {
         ControlOpcode::SegmentAck
     }
 }
+
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
-pub enum LowerPDU {
+pub enum PDU {
     UnsegmentedAccess(UnsegmentedAccessPDU),
     SegmentedAccess(SegmentedAccessPDU),
     UnsegmentedControl(UnsegmentedControlPDU),
     SegmentedControl(SegmentedControlPDU),
 }
-impl LowerPDU {
+impl PDU {
     #[must_use]
     pub fn is_seg(&self) -> bool {
         match self {
-            LowerPDU::UnsegmentedAccess(_) | LowerPDU::UnsegmentedControl(_) => false,
-            LowerPDU::SegmentedAccess(_) | LowerPDU::SegmentedControl(_) => true,
+            PDU::UnsegmentedAccess(_) | PDU::UnsegmentedControl(_) => false,
+            PDU::SegmentedAccess(_) | PDU::SegmentedControl(_) => true,
         }
     }
     #[must_use]
     pub fn is_control(&self) -> bool {
         match self {
-            LowerPDU::UnsegmentedAccess(_) | LowerPDU::SegmentedAccess(_) => false,
-            LowerPDU::UnsegmentedControl(_) | LowerPDU::SegmentedControl(_) => true,
+            PDU::UnsegmentedAccess(_) | PDU::SegmentedAccess(_) => false,
+            PDU::UnsegmentedControl(_) | PDU::SegmentedControl(_) => true,
+        }
+    }
+    /// Number of bytes required to hold any serialized `Lower::PDU` in a byte buffer.
+    pub const fn max_len() -> usize {
+        16
+    }
+    pub fn to_bytes(&self) -> PDUBytes {
+        match self {
+            PDU::UnsegmentedAccess(p) => p.to_bytes(),
+            PDU::SegmentedAccess(p) => p.to_bytes(),
+            PDU::UnsegmentedControl(p) => p.to_bytes(),
+            PDU::SegmentedControl(p) => p.to_bytes(),
+        }
+    }
+    pub fn from_bytes(bytes: PDUBytes, ctl: CTL) -> Option<Self> {
+        Some(match (bool::from(ctl), bool::from(bytes.seg())) {
+            (true, true) => PDU::SegmentedControl(SegmentedControlPDU::from_bytes(bytes)),
+            (true, false) => PDU::UnsegmentedControl(UnsegmentedControlPDU::from_bytes(bytes)),
+            (false, false) => PDU::UnsegmentedAccess(UnsegmentedAccessPDU::from_bytes(bytes)?),
+            (false, true) => PDU::SegmentedAccess(SegmentedAccessPDU::from_bytes(bytes)),
+        })
+    }
+}
+#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
+pub struct PDUBytes {
+    buf: [u8; PDU::max_len()],
+    buf_len: usize,
+}
+impl PDUBytes {
+    /// Creates a new `PDUBytes` from a byte buffer.
+    /// # Panics
+    /// Panics if `buffer.len() == 0 || buffer.len() > PDU::max_len()`.
+    pub fn new(buffer: &[u8]) -> PDUBytes {
+        buffer.try_into().expect("bad buffer length")
+    }
+    pub fn len(&self) -> usize {
+        self.buf_len
+    }
+    pub fn is_empty(&self) -> bool {
+        self.buf_len == 0
+    }
+    pub fn seg(&self) -> SEG {
+        debug_assert!(!self.is_empty());
+        SEG(self.buf[0] & 0x80 != 0)
+    }
+}
+impl AsRef<[u8]> for PDUBytes {
+    fn as_ref(&self) -> &[u8] {
+        &self.buf[..self.buf_len]
+    }
+}
+#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
+pub struct PDUBytesError;
+impl TryFrom<&[u8]> for PDUBytes {
+    type Error = PDUBytesError;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        let l = value.len();
+        if l == 0 || l > PDU::max_len() {
+            Err(PDUBytesError)
+        } else {
+            let mut buf = [0_u8; PDU::max_len()];
+            buf[..l].copy_from_slice(value);
+            Ok(Self { buf, buf_len: l })
         }
     }
     #[must_use]

@@ -1,6 +1,7 @@
 # Bluetooth Mesh Rust
-Bluetooth Mesh stack implemented in Rust. In progress port/rewrite of Ero Bluetooth Mesh
+Bluetooth Mesh stack implemented in Rust. In progress port/rewrite of Ero Bluetooth Mesh.
 
+`#[no_std]`
 ## 8 Layer system
 ![The 8 Layer of the Bluetooth Mesh Stack](/mesh_layout.PNG)
 
@@ -24,7 +25,7 @@ TODO:
     - [ ] Models
     - [ ] States
     - [ ] Messages
-    - [ ] Acknoledgements
+    - [ ] Acknowledgements
   - [ ] Transport
     - [ ] Upper
       - [ ] Control
@@ -49,17 +50,35 @@ TODO:
     - [x] Payload
     - [x] Header
   - [ ] Bearers
-    - [ ] PB-ADV
-      - [ ] Links for Provisioning
+    - [x] PB-ADV
+      - [x] Links for Provisioning
     - [ ] PB-GATT
     - [ ] PB-Proxy
     - [ ] Custom Proxy?
-
-
+  - [ ] Crypto Functions
+    - [x] k1
+    - [x] k2
+    - [x] k3
+    - [x] k4
+    - [x] s1
+    - [x] Tests for k1-k4, s1
+    - [x] id128
+    - [ ] ECDH
+    - [x] AES-CMAC
+    - [x] AES-ECB
+  - [ ] Provisioning
+    - [ ] PB-GATT
+    - [x] PB_ADV
+      - [x] Links
+    - [ ] Generic
+    - [ ] Key Exchange
+    - [ ] Segmentation
+    - [ ] Reassembly
+    
 - [ ] Serialization
   - [ ] Wire Serialization
-  - [ ] Text Serialization
     - [x] Tests written
+  - [ ] Text Serialization
 
 - [ ] Models
   - [ ] Config

@@ -1,5 +1,6 @@
 use crate::crypto::k_funcs::{k1, s1};
-use crate::crypto::{Salt, AKF};
+use crate::crypto::{hex_16_to_array, ECDHSecret, NetworkID, ProvisioningSalt, Salt, AID, AKF};
+use crate::mesh::NID;
 use core::convert::{TryFrom, TryInto};
 
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
@@ -18,6 +19,9 @@ impl Key {
     #[must_use]
     pub fn new(key_bytes: [u8; KEY_LEN]) -> Key {
         Key(key_bytes)
+    }
+    pub fn from_hex(hex: &str) -> Option<Key> {
+        Some(Key::new(hex_16_to_array(hex)?))
     }
     pub fn as_salt(&self) -> Salt {
         Salt(self.0)
@@ -49,8 +53,27 @@ impl NetKey {
     pub fn new(key: Key) -> Self {
         Self(key)
     }
+    #[must_use]
+    pub fn from_hex(hex: &str) -> Option<Self> {
+        Some(Self::new_bytes(hex_16_to_array(hex)?))
+    }
     pub const fn key(&self) -> &Key {
         &self.0
+    }
+    /// Derives `IdentityKey` from `self` by using `crypto::k1`.
+    #[must_use]
+    pub fn derive_identity_key(&self) -> IdentityKey {
+        IdentityKey::from_net_key(self)
+    }
+    /// Derives `BeaconKey` from `self` by using `crypto::k1`.
+    #[must_use]
+    pub fn derive_beacon_key(&self) -> BeaconKey {
+        BeaconKey::from_net_key(self)
+    }
+    /// Derives `NetworkID` from `self` by using `crypto::k3`.
+    #[must_use]
+    pub fn derive_network_id(&self) -> NetworkID {
+        NetworkID::from_net_key(self)
     }
 }
 
@@ -79,14 +102,18 @@ impl IdentityKey {
         Self(key)
     }
     #[must_use]
+    pub fn from_hex(hex: &str) -> Option<Self> {
+        Some(Self::new_bytes(hex_16_to_array(hex)?))
+    }
+    #[must_use]
     pub const fn key(&self) -> Key {
         self.0
     }
-    pub fn from_net_key(key: NetKey) -> IdentityKey {
+    pub fn from_net_key(key: &NetKey) -> IdentityKey {
         // From Mesh Core v1.0
         let salt = s1("nkik");
         const P: &str = "id128\x01";
-        k1(&key.0, salt, P.as_bytes()).into()
+        k1(key.key(), salt, P.as_bytes()).into()
     }
 }
 impl TryFrom<&[u8]> for IdentityKey {
@@ -114,10 +141,14 @@ impl BeaconKey {
         Self(key)
     }
     #[must_use]
+    pub fn from_hex(hex: &str) -> Option<Self> {
+        Some(Self::new_bytes(hex_16_to_array(hex)?))
+    }
+    #[must_use]
     pub const fn key(&self) -> Key {
         self.0
     }
-    pub fn from_net_key(key: NetKey) -> BeaconKey {
+    pub fn from_net_key(key: &NetKey) -> BeaconKey {
         let salt = s1("nkbk");
         const P: &str = "id128\x01";
         k1(key.key(), salt, P.as_bytes()).into()
@@ -146,6 +177,10 @@ impl EncryptionKey {
     #[must_use]
     pub fn new(key: Key) -> EncryptionKey {
         EncryptionKey(key)
+    }
+    #[must_use]
+    pub fn from_hex(hex: &str) -> Option<Self> {
+        Some(Self::new_bytes(hex_16_to_array(hex)?))
     }
     #[must_use]
     pub const fn key(&self) -> Key {
@@ -177,6 +212,10 @@ impl PrivacyKey {
         Self(key)
     }
     #[must_use]
+    pub fn from_hex(hex: &str) -> Option<Self> {
+        Some(Self::new_bytes(hex_16_to_array(hex)?))
+    }
+    #[must_use]
     pub const fn key(&self) -> Key {
         self.0
     }
@@ -204,6 +243,14 @@ impl DevKey {
     #[must_use]
     pub fn new(key: Key) -> Self {
         Self(key)
+    }
+    #[must_use]
+    pub fn from_hex(hex: &str) -> Option<Self> {
+        Some(Self::new_bytes(hex_16_to_array(hex)?))
+    }
+    #[must_use]
+    pub fn from_salt_and_secret(salt: ProvisioningSalt, secret: ECDHSecret) -> Self {
+        Self::new(super::k1(&salt.0.as_key(), secret.as_salt(), b"prdk"))
     }
     #[must_use]
     pub fn key(&self) -> Key {
@@ -239,7 +286,14 @@ impl AppKey {
     pub fn new(key: Key) -> Self {
         Self(key)
     }
-
+    #[must_use]
+    pub fn from_hex(hex: &str) -> Option<Self> {
+        Some(Self::new_bytes(hex_16_to_array(hex)?))
+    }
+    #[must_use]
+    pub fn aid(&self) -> AID {
+        super::k4(self)
+    }
     #[must_use]
     pub const fn key(&self) -> Key {
         self.0
@@ -249,6 +303,7 @@ impl AppKey {
         AKF(true)
     }
 }
+
 impl TryFrom<&[u8]> for AppKey {
     type Error = core::array::TryFromSliceError;
 
@@ -334,5 +389,29 @@ impl AsRef<Key> for EncryptionKey {
     #[must_use]
     fn as_ref(&self) -> &Key {
         &self.0
+    }
+}
+
+pub struct NetworkKeys {
+    nid: NID,
+    encryption: EncryptionKey,
+    privacy: PrivacyKey,
+}
+impl NetworkKeys {
+    pub fn new(nid: NID, encryption: EncryptionKey, privacy: PrivacyKey) -> Self {
+        Self {
+            nid,
+            encryption,
+            privacy,
+        }
+    }
+    pub fn nid(&self) -> NID {
+        self.nid
+    }
+    pub fn encryption_key(&self) -> EncryptionKey {
+        self.encryption
+    }
+    pub fn privacy_key(&self) -> PrivacyKey {
+        self.privacy
     }
 }

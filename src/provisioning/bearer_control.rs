@@ -3,13 +3,15 @@ use core::fmt::{Display, Error, Formatter};
 
 /// Bearer Control Opcodes (8-bits).
 /// 0x03-0xFF is RFU
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Ord, PartialOrd)]
 #[repr(u8)]
 pub enum Opcode {
     LinkOpen = 0x00,
     LinkAck = 0x01,
     LinkClose = 0x02,
 }
-#[derive(Clone, Copy, Eq, PartialEq, Debug, Ord, PartialOrd, Hash)]
+
+#[derive(Clone, Copy, Eq, Hash, Ord, PartialOrd, PartialEq, Debug)]
 pub struct LinkOpen(pub UUID);
 
 impl LinkOpen {
@@ -25,14 +27,14 @@ impl Display for LinkOpen {
         write!(f, "LinkOpen({})", self.0)
     }
 }
-#[derive(Clone, Copy, Eq, PartialEq, Debug, Ord, PartialOrd, Hash)]
+#[derive(Clone, Copy, Eq, Hash, Ord, PartialOrd, PartialEq, Debug)]
 pub struct LinkAck();
 impl Display for LinkAck {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         f.write_str("LinkAck")
     }
 }
-#[derive(Clone, Copy, Eq, PartialEq, Debug, Ord, PartialOrd, Hash)]
+#[derive(Clone, Copy, Eq, Hash, Ord, PartialOrd, PartialEq, Debug)]
 pub enum CloseReason {
     Success = 0x00,
     Timeout = 0x01,
@@ -48,7 +50,7 @@ impl Display for CloseReason {
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq, Debug, Ord, PartialOrd, Hash)]
+#[derive(Clone, Copy, Eq, Hash, Ord, PartialOrd, PartialEq, Debug)]
 pub struct LinkClose(CloseReason);
 impl LinkClose {
     pub fn new(reason: CloseReason) -> LinkClose {

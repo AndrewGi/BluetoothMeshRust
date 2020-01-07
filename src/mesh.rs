@@ -137,31 +137,18 @@ impl U24 {
         self.0
     }
 }
-impl From<(u8, u8, u8)> for U24 {
-    #[must_use]
-    fn from(b: (u8, u8, u8)) -> Self {
-        U24(u32::from(b.0) | (u32::from(b.1) << 8) | (u32::from(b.2) << 16))
-    }
-}
-impl From<U24> for (u8, u8, u8) {
-    #[must_use]
-    fn from(i: U24) -> Self {
-        let b = i.value().to_ne_bytes();
-        (b[0], b[1], b[2])
-    }
-}
 impl ToFromBytesEndian for U24 {
     type AsBytesType = [u8; 3];
 
     #[must_use]
     fn to_bytes_le(&self) -> Self::AsBytesType {
-        let b = (self.0).to_bytes_le();
+        let b = self.0.to_le_bytes();
         [b[0], b[1], b[2]]
     }
 
     #[must_use]
     fn to_bytes_be(&self) -> Self::AsBytesType {
-        let b = (self.0).to_bytes_be();
+        let b = self.0.to_be_bytes();
         [b[0], b[1], b[2]]
     }
 
@@ -177,7 +164,7 @@ impl ToFromBytesEndian for U24 {
     #[must_use]
     fn from_bytes_be(bytes: &[u8]) -> Option<Self> {
         if bytes.len() == 3 {
-            Some(U24(u32::from_be_bytes([bytes[0], bytes[1], bytes[2], 0])))
+            Some(U24(u32::from_be_bytes([0, bytes[0], bytes[1], bytes[2]])))
         } else {
             None
         }
@@ -185,9 +172,37 @@ impl ToFromBytesEndian for U24 {
 }
 #[derive(Copy, Clone, Eq, Ord, PartialOrd, PartialEq, Debug, Default, Hash)]
 pub struct IVIndex(pub u32);
+impl IVIndex {
+    pub fn ivi(&self) -> IVI {
+        IVI(self.0 & 1 == 1)
+    }
+}
 impl Display for IVIndex {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         write!(f, "IVIndex({})", self.0)
+    }
+}
+impl ToFromBytesEndian for IVIndex {
+    type AsBytesType = [u8; 4];
+
+    #[must_use]
+    fn to_bytes_le(&self) -> Self::AsBytesType {
+        (self.0).to_bytes_le()
+    }
+
+    #[must_use]
+    fn to_bytes_be(&self) -> Self::AsBytesType {
+        (self.0).to_bytes_be()
+    }
+
+    #[must_use]
+    fn from_bytes_le(bytes: &[u8]) -> Option<Self> {
+        Some(Self(u32::from_bytes_le(bytes)?))
+    }
+
+    #[must_use]
+    fn from_bytes_be(bytes: &[u8]) -> Option<Self> {
+        Some(Self(u32::from_bytes_be(bytes)?))
     }
 }
 /// 24bit Sequence number
@@ -220,94 +235,6 @@ impl ToFromBytesEndian for SequenceNumber {
     #[must_use]
     fn from_bytes_be(bytes: &[u8]) -> Option<Self> {
         Some(SequenceNumber(U24::from_bytes_be(bytes)?))
-    }
-}
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
-pub enum MIC {
-    Big(u64),
-    Small(u32),
-}
-const BIG_MIC_SIZE: usize = 8;
-const SMALL_MIC_SIZE: usize = 4;
-impl MIC {
-    #[must_use]
-    pub fn try_from_bytes_be(bytes: &[u8]) -> Option<MIC> {
-        match bytes.len() {
-            SMALL_MIC_SIZE => Some(MIC::Small(u32::from_bytes_be(bytes)?)),
-            BIG_MIC_SIZE => Some(MIC::Big(u64::from_bytes_be(bytes)?)),
-            _ => None,
-        }
-    }
-    #[must_use]
-    pub fn try_from_bytes_le(bytes: &[u8]) -> Option<MIC> {
-        match bytes.len() {
-            SMALL_MIC_SIZE => Some(MIC::Small(u32::from_bytes_le(bytes)?)),
-            BIG_MIC_SIZE => Some(MIC::Big(u64::from_bytes_le(bytes)?)),
-            _ => None,
-        }
-    }
-    #[must_use]
-    pub fn mic(&self) -> u64 {
-        match self {
-            MIC::Big(b) => *b,
-            MIC::Small(s) => u64::from(*s),
-        }
-    }
-    #[must_use]
-    pub fn is_big(&self) -> bool {
-        match self {
-            MIC::Big(_) => true,
-            MIC::Small(_) => false,
-        }
-    }
-    /// Return the size in bytes (4 or 8) needed to represent the MIC.
-    /// Depends on if the MIC is small or big
-    /// ```
-    /// use crate::bluetooth_mesh::mesh::MIC;
-    /// assert_eq!(MIC::Big(0u64).byte_size(), 8);
-    /// assert_eq!(MIC::Small(0u32).byte_size(), 4);
-    /// ```
-    #[must_use]
-    pub fn byte_size(&self) -> usize {
-        if self.is_big() {
-            BIG_MIC_SIZE
-        } else {
-            SMALL_MIC_SIZE
-        }
-    }
-    #[must_use]
-    pub const fn max_size() -> usize {
-        BIG_MIC_SIZE
-    }
-    /// returns the small size of a mic
-    /// example:
-    /// ```
-    /// use bluetooth_mesh::mesh::MIC;
-    /// assert_eq!(MIC::small_size(), MIC::Small(0).byte_size());
-    /// ```
-    #[must_use]
-    pub const fn small_size() -> usize {
-        SMALL_MIC_SIZE
-    }
-    /// returns the big size of a mic
-    /// example:
-    /// ```
-    /// use bluetooth_mesh::mesh::MIC;
-    /// assert_eq!(MIC::big_size(), MIC::Big(0).byte_size());
-    /// ```
-    #[must_use]
-    pub const fn big_size() -> usize {
-        BIG_MIC_SIZE
-    }
-}
-
-impl Display for MIC {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        let (name, value) = match self {
-            MIC::Big(b) => ("Big", *b),
-            MIC::Small(s) => ("Small", u64::from(*s)),
-        };
-        write!(f, "{}({})", name, value)
     }
 }
 
