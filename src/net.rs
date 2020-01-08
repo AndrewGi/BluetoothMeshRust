@@ -2,7 +2,6 @@
 //! Network Layer is BIG Endian
 
 use crate::address::{Address, UnicastAddress, ADDRESS_LEN};
-use crate::crypto::aes::{AESCipher, Error};
 use crate::crypto::key::PrivacyKey;
 use crate::crypto::nonce::{NetworkNonce, NetworkNonceParts};
 use crate::crypto::MIC;
@@ -12,11 +11,11 @@ use crate::serializable::bytes::{Buf, BufError, BufMut, Bytes, BytesMut, ToFromB
 use crate::serializable::ByteSerializable;
 use core::fmt;
 
-const TRANSPORT_PDU_MAX_LENGTH: usize = 16;
+const TRANSPORT_PDU_MAX_LEN: usize = 16;
 
 /// Holds the encrypted destination address, transport PDU and MIC.
 pub struct EncryptedPayload {
-    data: [u8; TRANSPORT_PDU_MAX_LENGTH + ADDRESS_LEN],
+    data: [u8; TRANSPORT_PDU_MAX_LEN + ADDRESS_LEN],
     length: u8,
     mic: MIC,
 }
@@ -46,7 +45,7 @@ impl EncryptedPayload {
     }
     #[must_use]
     pub const fn max_len() -> usize {
-        TRANSPORT_PDU_MAX_LENGTH + ADDRESS_LEN
+        TRANSPORT_PDU_MAX_LEN + ADDRESS_LEN
     }
 }
 impl AsRef<[u8]> for EncryptedPayload {
@@ -90,12 +89,12 @@ pub struct Header {
     pub dst: Address,
 }
 // (IVI + NID) (1) + (CTL + TTL) (1) + Seq (3) + Src (2) + Dst (2)
-const PDU_HEADER_SIZE: usize = 1 + 1 + 3 + 2 + 2;
+const PDU_HEADER_LEN: usize = 1 + 1 + 3 + 2 + 2;
 
 impl Header {
     #[must_use]
     pub const fn len() -> usize {
-        PDU_HEADER_SIZE
+        PDU_HEADER_LEN
     }
     #[must_use]
     pub fn big_mic(&self) -> bool {
@@ -116,10 +115,11 @@ impl From<&Header> for DeobfuscatedHeader {
         DeobfuscatedHeader::new(h.ctl, h.ttl, h.seq, h.src)
     }
 }
+
 impl ByteSerializable for Header {
     fn serialize_to(&self, buf: &mut BytesMut) -> Result<(), BufError> {
-        if buf.remaining_empty_space() < PDU_HEADER_SIZE {
-            Err(BufError::OutOfSpace(PDU_HEADER_SIZE))
+        if buf.remaining_empty_space() < PDU_HEADER_LEN {
+            Err(BufError::OutOfSpace(PDU_HEADER_LEN))
         } else if let Address::Unassigned = self.dst {
             // Can't have a PDU destination be unassigned
             Err(BufError::InvalidInput)
@@ -134,7 +134,7 @@ impl ByteSerializable for Header {
     }
 
     fn serialize_from(buf: &mut Bytes) -> Result<Self, BufError> {
-        if buf.length() < PDU_HEADER_SIZE {
+        if buf.length() < PDU_HEADER_LEN {
             Err(BufError::InvalidInput)
         } else {
             let dst: Address = buf.pop_be().expect("dst address is infallible");
@@ -163,7 +163,7 @@ impl fmt::Display for Header {
         )
     }
 }
-const ENCRYPTED_PDU_MAX_SIZE: usize = TRANSPORT_PDU_MAX_LENGTH + PDU_HEADER_SIZE + 8;
+const ENCRYPTED_PDU_MAX_SIZE: usize = TRANSPORT_PDU_MAX_LEN + PDU_HEADER_LEN + 8;
 #[derive(Copy, Clone)]
 pub struct EncryptedPDU {
     pdu_buffer: [u8; ENCRYPTED_PDU_MAX_SIZE],

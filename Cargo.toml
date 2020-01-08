@@ -4,6 +4,8 @@ version = "0.1.0"
 authors = ["Andrew <andrew@gilbrough.com>"]
 edition = "2018"
 
+[features]
+default = ["serde"]
 
 [dependencies]
 rand = "0.7"
@@ -14,4 +16,4 @@ crypto-mac = "0.7.0"
 dbl = "0.2.1"
 block-modes = "0.3.3"
 subtle = "2.2.2"
-serde = {version = "1.0.104", default-features = false, features = ["derive"] }
+serde = {version = "1.0.104", default-features = false, features = ["derive"], optional = true }
