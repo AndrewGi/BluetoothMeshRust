@@ -33,6 +33,7 @@ pub mod reassembler;
 pub mod upper;
 
 pub mod mesh_io;
+pub mod stack;
 
 pub mod provisioning;
 

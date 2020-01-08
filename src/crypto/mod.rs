@@ -82,7 +82,7 @@ impl MIC {
         }
     }
     #[must_use]
-    pub const fn max_size() -> usize {
+    pub const fn max_len() -> usize {
         BIG_MIC_SIZE
     }
     /// returns the small size of a mic
