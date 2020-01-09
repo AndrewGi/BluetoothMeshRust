@@ -5,6 +5,7 @@ use crate::net;
 use crate::timestamp::TimestampTrait;
 use core::convert::TryFrom;
 use core::time::Duration;
+use crypto_mac::generic_array::arr::Inc;
 
 #[derive(Copy, Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
 pub enum PDUType {
@@ -176,7 +177,7 @@ impl<Timestamp: TimestampTrait> MeshPDUQueue<Timestamp> {
         self.queue.remove(slot.0)
     }
 
-    pub fn send_ready<Bearer>(&mut self, bearer: &mut impl IOBearer) -> Result<(), IOError> {
+    pub fn send_ready(&mut self, bearer: &mut impl IOBearer) -> Result<(), IOError> {
         while let Some((_, pdu)) = self.queue.pop_ready() {
             bearer.send_io_pdu(pdu)?
         }
