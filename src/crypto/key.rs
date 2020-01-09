@@ -1,6 +1,5 @@
 use crate::crypto::k_funcs::{k1, s1};
 use crate::crypto::{hex_16_to_array, ECDHSecret, NetworkID, ProvisioningSalt, Salt, AID, AKF};
-use crate::mesh::NID;
 use core::convert::{TryFrom, TryInto};
 
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
