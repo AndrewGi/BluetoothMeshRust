@@ -169,20 +169,24 @@ pub struct EncryptedPDU {
     pdu_buffer: [u8; ENCRYPTED_PDU_MAX_SIZE],
     length: u8,
 }
+const MIN_ENCRYPTED_PDU_LEN: usize = PDU_HEADER_LEN + MIC::small_size();
+const MAX_ENCRYPTED_PDU_LEN: usize = ENCRYPTED_PDU_MAX_SIZE;
 impl EncryptedPDU {
     /// Wrapped a raw bytes that represent an Encrypted Network PDU
     /// See `ENCRYPTED_PDU_MAX_SIZE` for the max size.
-    /// # Panics
-    /// Panics if `buf.len() > ENCRYPTED_PDU_MAX_SIZE`
+    /// Returns `None` if `buf.len() < MIN_ENCRYPTED_PDU_LEN`
+    /// or `buf.len() > MAX_ENCRYPTED_PDU_LEN`.
     #[must_use]
-    pub fn new(buf: &[u8]) -> EncryptedPDU {
-        assert!(buf.len() <= ENCRYPTED_PDU_MAX_SIZE);
+    pub fn new(buf: &[u8]) -> Option<EncryptedPDU> {
+        if buf.len() < MIN_ENCRYPTED_PDU_LEN || buf.len() > MAX_ENCRYPTED_PDU_LEN {
+            return None;
+        }
         let mut pdu_buf: [u8; ENCRYPTED_PDU_MAX_SIZE] = [0_u8; ENCRYPTED_PDU_MAX_SIZE];
         pdu_buf[..buf.len()].copy_from_slice(buf);
-        EncryptedPDU {
+        Some(EncryptedPDU {
             pdu_buffer: pdu_buf,
             length: buf.len() as u8,
-        }
+        })
     }
     #[must_use]
     pub const fn len(&self) -> usize {
@@ -202,12 +206,7 @@ impl EncryptedPDU {
         &mut self.pdu_buffer[..l]
     }
 }
-impl From<&[u8]> for EncryptedPDU {
-    #[must_use]
-    fn from(b: &[u8]) -> Self {
-        EncryptedPDU::new(b)
-    }
-}
+
 impl AsRef<[u8]> for EncryptedPDU {
     #[must_use]
     fn as_ref(&self) -> &[u8] {
