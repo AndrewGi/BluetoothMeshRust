@@ -1,4 +1,6 @@
+use crate::ble::advertisement::AdStructure::Unknown;
 use core::convert::TryFrom;
+use core::mem;
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
 pub struct AdStructureError(());
@@ -109,21 +111,37 @@ impl TryFrom<u8> for AdType {
         }
     }
 }
-pub enum AdStructure {}
-pub struct RawAdStructure<'a> {
-    ad_type: AdType,
-    data: &'a [u8],
+#[non_exhaustive]
+pub enum AdStructure {
+    MeshPDU(AdStructureDataBuffer),
+    MeshBeacon(AdStructureDataBuffer),
+    MeshProvision(AdStructureDataBuffer),
+    Unknown(AdType, AdStructureDataBuffer),
+}
+impl AdStructure {
+    /// # Panics
+    /// Panics if `data` won'f fit in `AdStructureDataBuffer` (look at `AdStructureDataBuffer::new`).
+    pub fn new(ad_type: AdType, data: &[u8]) -> AdStructure {
+        match ad_type {
+            _ => Unknown(ad_type, AdStructureDataBuffer::new(data)),
+        }
+    }
 }
 const MAX_AD_LEN: usize = 30;
-impl<'a> RawAdStructure<'a> {
+#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Debug, Hash, Default)]
+pub struct AdStructureDataBuffer {
+    data: [u8; MAX_AD_LEN],
+    len: usize,
+}
+impl AdStructureDataBuffer {
     /// # Panics
-    /// Panics if `data.len() > MAX_AD_LEN`
-    pub fn new(ad_type: AdType, data: &'a [u8]) -> RawAdStructure<'a> {
-        assert!(
-            data.len() <= MAX_AD_LEN,
-            "data too big to fit in a advertisement PDU"
-        );
-        Self { ad_type, data }
+    /// Panics if `data.len() > MAX_AD_LEN` (if data won't fit in the buffer).
+    pub fn new(data: &[u8]) -> AdStructureDataBuffer {
+        assert!(data.len() < MAX_AD_LEN);
+        let mut out = AdStructureDataBuffer::default();
+        out.data[..data.len()].copy_from_slice(data);
+        out.len = data.len();
+        out
     }
 }
 pub struct RawAdStructureBuffer {
@@ -131,14 +149,62 @@ pub struct RawAdStructureBuffer {
     data: [u8; MAX_AD_LEN],
     len: usize,
 }
+impl AsRef<[u8]> for AdStructureDataBuffer {
+    fn as_ref(&self) -> &[u8] {
+        &self.data[..self.len]
+    }
+}
 impl RawAdStructureBuffer {
     pub fn data(&self) -> &[u8] {
         &self.data[..self.len]
     }
 }
-impl<'a> From<&'a RawAdStructureBuffer> for RawAdStructure<'a> {
-    fn from(b: &'a RawAdStructureBuffer) -> Self {
-        Self::new(b.ad_type, &b.data[..b.len])
+const MAX_ADV_LEN: usize = 31;
+pub struct RawAdvertisement {
+    buf: [u8; MAX_ADV_LEN],
+    len: usize,
+}
+impl RawAdvertisement {
+    pub fn iter(&self) -> AdStructureIterator<'_> {
+        AdStructureIterator {
+            data: self.as_ref(),
+        }
+    }
+}
+impl AsRef<[u8]> for RawAdvertisement {
+    fn as_ref(&self) -> &[u8] {
+        &self.buf[..self.len]
+    }
+}
+pub struct IncomingAdvertisement {
+    adv: RawAdvertisement,
+}
+impl IncomingAdvertisement {
+    pub fn adv(&self) -> &RawAdvertisement {
+        &self.adv
+    }
+}
+pub struct OutgoingAdvertisement {}
+pub struct AdvertisementData {}
+pub struct AdStructureIterator<'a> {
+    data: &'a [u8],
+}
+
+impl<'a> Iterator for AdStructureIterator<'a> {
+    type Item = AdStructure;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.data.len() < 2 {
+            return None;
+        }
+        let d = mem::replace(&mut self.data, &mut []);
+        let len = usize::from(d[0]);
+        let (data, rest) = d.split_at(len + 1);
+        self.data = rest;
+        let ad_type = AdType::try_from(data[1]).ok()?;
+        // Drop the len and ad_type from the front of the ad structure.
+        let data = &data[2..];
+        Some(AdStructure::new(ad_type, data))
     }
 }
 #[cfg(test)]

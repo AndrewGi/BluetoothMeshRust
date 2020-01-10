@@ -1,8 +1,11 @@
 use crate::net::EncryptedPDU;
 use crate::scheduler::TimeQueueSlotKey;
 //use crate::timestamp::Timestamp;
-use crate::net;
+use crate::ble::advertisement::{AdStructure, AdvertisementData};
+use crate::ble::gap::{Advertiser, Scanner};
 use crate::timestamp::TimestampTrait;
+use crate::{beacon, net, provisioning};
+use alloc::boxed::Box;
 use core::convert::TryFrom;
 use core::time::Duration;
 use crypto_mac::generic_array::arr::Inc;
@@ -60,6 +63,7 @@ impl From<u8> for PDUType {
         Self::from_advertisement_type(v)
     }
 }
+/*
 const BLE_ADV_MAX_LEN: usize = 31;
 #[derive(Copy, Clone, Hash, Debug, Default)]
 pub struct RawAdvertisementPDU {
@@ -141,39 +145,61 @@ impl TryFrom<RawAdvertisementPDU> for EncryptedPDU {
         }
     }
 }
-pub struct TransmitParameters {}
-pub struct OutgoingPDU {
-    transmit_parameters: TransmitParameters,
-    pdu: net::EncryptedPDU,
+*/
+pub enum PDU {
+    Network(net::EncryptedPDU),
+    Beacon(beacon::Beacon),
+    Provisioning(provisioning::generic::PDU),
 }
-impl AsRef<net::EncryptedPDU> for OutgoingPDU {
-    fn as_ref(&self) -> &EncryptedPDU {
+pub struct TransmitParameters {}
+pub struct OutgoingMeshPDU {
+    transmit_parameters: TransmitParameters,
+    pdu: PDU,
+}
+impl AsRef<PDU> for OutgoingMeshPDU {
+    fn as_ref(&self) -> &PDU {
         &self.pdu
     }
 }
 
 pub struct IncomingPDU {
-    pdu: net::EncryptedPDU,
+    pdu: PDU,
 }
-impl AsRef<net::EncryptedPDU> for IncomingPDU {
-    fn as_ref(&self) -> &EncryptedPDU {
+impl AsRef<PDU> for IncomingPDU {
+    fn as_ref(&self) -> &PDU {
         &self.pdu
     }
 }
+pub struct PDUConversionError(());
+impl TryFrom<&AdStructure> for PDU {
+    type Error = PDUConversionError;
+
+    fn try_from(value: &AdStructure) -> Result<Self, Self::Error> {
+        match value {
+            AdStructure::MeshPDU(b) => Ok(PDU::Network(
+                net::EncryptedPDU::new(b.as_ref()).ok_or(PDUConversionError(()))?,
+            )),
+            AdStructure::MeshBeacon(b) => unimplemented!(),
+            AdStructure::MeshProvision(b) => unimplemented!(),
+            _ => Err(PDUConversionError(())),
+        }
+    }
+}
 pub struct MeshPDUQueue<Timestamp: TimestampTrait> {
-    queue: crate::scheduler::SlottedTimeQueue<OutgoingPDU, Timestamp>,
+    queue: crate::scheduler::SlottedTimeQueue<OutgoingMeshPDU, Timestamp>,
 }
 pub struct IOError(());
 pub trait IOBearer {
-    fn send_io_pdu(&mut self, pdu: OutgoingPDU) -> Result<(), IOError>;
+    fn on_io_pdu(&mut self, callback: Box<dyn FnMut(&IncomingPDU)>);
+    fn send_io_pdu(&mut self, pdu: OutgoingMeshPDU) -> Result<(), IOError>;
 }
 #[derive(Copy, Clone, Debug, Hash)]
 pub struct PDUQueueSlot(TimeQueueSlotKey);
 impl<Timestamp: TimestampTrait> MeshPDUQueue<Timestamp> {
-    pub fn add(&mut self, delay: Duration, io_pdu: OutgoingPDU) -> PDUQueueSlot {
+    pub fn add(&mut self, delay: Duration, io_pdu: OutgoingMeshPDU) -> PDUQueueSlot {
         PDUQueueSlot(self.queue.push(Timestamp::with_delay(delay), io_pdu))
     }
-    pub fn cancel(&mut self, slot: PDUQueueSlot) -> Option<OutgoingPDU> {
+    pub fn cancel(&mut self, slot: PDUQueueSlot) -> Option<OutgoingMeshPDU> {
         self.queue.remove(slot.0)
     }
 
@@ -182,5 +208,35 @@ impl<Timestamp: TimestampTrait> MeshPDUQueue<Timestamp> {
             bearer.send_io_pdu(pdu)?
         }
         Ok(())
+    }
+}
+
+pub struct AdvertisementIOBearer<S: Scanner, A: Advertiser> {
+    scanner: S,
+    advertiser: A,
+}
+impl<S: Scanner, A: Advertiser> AdvertisementIOBearer<S, A> {
+    pub fn new(scanner: S, advertiser: A) -> AdvertisementIOBearer<S, A> {
+        AdvertisementIOBearer {
+            scanner,
+            advertiser,
+        }
+    }
+}
+impl<S: Scanner, A: Advertiser> IOBearer for AdvertisementIOBearer<S, A> {
+    fn on_io_pdu(&mut self, mut callback: Box<dyn FnMut(&IncomingPDU)>) {
+        self.scanner.on_advertisement(Box::new(move |incoming| {
+            // Only look at the first AdStructure in the advertisement for now.
+            if let Some(first_struct) = incoming.adv().iter().next() {
+                if let Ok(pdu) = PDU::try_from(&first_struct) {
+                    let incoming = IncomingPDU { pdu };
+                    callback(&incoming);
+                }
+            }
+        }));
+    }
+
+    fn send_io_pdu(&mut self, pdu: OutgoingMeshPDU) -> Result<(), IOError> {
+        unimplemented!()
     }
 }

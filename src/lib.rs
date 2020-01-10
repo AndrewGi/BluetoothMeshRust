@@ -21,6 +21,7 @@ pub mod uuid;
 
 //pub mod access;
 pub mod address;
+pub mod beacon;
 pub mod bearer;
 pub mod control;
 pub mod crypto;
