@@ -111,7 +111,6 @@ impl TryFrom<u8> for AdType {
         }
     }
 }
-#[non_exhaustive]
 pub enum AdStructure {
     MeshPDU(AdStructureDataBuffer),
     MeshBeacon(AdStructureDataBuffer),
@@ -125,6 +124,38 @@ impl AdStructure {
         match ad_type {
             _ => Unknown(ad_type, AdStructureDataBuffer::new(data)),
         }
+    }
+    pub fn data(&self) -> &[u8] {
+        match self {
+            AdStructure::MeshPDU(p) => p.as_ref(),
+            AdStructure::MeshBeacon(b) => b.as_ref(),
+            AdStructure::MeshProvision(p) => p.as_ref(),
+            Unknown(_, b) => b.as_ref(),
+        }
+    }
+    pub fn ad_type(&self) -> AdType {
+        match self {
+            AdStructure::MeshPDU(_) => AdType::MeshPDU,
+            AdStructure::MeshBeacon(_) => AdType::MeshBeacon,
+            AdStructure::MeshProvision(_) => AdType::PbAdv,
+            Unknown(t, _) => *t,
+        }
+    }
+    pub fn len(&self) -> usize {
+        // +2 for the ad_type and len u8's
+        match self {
+            AdStructure::MeshPDU(b) => b.len() + 2,
+            AdStructure::MeshBeacon(b) => b.len() + 2,
+            AdStructure::MeshProvision(b) => b.len() + 2,
+            Unknown(_, b) => b.len() + 2,
+        }
+    }
+}
+impl From<&AdStructure> for RawAdvertisement {
+    fn from(s: &AdStructure) -> Self {
+        let mut out = RawAdvertisement::default();
+        out.insert(s);
+        out
     }
 }
 const MAX_AD_LEN: usize = 30;
@@ -143,6 +174,12 @@ impl AdStructureDataBuffer {
         out.len = data.len();
         out
     }
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+    pub fn len(&self) -> usize {
+        self.len
+    }
 }
 pub struct RawAdStructureBuffer {
     ad_type: AdType,
@@ -160,11 +197,40 @@ impl RawAdStructureBuffer {
     }
 }
 const MAX_ADV_LEN: usize = 31;
+#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Default, Hash, Debug)]
 pub struct RawAdvertisement {
     buf: [u8; MAX_ADV_LEN],
     len: usize,
 }
 impl RawAdvertisement {
+    /// Inserts a `AdStructure` into a `RawAdvertisement`
+    /// # Panics
+    /// Panics if there isn't enough room for the `ad_struct`
+    pub fn insert(&mut self, ad_struct: &AdStructure) {
+        assert!(
+            self.space_left() >= ad_struct.len(),
+            "no room for ad_struct"
+        );
+        self.insert_u8(ad_struct.ad_type().into());
+        let len = ad_struct.len();
+        self.insert_u8(u8::try_from(len).expect("AdStructures are always < MAX_ADV_LEN"));
+        self.buf[self.len..self.len + len].copy_from_slice(ad_struct.data());
+        self.len += len;
+    }
+    fn insert_u8(&mut self, v: u8) {
+        assert!(self.len < MAX_ADV_LEN);
+        self.buf[self.len] = v;
+        self.len += 1;
+    }
+    pub const fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+    pub const fn len(&self) -> usize {
+        self.len
+    }
+    pub fn space_left(&self) -> usize {
+        MAX_ADV_LEN - self.len
+    }
     pub fn iter(&self) -> AdStructureIterator<'_> {
         AdStructureIterator {
             data: self.as_ref(),

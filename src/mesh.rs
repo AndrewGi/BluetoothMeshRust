@@ -73,6 +73,7 @@ impl Display for TTL {
         write!(f, "TTL({})", self.0)
     }
 }
+/// 7-bit `NID` (different than `NetworkID`!!)
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct NID(u8);
 
@@ -111,6 +112,7 @@ impl NID {
 }
 
 #[derive(Default, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+/// 24-bit Unsigned Integer. Commonly used for other 24-bit Unsigned types (`IVIndex`, `SequenceNumber`, Etc)
 pub struct U24(u32);
 const U24_MAX: u32 = (1_u32 << 24) - 1; // 2**24 - 1
 impl Display for U24 {

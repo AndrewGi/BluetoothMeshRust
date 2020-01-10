@@ -1,8 +1,11 @@
 use crate::net::EncryptedPDU;
 use crate::scheduler::TimeQueueSlotKey;
 //use crate::timestamp::Timestamp;
-use crate::ble::advertisement::{AdStructure, AdvertisementData};
+use crate::ble::advertisement::{
+    AdStructure, AdStructureDataBuffer, AdvertisementData, RawAdvertisement,
+};
 use crate::ble::gap::{Advertiser, Scanner};
+use crate::provisioning::pb_adv::PackedPDU;
 use crate::timestamp::TimestampTrait;
 use crate::{beacon, net, provisioning};
 use alloc::boxed::Box;
@@ -148,10 +151,13 @@ impl TryFrom<RawAdvertisementPDU> for EncryptedPDU {
 */
 pub enum PDU {
     Network(net::EncryptedPDU),
-    Beacon(beacon::Beacon),
-    Provisioning(provisioning::generic::PDU),
+    Beacon(beacon::PackedBeacon),
+    Provisioning(provisioning::pb_adv::PackedPDU),
 }
-pub struct TransmitParameters {}
+pub struct TransmitParameters {
+    interval: Duration,
+    times: u8,
+}
 pub struct OutgoingMeshPDU {
     transmit_parameters: TransmitParameters,
     pdu: PDU,
@@ -185,13 +191,37 @@ impl TryFrom<&AdStructure> for PDU {
         }
     }
 }
+impl From<&net::EncryptedPDU> for AdStructure {
+    fn from(pdu: &EncryptedPDU) -> Self {
+        AdStructure::MeshPDU(AdStructureDataBuffer::new(pdu.as_ref()))
+    }
+}
+impl From<&beacon::PackedBeacon> for AdStructure {
+    fn from(beacon: &beacon::PackedBeacon) -> Self {
+        AdStructure::MeshBeacon(AdStructureDataBuffer::new(beacon.as_ref()))
+    }
+}
+impl From<&provisioning::pb_adv::PackedPDU> for AdStructure {
+    fn from(pdu: &PackedPDU) -> Self {
+        AdStructure::MeshProvision(AdStructureDataBuffer::new(pdu.as_ref()))
+    }
+}
+impl From<&PDU> for AdStructure {
+    fn from(p: &PDU) -> Self {
+        match p {
+            PDU::Network(n) => n.into(),
+            PDU::Beacon(b) => b.into(),
+            PDU::Provisioning(p) => p.into(),
+        }
+    }
+}
 pub struct MeshPDUQueue<Timestamp: TimestampTrait> {
     queue: crate::scheduler::SlottedTimeQueue<OutgoingMeshPDU, Timestamp>,
 }
 pub struct IOError(());
 pub trait IOBearer {
     fn on_io_pdu(&mut self, callback: Box<dyn FnMut(&IncomingPDU)>);
-    fn send_io_pdu(&mut self, pdu: OutgoingMeshPDU) -> Result<(), IOError>;
+    fn send_io_pdu(&mut self, pdu: &PDU) -> Result<(), IOError>;
 }
 #[derive(Copy, Clone, Debug, Hash)]
 pub struct PDUQueueSlot(TimeQueueSlotKey);
@@ -205,7 +235,7 @@ impl<Timestamp: TimestampTrait> MeshPDUQueue<Timestamp> {
 
     pub fn send_ready(&mut self, bearer: &mut impl IOBearer) -> Result<(), IOError> {
         while let Some((_, pdu)) = self.queue.pop_ready() {
-            bearer.send_io_pdu(pdu)?
+            bearer.send_io_pdu(&pdu.pdu)?
         }
         Ok(())
     }
@@ -236,7 +266,9 @@ impl<S: Scanner, A: Advertiser> IOBearer for AdvertisementIOBearer<S, A> {
         }));
     }
 
-    fn send_io_pdu(&mut self, pdu: OutgoingMeshPDU) -> Result<(), IOError> {
-        unimplemented!()
+    fn send_io_pdu(&mut self, pdu: &PDU) -> Result<(), IOError> {
+        self.advertiser
+            .advertise(&RawAdvertisement::from(&pdu.into()))
+            .map_err(|_| IOError(()))
     }
 }

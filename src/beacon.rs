@@ -16,3 +16,9 @@ pub enum Beacon {
     Unprovisioned(UnprovisionedDeviceBeacon),
     SecureNetwork(SecureNetworkBeacon),
 }
+pub struct PackedBeacon {}
+impl AsRef<[u8]> for PackedBeacon {
+    fn as_ref(&self) -> &[u8] {
+        unimplemented!()
+    }
+}

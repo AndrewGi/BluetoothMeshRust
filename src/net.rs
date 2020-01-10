@@ -2,6 +2,7 @@
 //! Network Layer is BIG Endian
 
 use crate::address::{Address, UnicastAddress, ADDRESS_LEN};
+use crate::crypto::aes::AESCipher;
 use crate::crypto::key::PrivacyKey;
 use crate::crypto::nonce::{NetworkNonce, NetworkNonceParts};
 use crate::crypto::MIC;
@@ -9,6 +10,7 @@ use crate::lower;
 use crate::mesh::{IVIndex, SequenceNumber, CTL, IVI, NID, TTL};
 use crate::serializable::bytes::{Buf, BufError, BufMut, Bytes, BytesMut, ToFromBytesEndian};
 use crate::serializable::ByteSerializable;
+use core::convert::TryInto;
 use core::fmt;
 
 const TRANSPORT_PDU_MAX_LEN: usize = 16;
@@ -324,8 +326,13 @@ impl PackedPrivacy {
     pub fn new_bytes(bytes: [u8; PACKED_PRIVACY_LEN]) -> Self {
         Self(bytes)
     }
-    pub fn encrypt(self, key: PrivacyKey) -> PECB {
-        unimplemented!()
+    pub fn encrypt_with(mut self, key: PrivacyKey) -> PECB {
+        AESCipher::new(key.key()).ecb_encrypt(&mut self.0[..]);
+        PECB(
+            (&self.0[..PECB_LEN])
+                .try_into()
+                .expect("slice is sliced to array length"),
+        )
     }
 }
 impl AsRef<[u8]> for PackedPrivacy {
@@ -344,6 +351,7 @@ mod tests {
     use super::*;
     use crate::mesh::U24;
 
+    /*
     /// Generates a random Network PDU Header. Helpful for testing.
     pub fn random_header() -> Header {
         Header {
@@ -356,6 +364,7 @@ mod tests {
             dst: rand_u16().into(),
         }
     }
+    */
     fn test_header_size() {}
     /// Message #1 from Mesh Core v1.0 Sample Data
     fn message_1_header() -> Header {

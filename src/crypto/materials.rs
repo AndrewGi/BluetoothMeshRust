@@ -1,6 +1,8 @@
-use crate::crypto::key::{BeaconKey, EncryptionKey, IdentityKey, NetKey, PrivacyKey};
+use crate::crypto::key::{
+    AppKey, BeaconKey, DevKey, EncryptionKey, IdentityKey, NetKey, PrivacyKey,
+};
 use crate::crypto::{k2, KeyRefreshPhases, NetKeyIndex, NetworkID};
-use crate::mesh::NID;
+use crate::mesh::{AppKeyIndex, NID};
 use alloc::collections::btree_map;
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
 pub struct NetworkKeys {
@@ -86,6 +88,13 @@ impl<K: Clone + Copy + Eq> KeyPhase<K> {
             KeyPhase::Phase2(p) => (&p.new, Some(&p.old)),
         }
     }
+    pub fn key_pair(&self) -> Option<&KeyPair<K>> {
+        match self {
+            KeyPhase::Normal(_) => None,
+            KeyPhase::Phase1(p) => Some(p),
+            KeyPhase::Phase2(p) => Some(p),
+        }
+    }
 }
 
 pub struct NetKeyMap {
@@ -96,6 +105,27 @@ impl NetKeyMap {
         Self {
             map: btree_map::BTreeMap::new(),
         }
+    }
+
+    /// Returns all `NetworkSecurityMaterials` matching `nid_to_match`. Because `NID` is a 7-bit value,
+    /// one `NID` can match multiple different networks. For this reason, this functions returns an
+    /// iterator that yields each matching network security materials. Only attempting to decrypt
+    /// the Network PDU (and it failing/succeeding) will tell you if the `NID` and `NetworkKeys` match.
+    pub fn matching_nid(
+        &self,
+        nid_to_match: NID,
+    ) -> impl Iterator<Item = (NetKeyIndex, &'_ NetworkSecurityMaterials)> {
+        self.map.iter().filter_map(move |(&index, phase)| {
+            let keys = phase.rx_keys();
+            if keys.0.network_keys.nid == nid_to_match {
+                Some((index, keys.0))
+            } else {
+                match keys.1 {
+                    Some(sm) if sm.network_keys.nid == nid_to_match => Some((index, sm)),
+                    _ => None,
+                }
+            }
+        })
     }
     pub fn get_keys(&self, index: NetKeyIndex) -> Option<&KeyPhase<NetworkSecurityMaterials>> {
         self.map.get(&index)
@@ -112,4 +142,33 @@ impl NetKeyMap {
     ) -> Option<KeyPhase<NetworkSecurityMaterials>> {
         self.map.remove(&index)
     }
+}
+pub struct ApplicationSecurityMaterials {
+    app_key: AppKey,
+}
+pub struct AppKeyMap {
+    map: btree_map::BTreeMap<AppKeyIndex, ApplicationSecurityMaterials>,
+}
+impl AppKeyMap {
+    pub fn new() -> Self {
+        Self {
+            map: btree_map::BTreeMap::new(),
+        }
+    }
+
+    pub fn get_key(&self, index: AppKeyIndex) -> Option<&ApplicationSecurityMaterials> {
+        self.map.get(&index)
+    }
+    pub fn get_key_mut(&mut self, index: AppKeyIndex) -> Option<&mut ApplicationSecurityMaterials> {
+        self.map.get_mut(&index)
+    }
+    pub fn remove_key(&mut self, index: AppKeyIndex) -> Option<ApplicationSecurityMaterials> {
+        self.map.remove(&index)
+    }
+}
+
+pub struct SecurityMaterials {
+    pub dev_key: DevKey,
+    pub net_key_map: NetKeyMap,
+    pub app_key_map: AppKeyMap,
 }
