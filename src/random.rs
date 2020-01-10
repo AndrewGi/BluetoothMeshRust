@@ -1,36 +1,22 @@
 // Generalized over the rand Library so there's no hard dependencies.
 
-#[must_use]
-pub fn rand_bool() -> bool {
-    rand::random()
-}
+use rand::distributions::{Distribution, Standard};
 
-#[must_use]
-pub fn rand_u8() -> u8 {
-    rand::random()
+pub trait Randomizable: Sized {
+    /// Generates and returns a random `T`. Currently essentially just an alias for `rand::random`
+    /// Assume `random` to be not secure! Even though `random` could use a cryptographically secure
+    /// random number generator behind the scenes, use `random_secure` if you need crypto-random.
+    fn random() -> Self {
+        Self::random_secure()
+    }
+    /// Generates and returns a cryptographically secure random `T`.
+    fn random_secure() -> Self;
 }
-
-#[must_use]
-pub fn rand_u16() -> u16 {
-    rand::random()
-}
-
-#[must_use]
-pub fn rand_u32() -> u32 {
-    rand::random()
-}
-
-#[must_use]
-pub fn rand_u64() -> u64 {
-    rand::random()
-}
-
-#[must_use]
-pub fn rand_16_bytes() -> [u8; 16] {
-    rand::random()
-}
-
-#[must_use]
-pub fn rand_32_bytes() -> [u8; 32] {
-    rand::random()
+impl<T> Randomizable for T
+where
+    Standard: Distribution<T>,
+{
+    fn random_secure() -> Self {
+        rand::random()
+    }
 }

@@ -75,3 +75,9 @@ pub struct PDU {
     transaction_number: TransactionNumber,
     generic_pdu: generic::PDU,
 }
+pub struct PackedPDU {}
+impl AsRef<[u8]> for PackedPDU {
+    fn as_ref(&self) -> &[u8] {
+        unimplemented!()
+    }
+}

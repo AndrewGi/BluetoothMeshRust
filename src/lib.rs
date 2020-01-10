@@ -28,13 +28,15 @@ pub mod crypto;
 pub mod foundation;
 pub mod lower;
 pub mod mesh;
-pub mod model;
 pub mod net;
 pub mod reassembler;
 pub mod upper;
 
+pub mod element;
 pub mod mesh_io;
 pub mod stack;
+
+pub mod models;
 
 pub mod provisioning;
 
