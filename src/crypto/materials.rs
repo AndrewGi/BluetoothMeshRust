@@ -43,6 +43,23 @@ pub struct NetworkSecurityMaterials {
     identity_key: IdentityKey,
     beacon_key: BeaconKey,
 }
+impl NetworkSecurityMaterials {
+    pub fn net_key(&self) -> &NetKey {
+        &self.net_key
+    }
+    pub fn network_keys(&self) -> &NetworkKeys {
+        &self.network_keys
+    }
+    pub fn network_id(&self) -> NetworkID {
+        self.network_id
+    }
+    pub fn identity_key(&self) -> &IdentityKey {
+        &self.identity_key
+    }
+    pub fn beacon_key(&self) -> &BeaconKey {
+        &self.beacon_key
+    }
+}
 impl NetworkSecurityMaterials {}
 impl From<&NetKey> for NetworkSecurityMaterials {
     fn from(k: &NetKey) -> Self {

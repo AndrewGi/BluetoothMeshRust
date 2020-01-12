@@ -30,9 +30,12 @@ pub mod lower;
 pub mod mesh;
 pub mod net;
 pub mod reassembler;
+pub mod replay;
 pub mod upper;
 
+pub mod device_state;
 pub mod element;
+pub mod friend;
 pub mod mesh_io;
 pub mod stack;
 

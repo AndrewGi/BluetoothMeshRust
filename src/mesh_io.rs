@@ -1,9 +1,7 @@
 use crate::net::EncryptedPDU;
 use crate::scheduler::TimeQueueSlotKey;
 //use crate::timestamp::Timestamp;
-use crate::ble::advertisement::{
-    AdStructure, AdStructureDataBuffer, AdvertisementData, RawAdvertisement,
-};
+use crate::ble::advertisement::{AdStructure, AdStructureDataBuffer, RawAdvertisement};
 use crate::ble::gap::{Advertiser, Scanner};
 use crate::provisioning::pb_adv::PackedPDU;
 use crate::timestamp::TimestampTrait;
@@ -11,7 +9,6 @@ use crate::{beacon, net, provisioning};
 use alloc::boxed::Box;
 use core::convert::TryFrom;
 use core::time::Duration;
-use crypto_mac::generic_array::arr::Inc;
 
 #[derive(Copy, Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Debug)]
 pub enum PDUType {
@@ -185,8 +182,8 @@ impl TryFrom<&AdStructure> for PDU {
             AdStructure::MeshPDU(b) => Ok(PDU::Network(
                 net::EncryptedPDU::new(b.as_ref()).ok_or(PDUConversionError(()))?,
             )),
-            AdStructure::MeshBeacon(b) => unimplemented!(),
-            AdStructure::MeshProvision(b) => unimplemented!(),
+            AdStructure::MeshBeacon(_b) => unimplemented!(),
+            AdStructure::MeshProvision(_b) => unimplemented!(),
             _ => Err(PDUConversionError(())),
         }
     }

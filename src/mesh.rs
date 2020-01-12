@@ -30,6 +30,34 @@ impl From<bool> for CTL {
     }
 }
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+pub struct KeyRefreshFlag(pub bool);
+impl From<KeyRefreshFlag> for bool {
+    #[must_use]
+    fn from(c: KeyRefreshFlag) -> Self {
+        c.0
+    }
+}
+impl From<bool> for KeyRefreshFlag {
+    #[must_use]
+    fn from(b: bool) -> Self {
+        KeyRefreshFlag(b)
+    }
+}
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+pub struct IVUpdateFlag(pub bool);
+impl From<IVUpdateFlag> for bool {
+    #[must_use]
+    fn from(c: IVUpdateFlag) -> Self {
+        c.0
+    }
+}
+impl From<bool> for IVUpdateFlag {
+    #[must_use]
+    fn from(b: bool) -> Self {
+        IVUpdateFlag(b)
+    }
+}
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct TTL(u8);
 
 const TTL_MASK: u8 = 127;
@@ -178,7 +206,17 @@ impl IVIndex {
     pub fn ivi(&self) -> IVI {
         IVI(self.0 & 1 == 1)
     }
+    pub fn matching_ivi(&self, ivi: IVI) -> Option<IVIndex> {
+        if self.ivi() == ivi {
+            Some(*self)
+        } else if self.0 == 0 {
+            None
+        } else {
+            Some(IVIndex(self.0 - 1))
+        }
+    }
 }
+
 impl Display for IVIndex {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         write!(f, "IVIndex({})", self.0)

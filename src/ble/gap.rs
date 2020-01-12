@@ -1,6 +1,4 @@
-use crate::ble::advertisement::{
-    AdStructureError, IncomingAdvertisement, OutgoingAdvertisement, RawAdvertisement,
-};
+use crate::ble::advertisement::{AdStructureError, IncomingAdvertisement, RawAdvertisement};
 use alloc::boxed::Box;
 
 pub trait Scanner {
