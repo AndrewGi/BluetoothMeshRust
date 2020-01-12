@@ -148,7 +148,11 @@ impl From<bool> for AKF {
         AKF(b)
     }
 }
-
+impl From<AKF> for bool {
+    fn from(a: AKF) -> Self {
+        a.0
+    }
+}
 #[derive(Debug, Copy, Clone)]
 pub struct TryFromBlockError(());
 const SALT_LEN: usize = 16;

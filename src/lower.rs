@@ -7,10 +7,37 @@ pub struct SZMIC(bool);
 //13 Bits SeqZero
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct SeqZero(u16);
+
+pub const SEG_MAX: u8 = 0x0F;
+
+/// 4 bit SegO (Segment Offset number)
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct SegO(u8);
+impl SegO {
+    pub fn new(v: u8) -> Self {
+        assert!(v <= SEG_MAX);
+        Self(v)
+    }
+}
+impl From<SegO> for u8 {
+    fn from(s: SegO) -> Self {
+        s.0
+    }
+}
+/// 4 bit SegN (Last Segment number)
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct SegN(u8);
+impl SegN {
+    pub fn new(v: u8) -> Self {
+        assert!(v <= SEG_MAX);
+        Self(v)
+    }
+}
+impl From<SegN> for u8 {
+    fn from(s: SegN) -> Self {
+        s.0
+    }
+}
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq, Default)]
 pub struct BlockAck(u32);
 impl BlockAck {
@@ -43,6 +70,11 @@ impl BlockAck {
 }
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct SEG(bool);
+impl SEG {
+    pub fn new_upper_masked(v: u8) -> SEG {
+        SEG(v & 0x80 != 0)
+    }
+}
 impl From<SEG> for bool {
     fn from(s: SEG) -> Self {
         s.0
@@ -63,6 +95,15 @@ pub struct SegmentHeader {
     seg_n: SegN,
 }
 impl SegmentHeader {
+    #[must_use]
+    pub fn new(flag: bool, seq_zero: SeqZero, seg_o: SegO, seg_n: SegN) -> Self {
+        Self {
+            flag,
+            seq_zero,
+            seg_o,
+            seg_n,
+        }
+    }
     #[must_use]
     pub fn pack_into_u24(self) -> U24 {
         unimplemented!();
@@ -111,28 +152,61 @@ impl UnsegmentedAccessPDU {
         unimplemented!()
     }
     #[must_use]
-    pub fn from_bytes(bytes: PDUBytes) -> Option<Self> {
-        if bool::from(bytes.seg()) {
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        if SEG::new_upper_masked(bytes[0]).0 {
             // SEG is set (1) so it is a segmented message
             None
         } else {
-            let b = bytes.as_ref();
-            let akf = b[0] & 0x40 != 0;
+            let akf = bytes[0] & 0x40 != 0;
             unimplemented!();
         }
     }
 }
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
-pub struct SegmentedAccessPDU {}
+pub struct SegmentedAccessPDU {
+    segment_header: SegmentHeader,
+    segment_buf: [u8; SegmentedAccessPDU::max_seg_len()],
+    len: usize,
+}
 
 impl SegmentedAccessPDU {
+    pub fn new(
+        akf: AKF,
+        aid: AID,
+        sz_mic: SZMIC,
+        seq_zero: SeqZero,
+        seg_o: SegO,
+        seg_n: SegN,
+        data: &[u8],
+    ) -> Self {
+        let mut buf = [0_u8; SegmentedAccessPDU::max_seg_len()];
+        buf[..data.len()].copy_from_slice(data);
+        Self {
+            segment_header: SegmentHeader {
+                flag: akf.into(),
+                seq_zero,
+                seg_o,
+                seg_n,
+            },
+            segment_buf: buf,
+            len: data.len(),
+        }
+    }
+    #[must_use]
+    pub fn akf(&self) -> AKF {
+        self.segment_header.flag.into()
+    }
+
     #[must_use]
     pub fn to_bytes(&self) -> PDUBytes {
         unimplemented!()
     }
     #[must_use]
-    pub fn from_bytes(bytes: PDUBytes) -> Self {
+    pub fn from_bytes(bytes: &[u8]) -> Self {
         unimplemented!()
+    }
+    pub const fn max_seg_len() -> usize {
+        12
     }
 }
 
@@ -186,7 +260,7 @@ impl UnsegmentedControlPDU {
         unimplemented!()
     }
     #[must_use]
-    pub fn from_bytes(bytes: PDUBytes) -> Self {
+    pub fn from_bytes(bytes: &[u8]) -> Self {
         unimplemented!()
     }
 }
@@ -255,7 +329,7 @@ impl SegmentedControlPDU {
         unimplemented!()
     }
     #[must_use]
-    pub fn from_bytes(bytes: PDUBytes) -> Self {
+    pub fn from_bytes(bytes: &[u8]) -> Self {
         unimplemented!()
     }
 }
@@ -306,8 +380,8 @@ impl PDU {
             PDU::SegmentedControl(p) => p.to_bytes(),
         }
     }
-    pub fn from_bytes(bytes: PDUBytes, ctl: CTL) -> Option<Self> {
-        Some(match (bool::from(ctl), bool::from(bytes.seg())) {
+    pub fn from_bytes(bytes: &[u8], ctl: CTL) -> Option<Self> {
+        Some(match (bool::from(ctl), SEG::new_upper_masked(bytes[0]).0) {
             (true, true) => PDU::SegmentedControl(SegmentedControlPDU::from_bytes(bytes)),
             (true, false) => PDU::UnsegmentedControl(UnsegmentedControlPDU::from_bytes(bytes)),
             (false, false) => PDU::UnsegmentedAccess(UnsegmentedAccessPDU::from_bytes(bytes)?),
