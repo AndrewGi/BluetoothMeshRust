@@ -1,3 +1,6 @@
+//! Replay Cache based on a BTreeMap that keeps track of each ivi and seq per src address. Updating
+//! the IVIndex causes a 'Garbage Collection' like effect that will delete any cache entries for
+//! any 'too' old IVIndices.
 use crate::address::UnicastAddress;
 use crate::mesh::{IVIndex, SequenceNumber, IVI};
 use crate::net;

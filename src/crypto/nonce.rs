@@ -1,3 +1,4 @@
+//! Bluetooth Mesh nonces. Based on Mesh Core Spec v1.0.
 use crate::address::{Address, UnicastAddress};
 use crate::mesh::{IVIndex, SequenceNumber, CTL, TTL};
 use crate::serializable::bytes::ToFromBytesEndian;

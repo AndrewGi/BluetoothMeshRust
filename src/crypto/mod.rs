@@ -1,3 +1,6 @@
+//! Crypto functions (AES, ECDH) that the Mesh uses.
+//! AES is primarily used in the `crypto::k_funcs` and in network/application layer encryption.
+//! ECDH is used for the provisioning key exchange.
 use crate::crypto::key::{Key, NetKey};
 use core::convert::TryFrom;
 

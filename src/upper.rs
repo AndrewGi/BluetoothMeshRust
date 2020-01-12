@@ -1,3 +1,4 @@
+//! Upper Transport Layer. Primarily focusing on segmentation and reassembly.
 use crate::address::VirtualAddress;
 use crate::crypto::aes::{AESCipher, Error, MicSize};
 use crate::crypto::key::{AppKey, DevKey, Key};

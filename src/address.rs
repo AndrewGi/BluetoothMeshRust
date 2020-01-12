@@ -1,20 +1,19 @@
+//! Mesh Addresses
+//! | Bits (16)             | Type          |
+//! |-----------------------|---------------|
+//! | 0b0000 0000 0000 0000 | Unassigned    |
+//! | 0b0xxx xxxx xxxx xxxx | Unicast       |
+//! | 0b10xx xxxx xxxx xxxx | Virtual       |
+//! | 0b11xx xxxx xxxx xxxx | Group         |
+//!
+//! Endian depends on layer!!
+//! Little: Access/Foundation
+//! Big: Everything else
 use crate::crypto::aes::AESCipher;
 use crate::crypto::k_funcs::VTAD;
 use crate::serializable::bytes::ToFromBytesEndian;
 use crate::uuid::UUID;
 use core::convert::{TryFrom, TryInto};
-
-/// Mesh Addresses
-/// | Bits (16)             | Type          |
-/// |-----------------------|---------------|
-/// | 0b0000 0000 0000 0000 | Unassigned    |
-/// | 0b0xxx xxxx xxxx xxxx | Unicast       |
-/// | 0b10xx xxxx xxxx xxxx | Virtual       |
-/// | 0b11xx xxxx xxxx xxxx | Group         |
-///
-/// Endian depends on layer!!
-/// Little: Access/Foundation
-/// Big: Everything else
 
 pub const ADDRESS_LEN: usize = 2;
 

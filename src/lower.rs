@@ -1,3 +1,6 @@
+//! Lower Transport Layer.
+//! Primarily handles 4 types of PDUs.
+//! | Segmented |
 use crate::crypto::{AID, AKF};
 use crate::mesh::{CTL, U24};
 use core::convert::{TryFrom, TryInto};

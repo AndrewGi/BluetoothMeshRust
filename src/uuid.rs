@@ -1,3 +1,4 @@
+//! Universally Unique Identifiers or UUIDs.
 /// Have to allow unused_imports for `string::ToString`. We have to import it so the `Display` trait
 /// can also implement `ToString` automatically for us. Clippy complains its unused but it fails to
 /// compile without that import.

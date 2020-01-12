@@ -1,3 +1,4 @@
+//! Optional Bluetooth Mesh Friends feature.
 use crate::address::UnicastAddress;
 use crate::mesh::{IVIndex, IVUpdateFlag, KeyRefreshFlag, U24};
 

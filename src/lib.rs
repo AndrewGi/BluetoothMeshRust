@@ -19,7 +19,7 @@ pub mod serializable;
 pub mod timestamp;
 pub mod uuid;
 
-//pub mod access;
+pub mod access;
 pub mod address;
 pub mod beacon;
 pub mod bearer;

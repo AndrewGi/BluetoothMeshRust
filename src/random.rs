@@ -1,4 +1,5 @@
-// Generalized over the rand Library so there's no hard dependencies.
+//! Random Number generation for the Mesh.
+//! Generalized over the rand Library so there's no hard dependencies.
 
 use rand::distributions::{Distribution, Standard};
 

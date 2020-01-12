@@ -1,3 +1,4 @@
+//! Transport Layer Reassembler.
 use crate::lower::{BlockAck, SegN};
 use alloc::boxed::Box;
 
