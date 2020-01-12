@@ -1,3 +1,4 @@
+//! Device State Manager used to storing device state and having an config client control it.
 use crate::crypto::materials::SecurityMaterials;
 use crate::mesh::IVIndex;
 

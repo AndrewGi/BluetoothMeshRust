@@ -1,3 +1,5 @@
+//! Bluetooth Mesh Beacon Layer. Currently only supports `SecureNetworkBeacon`s and
+//! `UnprovisionedDeviceBeacon`s.
 use crate::uuid::UUID;
 
 struct OOBInformation;

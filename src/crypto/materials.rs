@@ -1,3 +1,4 @@
+//! Collection of security materials (Keys, NID, AID, etc) used for encryption and decryption.
 use crate::crypto::key::{
     AppKey, BeaconKey, DevKey, EncryptionKey, IdentityKey, NetKey, PrivacyKey,
 };

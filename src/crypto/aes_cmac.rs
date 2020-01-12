@@ -1,3 +1,5 @@
+//! AES CMAC module. Based on `aes_cmac` crate but had to be reimplemented because it was missing
+//! certain public functions.
 // Copied from cmac crates because they didn't make `from_cipher` public :(
 
 pub use crypto_mac::Mac;

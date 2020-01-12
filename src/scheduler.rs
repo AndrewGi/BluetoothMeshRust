@@ -1,3 +1,5 @@
+//! Arbitrary Scheduler module mostly used for Packet Schedule but also for Publish scheduling and
+//! other timing related things.
 use crate::timestamp::TimestampTrait;
 use alloc::collections::BinaryHeap;
 use core::cmp::Ordering;

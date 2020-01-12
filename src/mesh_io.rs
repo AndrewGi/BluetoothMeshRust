@@ -1,3 +1,4 @@
+//! Mesh IO Layer. Generalized IO for PDU and Beacons.
 use crate::net::EncryptedPDU;
 use crate::scheduler::TimeQueueSlotKey;
 //use crate::timestamp::Timestamp;

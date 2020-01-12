@@ -1,3 +1,4 @@
+//! Common Bluetooth Mesh Objects/Structures.
 use crate::serializable::bytes::ToFromBytesEndian;
 use core::fmt::{Display, Error, Formatter};
 
@@ -278,8 +279,13 @@ impl ToFromBytesEndian for SequenceNumber {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
 pub struct CompanyID(u16);
+impl CompanyID {
+    pub const fn byte_len() -> usize {
+        2
+    }
+}
 impl ToFromBytesEndian for CompanyID {
     type AsBytesType = [u8; 2];
 

@@ -1,3 +1,7 @@
+//! Bluetooth Mesh Crypto Functions
+//! Defined in the Core Spec v1.0
+//!
+
 use crate::crypto::aes::AESCipher;
 use crate::crypto::key::{AppKey, EncryptionKey, Key, PrivacyKey, ZERO_KEY};
 use crate::crypto::{Salt, AID};
@@ -10,6 +14,7 @@ pub fn k1(key: &Key, salt: Salt, extra: &[u8]) -> Key {
     let t = AESCipher::from(salt).cmac(key.as_ref());
     AESCipher::from(t).cmac(extra)
 }
+#[must_use]
 pub fn k2(key: &Key, p: impl AsRef<[u8]>) -> (NID, EncryptionKey, PrivacyKey) {
     k2_bytes(key, p.as_ref())
 }
@@ -78,6 +83,7 @@ pub const SMK4: Salt = Salt([
 pub fn s1_bytes(m: &[u8]) -> Salt {
     AESCipher::new(ZERO_KEY).cmac(m).as_salt()
 }
+#[must_use]
 pub fn id128(n: &Key, s: impl AsRef<[u8]>) -> Key {
     id128_bytes(n, s.as_ref())
 }

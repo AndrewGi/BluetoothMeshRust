@@ -1,13 +1,9 @@
-use crate::mesh::ModelID;
+use crate::access::{SigModelID, VendorModelID};
+use crate::mesh::{CompanyID, ModelID};
 use alloc::vec::Vec;
 
 // LITTLE ENDIAN
-pub struct CompanyID(u16);
-impl CompanyID {
-    pub const fn byte_len() -> usize {
-        2
-    }
-}
+
 pub struct ProductID(u16);
 impl ProductID {
     pub const fn byte_len() -> usize {
@@ -46,18 +42,6 @@ impl Features {
 }
 const LOCATION_LEN: usize = 2;
 pub enum Location {}
-pub struct SigModelID {}
-impl SigModelID {
-    pub const fn byte_len() -> usize {
-        2
-    }
-}
-pub struct VendorModelID {}
-impl VendorModelID {
-    pub const fn byte_len() -> usize {
-        CompanyID::byte_len() + 2
-    }
-}
 pub struct Element {
     location: Location,
     sig_models: Vec<SigModelID>,

@@ -1,3 +1,5 @@
+//! AES CCM module. Based on `aes_ccm` crate but had to be reimplemented because it was missing
+//! certain public functions.
 use aes::block_cipher_trait::BlockCipher;
 use aes::Aes128;
 
