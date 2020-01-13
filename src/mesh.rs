@@ -201,6 +201,11 @@ impl ToFromBytesEndian for U24 {
         }
     }
 }
+impl From<U24> for u32 {
+    fn from(u: U24) -> Self {
+        u.0
+    }
+}
 #[derive(Copy, Clone, Eq, Ord, PartialOrd, PartialEq, Debug, Default, Hash)]
 pub struct IVIndex(pub u32);
 impl IVIndex {

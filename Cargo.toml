@@ -1,5 +1,8 @@
 [package]
 name = "bluetooth_mesh"
+description = "Pure Rust Full Bluetooth Mesh Stack."
+license = "GPL-3.0-only"
+repository = "https://github.com/AndrewGi/BluetoothMeshRust"
 version = "0.1.1"
 authors = ["Andrew <andrew@gilbrough.com>"]
 edition = "2018"

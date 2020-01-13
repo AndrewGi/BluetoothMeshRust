@@ -29,7 +29,7 @@ impl DecryptedData {
         &self.transport_buf[..self.transport_len]
     }
     pub fn as_lower_pdu(&self, ctl: CTL) -> Option<lower::PDU> {
-        lower::PDU::from_bytes(self.transport_pdu(), ctl)
+        lower::PDU::unpack_from(self.transport_pdu(), ctl)
     }
 }
 
