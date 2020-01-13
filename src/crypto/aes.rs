@@ -36,6 +36,20 @@ pub enum MicSize {
     Big,
     Small,
 }
+impl MicSize {
+    pub fn byte_size(self) -> usize {
+        match self {
+            MicSize::Big => MIC::big_size(),
+            MicSize::Small => MIC::small_size(),
+        }
+    }
+    pub fn is_big(self) -> bool {
+        match self {
+            MicSize::Big => true,
+            MicSize::Small => false,
+        }
+    }
+}
 pub struct AESCipher(Aes128);
 impl AESCipher {
     #[must_use]
@@ -140,6 +154,8 @@ impl AESCipher {
                 .unwrap(),
         }
     }
+    /// AES CCM decryption of the payload. To supply no associated data, pass it an empty slice
+    /// (such as `b""`). This function will return an [`Error`]
     pub fn ccm_decrypt(
         &self,
         nonce: &Nonce,

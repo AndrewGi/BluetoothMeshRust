@@ -1,3 +1,4 @@
+//! Crypto Keys uses for Mesh Security.
 use crate::crypto::k_funcs::{k1, s1};
 use crate::crypto::{hex_16_to_array, ECDHSecret, NetworkID, ProvisioningSalt, Salt, AID, AKF};
 use core::convert::{TryFrom, TryInto};

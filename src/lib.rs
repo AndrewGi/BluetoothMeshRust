@@ -1,4 +1,9 @@
+//! Pure Rust Bluetooth Mesh Stack.
+//! The layers are designed so they can be put together in different ways to make different stacks
+//! (single-threaded, multi-threaded, multi-radio, etc).
+//! A single-threaded stack is provided in [`stack`].
 #![no_std]
+#![deny(intra_doc_link_resolution_failure)]
 //Might re-enable clippy::restriction later.
 #![warn(clippy::all, clippy::pedantic, clippy::nursery, clippy::cargo)]
 #![allow(

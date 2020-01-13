@@ -1,6 +1,9 @@
+//! Foundation Layer. Handles Publication, Config, etc.
 use crate::access::{SigModelID, VendorModelID};
 use crate::mesh::{CompanyID, ModelID};
 use alloc::vec::Vec;
+
+pub mod publication;
 
 // LITTLE ENDIAN
 

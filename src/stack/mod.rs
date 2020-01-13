@@ -50,10 +50,10 @@ impl Stack {
     pub fn iv_index(&self) -> IVIndex {
         self.device_state.iv_index()
     }
-    pub fn handle_lower_transport_pdu(&mut self, pdu: &lower::PDU) {
+    pub fn handle_lower_transport_pdu(&mut self, _pdu: &lower::PDU) {
         unimplemented!()
     }
-    pub fn handle_encrypted_network_pdu(&mut self, pdu: &net::EncryptedPDU) {
+    pub fn handle_encrypted_network_pdu(&mut self, _pdu: &net::EncryptedPDU) {
         unimplemented!()
     }
     /// Tries to find the matching `NetworkSecurityMaterials` from the device state manager. Once
