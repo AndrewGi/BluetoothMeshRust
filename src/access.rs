@@ -16,23 +16,44 @@ impl VendorModelID {
         CompanyID::byte_len() + 2
     }
 }
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
 pub enum SigOpcode {
     SingleOctet(u8),
     DoubleOctet(u16),
 }
+impl SigOpcode {
+    pub fn byte_len(&self) -> usize {
+        match self {
+            SigOpcode::SingleOctet(_) => 1,
+            SigOpcode::DoubleOctet(_) => 2,
+        }
+    }
+}
+impl From<SigOpcode> for Opcode {
+    fn from(opcode: SigOpcode) -> Self {
+        Opcode::SIG(opcode)
+    }
+}
+const VENDOR_OPCODE_MAX: u8 = (1u8 << 6) - 1;
 /// 6 bit Vendor Opcode
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
 pub struct VendorOpcode(u8);
+impl VendorOpcode {
+    pub fn new(opcode: u8) -> Self {
+        assert!(opcode <= VENDOR_OPCODE_MAX);
+        VendorOpcode(opcode)
+    }
+}
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
 pub enum Opcode {
-    SIG(SigModelID),
+    SIG(SigOpcode),
     Vendor(VendorOpcode, CompanyID),
 }
 impl Opcode {
     pub fn company_id(&self) -> Option<CompanyID> {
         match self {
-            _ => None,
             Opcode::Vendor(_, cid) => Some(*cid),
+            _ => None,
         }
     }
     pub fn is_sig(&self) -> bool {
@@ -40,6 +61,31 @@ impl Opcode {
     }
     pub fn is_vendor(&self) -> bool {
         !self.is_sig()
+    }
+    pub fn byte_len(&self) -> usize {
+        match self {
+            Opcode::SIG(o) => o.byte_len(),
+            Opcode::Vendor(_, _) => 3,
+        }
+    }
+    pub const fn max_byte_len() -> usize {
+        3
+    }
+    pub fn unpack_from(bytes: &[u8]) -> Option<Self> {
+        if bytes.is_empty() || bytes.len() > Self::max_byte_len() {
+            None
+        } else if bytes[0] == 0x7F {
+            // This opcode is RFU
+            None
+        } else if bytes[0] & 0x80 == 0 {
+            Some(SigOpcode::SingleOctet(bytes[0]).into())
+        } else if bytes.len() > 1 && bytes[0] & 0xC0 == 0xC0 {
+            let vendor_opcode = VendorOpcode::new(bytes[0] & !0xC0);
+            let company_id = CompanyID(u16::from_le_bytes([bytes[1], bytes[2]]));
+            Some(Opcode::Vendor(vendor_opcode, company_id))
+        } else {
+            None
+        }
     }
 }
 #[derive(Copy, Clone, Eq, PartialEq)]

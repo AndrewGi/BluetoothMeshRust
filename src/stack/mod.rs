@@ -1,9 +1,9 @@
 //! Bluetooth Mesh Stack that connects all the layers together.
-use crate::crypto::materials::{NetKeyMap, NetworkSecurityMaterials, SecurityMaterials};
+use crate::ble::RSSI;
+use crate::crypto::materials::NetKeyMap;
 use crate::crypto::NetKeyIndex;
 use crate::mesh::IVIndex;
 use crate::mesh_io::IOBearer;
-use crate::net::PrivacyRandom;
 use crate::{device_state, lower, net, replay};
 use alloc::boxed::Box;
 
@@ -21,9 +21,17 @@ pub struct Stack {
     replay_cache: replay::Cache,
     io_bearer: Box<dyn IOBearer>,
 }
+
 pub enum IncomingPDU {
-    EncryptedNet(net::EncryptedPDU),
-    DecryptedNet((NetKeyIndex, net::PDU)),
+    EncryptedNet {
+        pdu: net::EncryptedPDU,
+        rssi: Option<RSSI>,
+    },
+    DecryptedNet {
+        net_key_index: NetKeyIndex,
+        rssi: Option<RSSI>,
+        pdu: net::PDU,
+    },
 }
 impl Stack {
     pub fn new(io_bearer: Box<dyn IOBearer>, device_state: device_state::State) -> Self {
@@ -49,7 +57,7 @@ impl Stack {
         unimplemented!()
     }
     /// Tries to find the matching `NetworkSecurityMaterials` from the device state manager. Once
-    /// it finds a `NetworkSecurityMatierals` with a matching `NID`, it tries to decrypt the PDU.
+    /// it finds a `NetworkSecurityMaterials` with a matching `NID`, it tries to decrypt the PDU.
     /// If the MIC is authenticated (the materials match), it'll return the decrypted PDU.
     /// If no security materials match, it'll return `None`
     pub fn decrypt_network_pdu(&self, pdu: &net::EncryptedPDU) -> Option<(NetKeyIndex, net::PDU)> {

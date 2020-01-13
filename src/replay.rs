@@ -2,9 +2,9 @@
 //! the IVIndex causes a 'Garbage Collection' like effect that will delete any cache entries for
 //! any 'too' old IVIndices.
 use crate::address::UnicastAddress;
-use crate::mesh::{IVIndex, SequenceNumber, IVI};
+use crate::mesh::{SequenceNumber, IVI};
 use crate::net;
-use crate::net::{Header, PrivateHeader};
+use crate::net::PrivateHeader;
 use alloc::collections::btree_map::Entry;
 use alloc::collections::BTreeMap;
 

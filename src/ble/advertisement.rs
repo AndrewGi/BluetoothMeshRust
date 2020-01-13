@@ -1,4 +1,5 @@
 use crate::ble::advertisement::AdStructure::Unknown;
+use crate::ble::RSSI;
 use core::convert::TryFrom;
 use core::mem;
 
@@ -244,10 +245,14 @@ impl AsRef<[u8]> for RawAdvertisement {
 }
 pub struct IncomingAdvertisement {
     adv: RawAdvertisement,
+    rssi: Option<RSSI>,
 }
 impl IncomingAdvertisement {
     pub fn adv(&self) -> &RawAdvertisement {
         &self.adv
+    }
+    pub fn rssi(&self) -> Option<RSSI> {
+        self.rssi
     }
 }
 pub struct OutgoingAdvertisement {}

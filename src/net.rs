@@ -1,7 +1,6 @@
 //! Bluetooth Mesh
 //! Network Layer is BIG Endian
 
-use crate::address::Address::Unicast;
 use crate::address::{Address, UnicastAddress, ADDRESS_LEN};
 use crate::crypto::aes::AESCipher;
 use crate::crypto::key::PrivacyKey;
@@ -38,6 +37,7 @@ pub enum NetworkDataError {
     BadIVI,
     BadTransportPDU,
     BadSrc,
+    BadDst,
     DifferentNID,
 }
 
@@ -177,6 +177,10 @@ impl Header {
             MIC::small_size()
         }
     }
+    #[must_use]
+    pub fn obfuscate(&self, pecb: PECB) -> ObfuscatedHeader {
+        DeobfuscatedHeader::from(self).obfuscate(pecb)
+    }
 }
 impl From<&Header> for DeobfuscatedHeader {
     #[must_use]
@@ -306,6 +310,9 @@ impl EncryptedPDU {
         let decrypted_data = encrypted_data
             .try_decrypt(keys, &nonce)
             .ok_or(NetworkDataError::InvalidMIC)?;
+        if decrypted_data.dst() == Address::Unassigned {
+            return Err(NetworkDataError::BadDst);
+        }
         let header = private_header.create_header(decrypted_data.dst);
         let payload = decrypted_data
             .as_lower_pdu(header.ctl)
@@ -361,6 +368,10 @@ impl PDU {
     pub fn header(&self) -> &Header {
         &self.header
     }
+    pub fn encrypt(&self, keys: &NetworkKeys) -> EncryptedPDU {
+        let header = self.header();
+        unimplemented!()
+    }
 }
 
 const OBFUSCATED_LEN: usize = 6;
@@ -371,6 +382,13 @@ impl ObfuscatedHeader {
     pub fn deobfuscate(mut self, pecb: PECB) -> Option<DeobfuscatedHeader> {
         pecb.xor(&mut self.0);
         DeobfuscatedHeader::unpack(&self.0)
+    }
+    /// Packets the Obfuscated Header into the byte buffer.
+    /// # Panics
+    /// Panics if `buffer.len() < OBFUSCATED_LEN`.
+    pub fn pack_into(&self, buffer: &mut [u8]) {
+        assert!(buffer.len() >= OBFUSCATED_LEN);
+        buffer[..OBFUSCATED_LEN].copy_from_slice(&self.0[..]);
     }
 }
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
@@ -546,9 +564,7 @@ impl From<PackedPrivacy> for [u8; PACKED_PRIVACY_LEN] {
 }
 #[cfg(test)]
 mod tests {
-    use super::super::random::*;
-    use super::*;
-    use crate::mesh::U24;
+    use super::Header;
 
     /*
     /// Generates a random Network PDU Header. Helpful for testing.
