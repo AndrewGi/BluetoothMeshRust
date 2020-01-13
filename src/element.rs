@@ -1,7 +1,7 @@
-use crate::access::ModelIdentifier;
+//use crate::access::ModelIdentifier;
 use crate::address::{Address, UnicastAddress};
 use crate::mesh::{AppKeyIndex, TTL};
-use alloc::collections::BTreeMap;
+//use alloc::collections::BTreeMap;
 
 pub struct ModelPublication {
     address: Address,
