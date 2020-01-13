@@ -1,7 +1,12 @@
 # Bluetooth Mesh Rust
-Bluetooth Mesh stack implemented in Rust. In progress port/rewrite of Ero Bluetooth Mesh.
+Bluetooth Mesh stack implemented in Rust. In progress port/rewrite of Ero Bluetooth Mesh. Following the Bluetooth Mesh Spec Core v1.0. Designed to work with any BLE radio but currently targeting linux for testing. The complete stack still needs more glue between the layers but all the parts should be fully functional. If any mistake are found, please contact me!
 
-`#[no_std]`
+`#![no_std]` excepts for dependence on `std::Instant` for time but a different source can be provided. While not provided, on ARM; a crystal oscilator can be the time source. 
+
+Partially `serde` support but still needs much more work.
+
+The only heap allocations made durning processing a message is allocating memory for the message at the access layer. Most Mesh PDUs are <31 bytes (to fit in a single BLE Advertisement) so the Network and Lower Transport Layer stores its data staticly on the stack.
+
 ## 8 Layer system
 ![The 8 Layer of the Bluetooth Mesh Stack](/mesh_layout.PNG)
 
@@ -21,14 +26,14 @@ TODO:
   - [ ] Isolated SDK layer
 - [ ] Stack
   - [ ] Access
-    - [ ] Elements
-    - [ ] Models
+    - [x] Elements
+    - [x] Models
     - [ ] States
-    - [ ] Messages
+    - [x] Messages
     - [ ] Acknowledgements
   - [ ] Transport
     - [ ] Upper
-      - [ ] Control
+      - [x] Control
         - [ ] Heartbeat
         - [ ] Friend
           - [ ] Poll
@@ -42,8 +47,8 @@ TODO:
             - [ ] Remove
             - [ ] Confirm
     - [ ] Lower
-      - [ ] Segment
-      - [ ] Reassembly
+      - [x] Segment
+      - [x] Reassembly
       - [ ] Friend Queue
   - [ ] Net
     - [ ] Encrypting
