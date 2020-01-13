@@ -4,6 +4,7 @@ use crate::scheduler::TimeQueueSlotKey;
 //use crate::timestamp::Timestamp;
 use crate::ble::advertisement::{AdStructure, AdStructureDataBuffer, RawAdvertisement};
 use crate::ble::gap::{Advertiser, Scanner};
+use crate::ble::RSSI;
 use crate::provisioning::pb_adv::PackedPDU;
 use crate::timestamp::TimestampTrait;
 use crate::{beacon, net, provisioning};
@@ -165,9 +166,9 @@ impl AsRef<PDU> for OutgoingMeshPDU {
         &self.pdu
     }
 }
-
 pub struct IncomingPDU {
     pdu: PDU,
+    rssi: Option<RSSI>,
 }
 impl AsRef<PDU> for IncomingPDU {
     fn as_ref(&self) -> &PDU {
@@ -253,11 +254,12 @@ impl<S: Scanner, A: Advertiser> AdvertisementIOBearer<S, A> {
 }
 impl<S: Scanner, A: Advertiser> IOBearer for AdvertisementIOBearer<S, A> {
     fn on_io_pdu(&mut self, mut callback: Box<dyn FnMut(&IncomingPDU)>) {
-        self.scanner.on_advertisement(Box::new(move |incoming| {
+        self.scanner.on_advertisement(Box::new(move |incoming_adv| {
             // Only look at the first AdStructure in the advertisement for now.
-            if let Some(first_struct) = incoming.adv().iter().next() {
+            let rssi = incoming_adv.rssi();
+            if let Some(first_struct) = incoming_adv.adv().iter().next() {
                 if let Ok(pdu) = PDU::try_from(&first_struct) {
-                    let incoming = IncomingPDU { pdu };
+                    let incoming = IncomingPDU { pdu, rssi };
                     callback(&incoming);
                 }
             }
