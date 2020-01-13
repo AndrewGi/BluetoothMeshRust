@@ -3,27 +3,29 @@ use crate::address::VirtualAddress;
 use crate::crypto::aes::{AESCipher, Error, MicSize};
 use crate::crypto::key::{AppKey, DevKey, Key};
 use crate::crypto::nonce::{AppNonce, DeviceNonce, Nonce};
-use crate::crypto::{AID, MIC};
+use crate::crypto::{AID, AKF, MIC};
 use crate::lower::PDU::SegmentedAccess;
-use crate::lower::{SegN, SegO, SegmentedAccessPDU, SeqZero};
+use crate::lower::{SegN, SegO, SegmentedAccessPDU, SeqZero, UnsegmentedAccessPDU, SZMIC};
 use crate::provisioning::generic::SegmentIndex;
 use alloc::boxed::Box;
 use core::convert::TryFrom;
 use core::mem;
 
-pub enum SecurityMaterials {
-    VirtualAddress(AppNonce, AppKey, VirtualAddress),
-    App(AppNonce, AppKey),
-    Device(DeviceNonce, DevKey),
+/// Application Security Materials used to encrypt and decrypt at the application layer.
+pub enum SecurityMaterials<'a> {
+    VirtualAddress(&'a AppNonce, &'a AppKey, AID, &'a VirtualAddress),
+    App(&'a AppNonce, &'a AppKey, AID),
+    Device(&'a DeviceNonce, &'a DevKey),
 }
-impl SecurityMaterials {
+impl SecurityMaterials<'_> {
+    /// Unpacks the Security Materials into a `Nonce`, `Key` and associated data.1
     #[must_use]
-    pub fn unpack(&self) -> (&Nonce, &Key, &[u8]) {
+    pub fn unpack(&self) -> (&'_ Nonce, &'_ Key, &'_ [u8]) {
         match &self {
-            SecurityMaterials::VirtualAddress(n, k, v) => {
+            SecurityMaterials::VirtualAddress(n, k, _, v) => {
                 (n.as_ref(), k.as_ref(), v.uuid().as_ref())
             }
-            SecurityMaterials::App(n, k) => (n.as_ref(), k.as_ref(), b""),
+            SecurityMaterials::App(n, k, _) => (n.as_ref(), k.as_ref(), b""),
             SecurityMaterials::Device(n, k) => (n.as_ref(), k.as_ref(), b""),
         }
     }
@@ -37,7 +39,20 @@ impl SecurityMaterials {
         let (nonce, key, aad) = self.unpack();
         AESCipher::new(*key).ccm_decrypt(nonce, aad, payload, mic)
     }
+    #[must_use]
+    pub fn akf(&self) -> AKF {
+        self.aid().is_some().into()
+    }
+    #[must_use]
+    pub fn aid(&self) -> Option<AID> {
+        match self {
+            SecurityMaterials::VirtualAddress(_, _, aid, _) => Some(*aid),
+            SecurityMaterials::App(_, _, aid) => Some(*aid),
+            SecurityMaterials::Device(_, _) => None,
+        }
+    }
 }
+/// Unencrypted Application payload.
 pub struct AppPayload {
     data: Box<[u8]>,
 }
@@ -45,10 +60,10 @@ impl AppPayload {
     /// Encrypts the Access Payload in-place. It reuses the data `Box` containing the plaintext
     /// data to hold the encrypted data.
     #[must_use]
-    pub fn encrypt(self, sm: SecurityMaterials, mic_size: MicSize) -> EncryptedAppPayload {
+    pub fn encrypt(self, sm: &SecurityMaterials, mic_size: MicSize) -> EncryptedAppPayload {
         let mut data = self.data;
         let mic = sm.encrypt(data.as_mut(), mic_size);
-        EncryptedAppPayload::new(data, mic)
+        EncryptedAppPayload::new(data, mic, sm.aid())
     }
     #[must_use]
     pub fn payload(&self) -> &[u8] {
@@ -66,13 +81,22 @@ impl AppPayload {
 pub struct EncryptedAppPayload {
     data: Box<[u8]>,
     mic: MIC,
+    aid: Option<AID>,
 }
 const ENCRYPTED_APP_PAYLOAD_MAX_LEN: usize = 380;
 impl EncryptedAppPayload {
     #[must_use]
-    pub fn new(data: Box<[u8]>, mic: MIC) -> Self {
-        assert!(data.len() < ENCRYPTED_APP_PAYLOAD_MAX_LEN - (mic.byte_size() + 4));
-        Self { data, mic }
+    pub fn new(data: Box<[u8]>, mic: MIC, aid: Option<AID>) -> Self {
+        assert!(data.len() < ENCRYPTED_APP_PAYLOAD_MAX_LEN - mic.byte_size() + MIC::small_size());
+        Self { data, mic, aid }
+    }
+    #[must_use]
+    pub fn akf(&self) -> AKF {
+        self.aid.is_some().into()
+    }
+    #[must_use]
+    pub fn aid(&self) -> Option<AID> {
+        self.aid
     }
     #[must_use]
     pub fn data(&self) -> &[u8] {
@@ -105,6 +129,16 @@ impl EncryptedAppPayload {
         };
         SegN::new(u8::try_from(n).expect("data_len longer than ENCRYPTED_APP_PAYLOAD_MAX_LEN"))
     }
+    pub fn should_segment(&self) -> bool {
+        self.len() > UnsegmentedAccessPDU::max_len()
+    }
+    pub fn as_unsegmented(&self) -> Option<UnsegmentedAccessPDU> {
+        if !self.should_segment() {
+            None
+        } else {
+            Some(UnsegmentedAccessPDU::new(self.aid(), self.data()))
+        }
+    }
     /*
     #[must_use]
     pub fn segments(&self) -> SegmentIterator<'_> {
@@ -117,9 +151,18 @@ impl EncryptedAppPayload {
     }
     */
 }
+impl From<&UnsegmentedAccessPDU> for EncryptedAppPayload {
+    fn from(pdu: &UnsegmentedAccessPDU) -> Self {
+        let mic = pdu.mic();
+        let upper_pdu = pdu.upper_pdu();
+        let upper_pdu = Box::<[u8]>::from(&upper_pdu[..upper_pdu.len() - MIC::small_size()]);
+        EncryptedAppPayload::new(upper_pdu, mic, pdu.aid())
+    }
+}
+/// Generates `SegmentedAccessPDU`s from an Encrypted Payload.
 pub struct SegmentIterator<'a> {
     seq_zero: SeqZero,
-    aid: AID,
+    aid: Option<AID>,
     seg_n: SegN,
     seg_o: SegO,
     data: &'a [u8],
@@ -127,7 +170,13 @@ pub struct SegmentIterator<'a> {
 }
 impl SegmentIterator<'_> {
     pub fn is_done(&self) -> bool {
-        u8::from(self.seg_n) < u8::from(self.seg_o)
+        u8::from(self.seg_n) > u8::from(self.seg_o)
+    }
+    pub fn is_last_seg(&self) -> bool {
+        u8::from(self.seg_n) == u8::from(self.seg_o)
+    }
+    pub fn szmic(&self) -> SZMIC {
+        self.mic.is_big().into()
     }
     pub fn pop_bytes(&mut self, amount: usize) -> Option<&[u8]> {
         if self.data.len() < amount {
@@ -146,7 +195,42 @@ impl Iterator for SegmentIterator<'_> {
         if self.is_done() {
             None
         } else {
-            unimplemented!()
+            assert!(!self.data.is_empty());
+            if self.is_last_seg() {
+                let seg_len = self.data.len() + self.mic.byte_size();
+                debug_assert!(
+                    seg_len <= SegmentedAccessPDU::max_seg_len(),
+                    "too much data to fit in last segment"
+                );
+                let mut buf = [0_u8; SegmentedAccessPDU::max_seg_len()];
+                buf[..self.data.len()].copy_from_slice(&self.data);
+                self.data = &[];
+                // Insert MIC on the end of the segment.
+                let mic_bytes = &self.mic.mic().to_be_bytes()[..self.mic.byte_size()];
+                buf[self.data.len()..self.data.len() + mic_bytes.len()].copy_from_slice(&mic_bytes);
+                Some(SegmentedAccessPDU::new(
+                    self.aid,
+                    self.szmic(),
+                    self.seq_zero,
+                    self.seg_o,
+                    self.seg_n,
+                    &buf,
+                ))
+            } else {
+                let aid = self.aid;
+                let szmic = self.szmic();
+                let seq_zero = self.seq_zero;
+                let seg_o = self.seg_o;
+                let seg_n = self.seg_n;
+                let b = self
+                    .pop_bytes(SegmentedAccessPDU::max_seg_len())
+                    .expect("seg_n < seg_o so there must be at least full segment of bytes left");
+                let out = Some(SegmentedAccessPDU::new(
+                    aid, szmic, seq_zero, seg_o, seg_n, b,
+                ));
+                self.seg_n = self.seg_n.next();
+                out
+            }
         }
     }
 }

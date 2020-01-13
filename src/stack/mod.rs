@@ -1,3 +1,4 @@
+//! Bluetooth Mesh Stack that connects all the layers together.
 use crate::crypto::materials::{NetKeyMap, NetworkSecurityMaterials, SecurityMaterials};
 use crate::crypto::NetKeyIndex;
 use crate::mesh::IVIndex;

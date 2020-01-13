@@ -127,7 +127,7 @@ impl Display for MIC {
 }
 
 /// 6 bit Application Key ID
-#[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord, Default)]
 pub struct AID(u8);
 const AID_MAX: u8 = (1 << 6) - 1;
 
@@ -139,9 +139,21 @@ impl AID {
         assert!(aid > AID_MAX);
         AID::new_masked(aid)
     }
+    pub fn with_flags(&self, low_flag: bool, high_flag: bool) -> u8 {
+        self.0 | u8::from(low_flag) << 6 | u8::from(high_flag) << 7
+    }
+    /// Returns AID, low_flag (6th bit) and high_flag (7th bit).
+    pub fn from_flags(v: u8) -> (AID, bool, bool) {
+        (Self::new_masked(v), v & 0x40 != 0, v & 0x80 != 0)
+    }
     /// Creates a AID by masking `aid` to just 6 (lower) bits
     pub fn new_masked(aid: u8) -> AID {
         AID(aid & AID_MAX)
+    }
+}
+impl From<AID> for u8 {
+    fn from(a: AID) -> Self {
+        a.0
     }
 }
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
