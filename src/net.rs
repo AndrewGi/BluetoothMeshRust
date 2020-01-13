@@ -2,7 +2,7 @@
 //! Network Layer is BIG Endian
 
 use crate::address::{Address, UnicastAddress, ADDRESS_LEN};
-use crate::crypto::aes::AESCipher;
+use crate::crypto::aes::{AESCipher, MicSize};
 use crate::crypto::key::PrivacyKey;
 use crate::crypto::materials::NetworkKeys;
 use crate::crypto::nonce::{NetworkNonce, NetworkNonceParts};
@@ -18,17 +18,40 @@ pub struct DecryptedData {
     dst: Address,
     transport_buf: [u8; TRANSPORT_PDU_MAX_LEN],
     transport_len: usize,
-    mic: MIC,
+    mic: Option<MIC>,
 }
 impl DecryptedData {
     pub fn dst(&self) -> Address {
         self.dst
+    }
+    pub fn transport_len(&self) -> usize {
+        self.transport_len
     }
     pub fn transport_pdu(&self) -> &[u8] {
         &self.transport_buf[..self.transport_len]
     }
     pub fn as_lower_pdu(&self, ctl: CTL) -> Option<lower::PDU> {
         lower::PDU::unpack_from(self.transport_pdu(), ctl)
+    }
+    pub fn len(&self) -> usize {
+        ADDRESS_LEN + self.transport_len
+    }
+    pub fn encrypt(
+        &self,
+        nonce: &NetworkNonce,
+        network_keys: &NetworkKeys,
+        mic_size: MicSize,
+    ) -> OwnedEncryptedData {
+        let mut buf = [0_u8; TRANSPORT_PDU_MAX_LEN + ADDRESS_LEN + MIC::max_len()];
+        buf[..ADDRESS_LEN].copy_from_slice(&self.dst.to_bytes_be()[..]);
+        buf[ADDRESS_LEN..self.len()].copy_from_slice(self.transport_pdu());
+        let mic = AESCipher::new(network_keys.encryption_key().key()).ccm_encrypt(
+            nonce.as_ref(),
+            b"",
+            &mut buf[..self.transport_len + ADDRESS_LEN],
+            mic_size,
+        );
+        OwnedEncryptedData::new(&buf[..self.len()], mic)
     }
 }
 
@@ -41,27 +64,53 @@ pub enum NetworkDataError {
     DifferentNID,
 }
 
+pub struct OwnedEncryptedData {
+    buf: [u8; TRANSPORT_PDU_MAX_LEN + ADDRESS_LEN],
+    buf_len: usize,
+    mic: MIC,
+}
+impl OwnedEncryptedData {
+    /// # Panics
+    /// Panics if `encrypted_data.len() <= ENCRYPTED_DATA_MIN_LEN`
+    /// or `encrypted_data.len() > ENCRYPTED_DATA_MAX_LEN`
+    pub fn new(encrypted_data: &[u8], mic: MIC) -> OwnedEncryptedData {
+        assert!(encrypted_data.len() > ENCRYPTED_DATA_MIN_LEN);
+        assert!(encrypted_data.len() <= ENCRYPTED_DATA_MAX_LEN);
+        let mut buf = [0_u8; TRANSPORT_PDU_MAX_LEN + ADDRESS_LEN];
+        buf[..encrypted_data.len()].copy_from_slice(encrypted_data);
+        OwnedEncryptedData {
+            buf,
+            buf_len: encrypted_data.len(),
+            mic,
+        }
+    }
+}
+impl<'a> From<&'a OwnedEncryptedData> for EncryptedData<'a> {
+    fn from(data: &'a OwnedEncryptedData) -> Self {
+        EncryptedData::new(&data.buf[..data.buf_len], data.mic)
+    }
+}
 const TRANSPORT_PDU_MIN_LEN: usize = 1;
 const TRANSPORT_PDU_MAX_LEN: usize = 16;
 
 /// Holds the encrypted destination address, transport PDU and MIC.
 pub struct EncryptedData<'a> {
     data: &'a [u8],
-    big_mic: bool,
+    mic: MIC,
 }
 
-const ENCRYPTED_DATA_MIN_LEN: usize = ADDRESS_LEN + MIC::small_size();
+const ENCRYPTED_DATA_MIN_LEN: usize = ADDRESS_LEN;
 const ENCRYPTED_DATA_MAX_LEN: usize = ENCRYPTED_DATA_MIN_LEN + TRANSPORT_PDU_MAX_LEN;
 impl EncryptedData<'_> {
     /// # Panics
     /// Panics if `encrypted_data.len() <= ENCRYPTED_DATA_MIN_LEN`
     /// or `encrypted_data.len() > ENCRYPTED_DATA_MAX_LEN`
-    pub fn new(encrypted_data: &[u8], big_mic: bool) -> EncryptedData<'_> {
+    pub fn new(encrypted_data: &[u8], mic: MIC) -> EncryptedData<'_> {
         assert!(encrypted_data.len() > ENCRYPTED_DATA_MIN_LEN);
         assert!(encrypted_data.len() <= ENCRYPTED_DATA_MAX_LEN);
         EncryptedData {
             data: encrypted_data,
-            big_mic,
+            mic,
         }
     }
     #[must_use]
@@ -85,16 +134,11 @@ impl EncryptedData<'_> {
         &self.data[..]
     }
     pub fn mic_size(&self) -> usize {
-        if self.big_mic {
-            MIC::big_size()
-        } else {
-            MIC::small_size()
-        }
+        self.mic.byte_size()
     }
     #[must_use]
     pub fn mic(&self) -> MIC {
-        MIC::try_from_bytes_be(&self.data[self.len() - self.mic_size()..])
-            .expect("pdu should always have MIC")
+        self.mic
     }
     #[must_use]
     pub const fn max_len() -> usize {
@@ -119,8 +163,17 @@ impl EncryptedData<'_> {
             dst: Address::from_bytes_be(&buf[..ADDRESS_LEN]).expect("dst address can be any u16"),
             transport_buf,
             transport_len,
-            mic,
+            mic: Some(mic),
         })
+    }
+    /// # Panics
+    /// Panics if `buffer.len() < self.len()`.
+    pub fn pack_into(&self, buffer: &mut [u8]) {
+        assert!(buffer.len() >= self.len());
+        let buffer = &mut buffer[..self.len()];
+        buffer[..self.data_len()].copy_from_slice(self.data());
+        self.mic
+            .be_pack_into(&mut buffer[self.data_len()..self.data_len() + self.mic_size()]);
     }
 }
 impl AsRef<[u8]> for EncryptedData<'_> {
@@ -239,7 +292,7 @@ const ENCRYPTED_PDU_MAX_SIZE: usize = TRANSPORT_PDU_MAX_LEN + PDU_HEADER_LEN + 8
 #[derive(Copy, Clone)]
 pub struct EncryptedPDU {
     pdu_buffer: [u8; ENCRYPTED_PDU_MAX_SIZE],
-    length: u8,
+    length: usize,
 }
 const MIN_ENCRYPTED_PDU_LEN: usize = PDU_HEADER_LEN + MIC::small_size();
 const MAX_ENCRYPTED_PDU_LEN: usize = ENCRYPTED_PDU_MAX_SIZE;
@@ -257,12 +310,33 @@ impl EncryptedPDU {
         pdu_buf[..buf.len()].copy_from_slice(buf);
         Some(EncryptedPDU {
             pdu_buffer: pdu_buf,
-            length: buf.len() as u8,
+            length: buf.len(),
         })
+    }
+    fn new_zeroed(length: usize) -> Self {
+        assert!(length < ENCRYPTED_DATA_MAX_LEN);
+        EncryptedPDU {
+            pdu_buffer: [0_u8; ENCRYPTED_PDU_MAX_SIZE],
+            length,
+        }
+    }
+    #[must_use]
+    pub fn new_parts(
+        ivi: IVI,
+        nid: NID,
+        obfuscated: &ObfuscatedHeader,
+        encrypted_data: &EncryptedData,
+    ) -> Self {
+        let mut out = Self::new_zeroed(encrypted_data.len() + ObfuscatedHeader::len() + 1);
+        let buf = out.as_mut();
+        buf[0] = nid.with_flag(ivi.into());
+        obfuscated.pack_into(&mut buf[1..1 + ObfuscatedHeader::len()]);
+        encrypted_data.pack_into(&mut buf[1 + ObfuscatedHeader::len()..]);
+        out
     }
     #[must_use]
     pub const fn len(&self) -> usize {
-        self.length as usize
+        self.length
     }
     #[must_use]
     pub const fn is_empty(&self) -> bool {
@@ -327,8 +401,17 @@ impl EncryptedPDU {
                 .expect("obfuscated header should always exist"),
         )
     }
+    pub fn mic(&self, ctl: CTL) -> MIC {
+        let mic_size = if bool::from(ctl) { 8 } else { 4 };
+        MIC::try_from_bytes_be(&self.pdu_buffer[self.length - mic_size..self.length])
+            .expect("every PDU has a MIC")
+    }
     pub fn encrypted_data(&self, ctl: CTL) -> EncryptedData {
-        EncryptedData::new(&self.pdu_buffer[OBFUSCATED_LEN..], ctl.0)
+        let mic = self.mic(ctl);
+        EncryptedData::new(
+            &self.pdu_buffer[OBFUSCATED_LEN..self.length - mic.byte_size()],
+            mic,
+        )
     }
 }
 
@@ -368,10 +451,6 @@ impl PDU {
     pub fn header(&self) -> &Header {
         &self.header
     }
-    pub fn encrypt(&self, keys: &NetworkKeys) -> EncryptedPDU {
-        let header = self.header();
-        unimplemented!()
-    }
 }
 
 const OBFUSCATED_LEN: usize = 6;
@@ -389,6 +468,9 @@ impl ObfuscatedHeader {
     pub fn pack_into(&self, buffer: &mut [u8]) {
         assert!(buffer.len() >= OBFUSCATED_LEN);
         buffer[..OBFUSCATED_LEN].copy_from_slice(&self.0[..]);
+    }
+    pub const fn len() -> usize {
+        OBFUSCATED_LEN
     }
 }
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]

@@ -1,6 +1,9 @@
-//! Mesh Addresses
+//! Bluetooth Mesh Addresses.
+//! All address are 16-bit except for Virtual Addresses. Virtual Address are 128-bit UUIDs but only
+//! a 16-bit hash of the UUID is sent with message.
+//!
 //! | Bits (16)             | Type          |
-//! |-----------------------|---------------|
+//! | --------------------- | ------------- |
 //! | 0b0000 0000 0000 0000 | Unassigned    |
 //! | 0b0xxx xxxx xxxx xxxx | Unicast       |
 //! | 0b10xx xxxx xxxx xxxx | Virtual       |
@@ -26,10 +29,46 @@ const GROUP_MASK: u16 = !GROUP_BIT;
 const VIRTUAL_BIT: u16 = 0x8000;
 const VIRTUAL_MASK: u16 = GROUP_MASK;
 
+/// Element Unicast Address. Each Element has one Unicast assigned to it.
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct UnicastAddress(u16);
+/// Group Address. Some Group Address are reserved.
+///
+/// | Values        | Group Name    |
+/// | ------------- | ------------- |
+/// | 0xFF00-0xFFFB | RFU           |
+/// | 0xFFFC        | All Proxies   |
+/// | 0xFFFD        | All Friends   |
+/// | 0xFFFE        | All Relays    |
+/// | 0xFFFF        | All Nodes     |
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct GroupAddress(u16);
+impl GroupAddress {
+    /// # Panics
+    /// Panics if `group_address` isn't a value group address.
+    pub fn new(group_address: u16) -> Self {
+        match Self::try_from(group_address) {
+            Ok(g) => g,
+            Err(_) => panic!("invalid group address given"),
+        }
+    }
+    /// Group address corresponding to all proxies nodes.
+    pub const fn all_proxies() -> GroupAddress {
+        GroupAddress(0xFFFC)
+    }
+    /// Group address corresponding to all friends nodes.
+    pub const fn all_friends() -> GroupAddress {
+        GroupAddress(0xFFFD)
+    }
+    /// Group address corresponding to all relay nodes.
+    pub const fn all_relays() -> GroupAddress {
+        GroupAddress(0xFFE)
+    }
+    /// Group address corresponding to all nodes.
+    pub const fn all_nodes() -> GroupAddress {
+        GroupAddress(0xFFFF)
+    }
+}
 const VIRTUAL_ADDRESS_HASH_MAX: u16 = (1_u16 << 14) - 1;
 /// Only stores the 14 bit hash of the virtual UUID.
 /// For the full 128 bit UUID, look at [`VirtualAddress`]
@@ -48,10 +87,14 @@ impl VirtualAddressHash {
         VirtualAddressHash(address & VIRTUAL_ADDRESS_HASH_MAX)
     }
 }
-/// Stores the 14 bit hash and full 128 bit virtual UUID.
+/// Stores the 14-bit hash and full 128 bit virtual UUID. Only the 14-bit hash is sent with
+/// messages over the air. During the application decryption process, the UUID is supplied to the
+/// AES CCM decryptor as associated data. If the hash matches but the decryption fails (MIC doesn't
+/// match), the message doesn't belong to that VirtualAddress.
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct VirtualAddress(VirtualAddressHash, UUID);
 impl VirtualAddress {
+    /// Creates a Virtual Address by calculate the hash of the UUID (using AES CMAC).
     pub fn hash_uuid(uuid: &UUID) -> VirtualAddressHash {
         let k = AESCipher::from(VTAD).cmac(uuid.as_ref());
         VirtualAddressHash::new_masked(u16::from_be_bytes([k.as_ref()[15], k.as_ref()[14]]))
@@ -59,8 +102,14 @@ impl VirtualAddress {
     pub fn new(uuid: &UUID) -> VirtualAddress {
         VirtualAddress(Self::hash_uuid(uuid), uuid.clone())
     }
+    fn new_parts(hash: VirtualAddressHash, uuid: &UUID) -> Self {
+        VirtualAddress(hash, *uuid)
+    }
     pub fn uuid(&self) -> &UUID {
         &self.1
+    }
+    pub fn hash(&self) -> VirtualAddressHash {
+        self.0
     }
 }
 impl AsRef<UUID> for VirtualAddress {

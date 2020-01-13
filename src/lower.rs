@@ -1,6 +1,11 @@
 //! Lower Transport Layer.
 //! Primarily handles 4 types of PDUs.
-//! | Segmented |
+//!
+//! |           | Segmented                 | Unsegmented               |
+//! | --------- | ------------------------- | ------------------------- |
+//! | Access    | [SegmentedAccessPDU]      | [UnsegmentedAccessPDU]    |
+//! | Control   | [SegmentedControlPDU]     | [UnsegmentedControlPDU]   |
+use crate::control::ControlOpcode;
 use crate::crypto::{AID, AKF, MIC};
 use crate::mesh::{CTL, U24};
 use crate::serializable::bytes::ToFromBytesEndian;
@@ -52,7 +57,7 @@ impl From<SegO> for u8 {
         s.0
     }
 }
-/// 4 bit SegN (Last Segment number)
+/// 5 bit SegN (Last Segment number)
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct SegN(u8);
 impl SegN {
@@ -74,6 +79,7 @@ impl From<SegN> for u8 {
         s.0
     }
 }
+/// 32-bit BlockAck used for Lower Transport ACKs.
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq, Default)]
 pub struct BlockAck(u32);
 impl BlockAck {
@@ -100,13 +106,17 @@ impl BlockAck {
     pub fn all_acked(self, seg_n: SegN) -> bool {
         self.0 == (1_u32 << u32::from(seg_n.0)).wrapping_sub(1)
     }
+    /// Returns the max length of BlockAck in bits (32).
     pub const fn max_len() -> usize {
         32
     }
 }
+/// SEG Flag for signaling segmented PDUs. Unsegmented PDUs have `SEG(false)` while segmented
+/// PDUs have `SEG(true)`.
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct SEG(bool);
 impl SEG {
+    /// Creates a SEG by looking at the 7th bit.
     pub fn new_upper_masked(v: u8) -> SEG {
         SEG(v & 0x80 != 0)
     }
@@ -123,6 +133,8 @@ impl From<bool> for SEG {
 }
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct OBO(bool);
+/// Generic Segment Header for both segmented Access and Control PDUs. Flag is usually SZMIC or
+/// RFU.
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct SegmentHeader {
     flag: bool,
@@ -164,25 +176,7 @@ impl SegmentHeader {
         Self::new(flag, seq_zero, seg_o, seg_n)
     }
 }
-/// 7 Bit Control Opcode
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
-#[repr(u8)]
-pub enum ControlOpcode {
-    SegmentAck = 0x00,
-}
-impl ControlOpcode {
-    pub fn new(opcode: u8) -> Option<Self> {
-        match opcode {
-            0x00 => Some(ControlOpcode::SegmentAck),
-            _ => None,
-        }
-    }
-}
-impl From<ControlOpcode> for u8 {
-    fn from(opcode: ControlOpcode) -> Self {
-        opcode as u8
-    }
-}
+
 /// Lower Transport PDU
 /// | CTL | SEG | Format				|
 /// |  0  |  0  | Unsegmented Access	|
@@ -439,20 +433,23 @@ impl UnsegmentedControlPDU {
         Some(Self::new(opcode, &bytes[1..]))
     }
 }
+const MAX_SEGMENTED_CONTROL_PDU_LEN: usize = 8;
+
 /// Segmented Control PDU Lengths
+///
 /// | # Packets  | PDU Size |
+/// | ---------- | -------- |
 /// |      1     |     8    |
 /// |      2     |    16    |
 /// |      3     |    24    |
 /// |      n     |    n*8   |
 /// |     32     |    256   |
-const MAX_SEGMENTED_CONTROL_PDU_LEN: usize = 8;
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
 pub struct SegmentedControlPDU {
     opcode: ControlOpcode,
     segment_header: SegmentHeader,
     segment_buf: [u8; MAX_SEGMENTED_CONTROL_PDU_LEN],
-    segment_buf_len: u8,
+    segment_buf_len: usize,
 }
 impl SegmentedControlPDU {
     /// # Panic
@@ -471,30 +468,32 @@ impl SegmentedControlPDU {
             opcode,
             segment_header: header,
             segment_buf: buf,
-            segment_buf_len: data.len() as u8,
+            segment_buf_len: data.len(),
         }
     }
+    #[must_use]
     pub const fn max_len() -> usize {
-        4 + 8
+        4 + MAX_SEGMENTED_CONTROL_PDU_LEN
     }
+    #[must_use]
     pub const fn min_len() -> usize {
         4 + 1
     }
     #[must_use]
     pub fn len(&self) -> usize {
-        usize::from(self.segment_buf_len)
+        self.segment_buf_len + 4
     }
     #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
+    pub fn segment_len(&self) -> usize {
+        self.segment_buf_len
     }
     #[must_use]
     pub fn segment_data(&self) -> &[u8] {
-        &self.segment_buf[..self.len()]
+        &self.segment_buf[..self.segment_len()]
     }
     #[must_use]
     pub fn segment_data_mut(&mut self) -> &mut [u8] {
-        let l = self.len();
+        let l = self.segment_len();
         &mut self.segment_buf[..l]
     }
     #[must_use]
@@ -539,7 +538,7 @@ pub struct SegmentAckPDU {
 impl SegmentAckPDU {
     #[must_use]
     pub const fn opcode() -> ControlOpcode {
-        ControlOpcode::SegmentAck
+        ControlOpcode::Ack
     }
 }
 

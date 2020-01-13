@@ -108,6 +108,14 @@ impl MIC {
     pub const fn big_size() -> usize {
         BIG_MIC_SIZE
     }
+
+    pub fn be_pack_into(self, buffer: &mut [u8]) {
+        assert!(buffer.len() >= self.byte_size());
+        match self {
+            MIC::Big(b) => buffer[..Self::big_size()].copy_from_slice(&b.to_be_bytes()),
+            MIC::Small(s) => buffer[..Self::small_size()].copy_from_slice(&s.to_be_bytes()),
+        }
+    }
 }
 impl TryFrom<&[u8]> for MIC {
     type Error = ();
