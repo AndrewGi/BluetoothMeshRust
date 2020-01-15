@@ -12,7 +12,7 @@ The only heap allocations made durning processing a message is allocating memory
 license = "GPL-3.0-only"
 repository = "https://github.com/AndrewGi/BluetoothMeshRust"
 version = "0.1.2"
-authors = ["Andrew <andrew@gilbrough.com>"]
+authors = ["Andrew Gilbrough <andrew@gilbrough.com>"]
 edition = "2018"
 
 [features]

@@ -1,4 +1,8 @@
 //! Bluetooth Mesh Stack that connects all the layers together.
+
+pub mod application;
+pub mod element;
+
 use crate::ble::RSSI;
 use crate::crypto::materials::NetKeyMap;
 use crate::crypto::NetKeyIndex;
@@ -6,6 +10,18 @@ use crate::mesh::IVIndex;
 use crate::mesh_io::IOBearer;
 use crate::{device_state, lower, net, replay};
 use alloc::boxed::Box;
+
+pub enum IncomingPDU {
+    EncryptedNet {
+        pdu: net::EncryptedPDU,
+        rssi: Option<RSSI>,
+    },
+    DecryptedNet {
+        net_key_index: NetKeyIndex,
+        rssi: Option<RSSI>,
+        pdu: net::PDU,
+    },
+}
 
 /// Full Bluetooth Mesh Stack for
 /// Layers:
@@ -22,17 +38,6 @@ pub struct Stack {
     io_bearer: Box<dyn IOBearer>,
 }
 
-pub enum IncomingPDU {
-    EncryptedNet {
-        pdu: net::EncryptedPDU,
-        rssi: Option<RSSI>,
-    },
-    DecryptedNet {
-        net_key_index: NetKeyIndex,
-        rssi: Option<RSSI>,
-        pdu: net::PDU,
-    },
-}
 impl Stack {
     pub fn new(io_bearer: Box<dyn IOBearer>, device_state: device_state::State) -> Self {
         Self {
