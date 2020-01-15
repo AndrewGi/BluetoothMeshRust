@@ -41,6 +41,11 @@ impl From<SeqZero> for u16 {
         s.0
     }
 }
+
+/// 53-bit Sequence Authentication value.
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+pub struct SeqAuth(u64);
+
 pub const SEG_MAX: u8 = 0x1F;
 
 /// 5 bit SegO (Segment Offset number)

@@ -51,14 +51,18 @@ impl SecurityMaterials<'_> {
     }
 }
 /// Unencrypted Application payload.
-pub struct AppPayload {
-    data: Box<[u8]>,
+pub struct AppPayload<Storage: AsRef<[u8]> + AsMut<[u8]>> {
+    data: Storage,
 }
-impl AppPayload {
+impl<'a, Storage: AsRef<[u8]> + AsMut<[u8]>> AppPayload<Storage> {
     /// Encrypts the Access Payload in-place. It reuses the data `Box` containing the plaintext
     /// data to hold the encrypted data.
     #[must_use]
-    pub fn encrypt(self, sm: &SecurityMaterials, mic_size: MicSize) -> EncryptedAppPayload {
+    pub fn encrypt(
+        self,
+        sm: &SecurityMaterials,
+        mic_size: MicSize,
+    ) -> EncryptedAppPayload<Storage> {
         let mut data = self.data;
         let mic = sm.encrypt(data.as_mut(), mic_size);
         EncryptedAppPayload::new(data, mic, sm.aid())
@@ -69,23 +73,26 @@ impl AppPayload {
     }
     #[must_use]
     pub fn len(&self) -> usize {
-        self.data.len()
+        self.payload().len()
     }
     #[must_use]
-    pub fn new(payload: Box<[u8]>) -> Self {
+    pub fn new(payload: Storage) -> Self {
         Self { data: payload }
     }
 }
-pub struct EncryptedAppPayload {
-    data: Box<[u8]>,
+pub struct EncryptedAppPayload<Storage: AsRef<[u8]> + AsMut<[u8]>> {
+    data: Storage,
     mic: MIC,
     aid: Option<AID>,
 }
 const ENCRYPTED_APP_PAYLOAD_MAX_LEN: usize = 380;
-impl EncryptedAppPayload {
+impl<Storage: AsRef<[u8]> + AsMut<[u8]>> EncryptedAppPayload<Storage> {
     #[must_use]
-    pub fn new(data: Box<[u8]>, mic: MIC, aid: Option<AID>) -> Self {
-        assert!(data.len() < ENCRYPTED_APP_PAYLOAD_MAX_LEN - mic.byte_size() + MIC::small_size());
+    pub fn new(data: Storage, mic: MIC, aid: Option<AID>) -> Self {
+        assert!(
+            data.as_ref().len()
+                < ENCRYPTED_APP_PAYLOAD_MAX_LEN - mic.byte_size() + MIC::small_size()
+        );
         Self { data, mic, aid }
     }
     #[must_use]
@@ -105,13 +112,13 @@ impl EncryptedAppPayload {
         self.mic
     }
     #[must_use]
-    pub fn decrypt(self, sm: SecurityMaterials) -> Result<AppPayload, Error> {
+    pub fn decrypt(self, sm: SecurityMaterials) -> Result<AppPayload<Storage>, Error> {
         let mut data = self.data;
         sm.decrypt(data.as_mut(), self.mic)?;
         Ok(AppPayload::new(data))
     }
     pub fn data_len(&self) -> usize {
-        self.data.len()
+        self.data().len()
     }
     pub fn len(&self) -> usize {
         self.data_len() + self.mic.byte_size()
@@ -149,12 +156,13 @@ impl EncryptedAppPayload {
     }
     */
 }
-impl From<&UnsegmentedAccessPDU> for EncryptedAppPayload {
+// This should optimized into a stack allocation,
+impl From<&UnsegmentedAccessPDU> for EncryptedAppPayload<Box<[u8]>> {
     fn from(pdu: &UnsegmentedAccessPDU) -> Self {
         let mic = pdu.mic();
         let upper_pdu = pdu.upper_pdu();
         let upper_pdu = Box::<[u8]>::from(&upper_pdu[..upper_pdu.len() - MIC::small_size()]);
-        EncryptedAppPayload::new(upper_pdu, mic, pdu.aid())
+        Self::new(upper_pdu, mic, pdu.aid())
     }
 }
 /// Generates `SegmentedAccessPDU`s from an Encrypted Payload.

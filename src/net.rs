@@ -186,6 +186,7 @@ impl AsRef<[u8]> for EncryptedData<'_> {
 /// ## Mesh Network PDU
 /// Network layer is Big Endian.
 /// From Mesh Core v1.0
+///
 /// | Field Name    | Bits  | Notes                                                     |
 /// |---------------|-------|-----------------------------------------------------------|
 /// | IVI           | 1     | Least significant bit of IV Index                         |
@@ -368,9 +369,9 @@ impl EncryptedPDU {
         if keys.nid() != self.nid() {
             return Err(NetworkDataError::InvalidMIC);
         }
-        let iv_index = iv_index
-            .matching_ivi(self.ivi())
-            .ok_or(NetworkDataError::BadIVI)?;
+        if iv_index.ivi() != self.ivi() {
+            return Err(NetworkDataError::BadIVI);
+        }
         let pecb = PrivacyRandom::from(self)
             .pack_with_iv(iv_index)
             .encrypt_with(keys.privacy_key());

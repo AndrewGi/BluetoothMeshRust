@@ -1,6 +1,7 @@
 //! Common Bluetooth Mesh Objects/Structures.
 use crate::serializable::bytes::ToFromBytesEndian;
 use core::fmt::{Display, Error, Formatter};
+use core::time;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct IVI(pub bool);
@@ -62,7 +63,7 @@ impl From<bool> for IVUpdateFlag {
 pub struct TTL(u8);
 
 const TTL_MASK: u8 = 127;
-
+const TTL_MAX: u8 = 0xFF;
 impl TTL {
     #[must_use]
     pub fn new(v: u8) -> TTL {
@@ -212,13 +213,30 @@ impl IVIndex {
     pub fn ivi(&self) -> IVI {
         IVI(self.0 & 1 == 1)
     }
-    pub fn matching_ivi(&self, ivi: IVI) -> Option<IVIndex> {
+    pub fn next(&self) -> Option<IVIndex> {
+        self.0.checked_add(1).map(IVIndex)
+    }
+    pub fn prev(&self) -> Option<IVIndex> {
+        self.0.checked_sub(1).map(IVIndex)
+    }
+    /// Returns an IVIndex matching `IVI` and `IVUpdateFlag`. Will return `None` if there is no
+    /// `self.next()` or `self.prev()`.
+    /// # Example
+    /// ```
+    /// use bluetooth_mesh::mesh::{IVIndex, IVI, IVUpdateFlag};
+    /// assert!(IVIndex(0).matching_flags(IVI(true), IVUpdateFlag(false)).is_none());
+    /// assert!(IVIndex(u32::max_value()).matching_flags(IVI(false), IVUpdateFlag(true)).is_none());
+    /// assert_eq!(IVIndex(2).matching_flags(IVI(true), IVUpdateFlag(false)), Some(IVIndex(1)));
+    /// ```
+    pub fn matching_flags(&self, ivi: IVI, update: IVUpdateFlag) -> Option<IVIndex> {
         if self.ivi() == ivi {
             Some(*self)
-        } else if self.0 == 0 {
-            None
         } else {
-            Some(IVIndex(self.0 - 1))
+            if bool::from(update) {
+                self.next()
+            } else {
+                self.prev()
+            }
         }
     }
 }
@@ -251,7 +269,7 @@ impl ToFromBytesEndian for IVIndex {
         Some(Self(u32::from_bytes_be(bytes)?))
     }
 }
-/// 24bit Sequence number
+/// 24-bit Sequence number. Sent with each Network PDU. Each element has their own Sequence Number.
 #[derive(Copy, Clone, Eq, Ord, PartialOrd, PartialEq, Debug, Default, Hash)]
 pub struct SequenceNumber(pub U24);
 
@@ -284,9 +302,12 @@ impl ToFromBytesEndian for SequenceNumber {
     }
 }
 
+/// 16-bit Bluetooth Company Identifier. Companies are assigned unique Company Identifiers to
+/// Bluetooth SIG members requesting them. [See here for more](https://www.bluetooth.com/specifications/assigned-numbers/company-identifiers/)
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
 pub struct CompanyID(pub u16);
 impl CompanyID {
+    /// Return the length in bytes of `CompanyID` (2-bytes, 16-bits)
     pub const fn byte_len() -> usize {
         2
     }
@@ -314,8 +335,13 @@ impl ToFromBytesEndian for CompanyID {
         Some(CompanyID(u16::from_bytes_be(bytes)?))
     }
 }
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
-pub struct ModelID(u16);
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash, Ord, PartialOrd)]
+pub struct ModelID(pub u16);
+impl ModelID {
+    pub const fn byte_len() -> usize {
+        2
+    }
+}
 impl ToFromBytesEndian for ModelID {
     type AsBytesType = [u8; 2];
 
@@ -343,6 +369,72 @@ impl ToFromBytesEndian for ModelID {
 pub struct NetworkKeyIndex(u16);
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub struct AppKeyIndex(u16);
+const COUNT_MAX: u8 = 0b111;
+/// 3-bit Transit Count,
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
+pub struct TransmitCount(u8);
+
+impl TransmitCount {
+    /// # Panics
+    /// Panics if `count > COUNT_MAX`,
+    pub fn new(count: u8) -> Self {
+        assert!(count <= COUNT_MAX);
+        Self(count)
+    }
+}
+impl From<TransmitCount> for u8 {
+    fn from(count: TransmitCount) -> Self {
+        count.0
+    }
+}
+const STEPS_MAX: u8 = (1u8 << 5) - 1;
+/// 5-bit Transmit Interval Steps
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
+pub struct TransmitSteps(u8);
+
+impl TransmitSteps {
+    /// # Panics
+    /// Panics if `steps > STEPS_MAX`.
+    pub fn new(steps: u8) -> Self {
+        assert!(steps <= STEPS_MAX);
+        Self(steps)
+    }
+    pub fn to_milliseconds(&self) -> u32 {
+        (u32::from(self.0) + 1) * 50
+    }
+    pub fn to_duration(&self) -> time::Duration {
+        time::Duration::from_millis(self.to_milliseconds().into())
+    }
+}
+
+impl From<TransmitSteps> for u8 {
+    fn from(steps: TransmitSteps) -> Self {
+        steps.0
+    }
+}
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
+pub struct TransmitInterval {
+    pub count: TransmitCount,
+    pub steps: TransmitSteps,
+}
+impl TransmitInterval {
+    pub fn new(count: TransmitCount, steps: TransmitSteps) -> Self {
+        Self { count, steps }
+    }
+}
+impl From<TransmitInterval> for u8 {
+    fn from(interval: TransmitInterval) -> Self {
+        u8::from(interval.count) | (u8::from(interval.steps) << 3)
+    }
+}
+impl From<u8> for TransmitInterval {
+    fn from(b: u8) -> Self {
+        Self::new(
+            TransmitCount::new(b & COUNT_MAX),
+            TransmitSteps::new((b >> 3)),
+        )
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
