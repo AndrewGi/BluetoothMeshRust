@@ -41,7 +41,7 @@ pub mod upper;
 pub mod device_state;
 pub mod element;
 pub mod friend;
-pub mod mesh_io;
+//pub mod mesh_io;
 pub mod stack;
 
 pub mod models;

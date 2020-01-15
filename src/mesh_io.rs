@@ -1,5 +1,5 @@
 //! Mesh IO Layer. Generalized IO for PDU and Beacons.
-use crate::net::EncryptedPDU;
+use crate::net::OwnedEncryptedPDU;
 use crate::scheduler::TimeQueueSlotKey;
 //use crate::timestamp::Timestamp;
 use crate::ble::advertisement::{AdStructure, AdStructureDataBuffer, RawAdvertisement};
@@ -149,7 +149,7 @@ impl TryFrom<RawAdvertisementPDU> for EncryptedPDU {
 }
 */
 pub enum PDU {
-    Network(net::EncryptedPDU),
+    Network(net::OwnedEncryptedPDU),
     Beacon(beacon::PackedBeacon),
     Provisioning(provisioning::pb_adv::PackedPDU),
 }
@@ -182,7 +182,7 @@ impl TryFrom<&AdStructure> for PDU {
     fn try_from(value: &AdStructure) -> Result<Self, Self::Error> {
         match value {
             AdStructure::MeshPDU(b) => Ok(PDU::Network(
-                net::EncryptedPDU::new(b.as_ref()).ok_or(PDUConversionError(()))?,
+                net::OwnedEncryptedPDU::new(b.as_ref()).ok_or(PDUConversionError(()))?,
             )),
             AdStructure::MeshBeacon(_b) => unimplemented!(),
             AdStructure::MeshProvision(_b) => unimplemented!(),
@@ -190,9 +190,9 @@ impl TryFrom<&AdStructure> for PDU {
         }
     }
 }
-impl From<&net::EncryptedPDU> for AdStructure {
-    fn from(pdu: &EncryptedPDU) -> Self {
-        AdStructure::MeshPDU(AdStructureDataBuffer::new(pdu.as_ref()))
+impl From<net::EncryptedPDU<'_>> for AdStructure {
+    fn from(pdu: net::EncryptedPDU<'_>) -> Self {
+        AdStructure::MeshPDU(AdStructureDataBuffer::new(pdu.data()))
     }
 }
 impl From<&beacon::PackedBeacon> for AdStructure {
