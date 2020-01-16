@@ -159,18 +159,18 @@ impl NetworkNonceParts {
 
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 pub struct AppNonceParts {
-    aszmic: bool,
-    seq: SequenceNumber,
-    src: UnicastAddress,
-    dst: Address,
-    iv_index: IVIndex,
+    pub aszmic: bool,
+    pub seq: SequenceNumber,
+    pub src: UnicastAddress,
+    pub dst: Address,
+    pub iv_index: IVIndex,
 }
 
 impl AppNonceParts {
     pub fn to_nonce(&self) -> AppNonce {
         let seq = self.seq.to_bytes_be();
         let src = self.src.to_bytes_be();
-        let dst = self.src.to_bytes_be();
+        let dst = u16::from(&self.dst).to_bytes_be();
         let iv = self.iv_index.to_bytes_be();
         AppNonce::new_bytes([
             NonceType::Application.as_u8(),
@@ -192,11 +192,11 @@ impl AppNonceParts {
 
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 pub struct DeviceNonceParts {
-    aszmic: bool,
-    seq: SequenceNumber,
-    src: UnicastAddress,
-    dst: Address,
-    iv_index: IVIndex,
+    pub aszmic: bool,
+    pub seq: SequenceNumber,
+    pub src: UnicastAddress,
+    pub dst: Address,
+    pub iv_index: IVIndex,
 }
 
 impl DeviceNonceParts {

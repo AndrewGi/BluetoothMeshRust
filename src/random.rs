@@ -2,6 +2,7 @@
 //! Generalized over the rand Library so there's no hard dependencies.
 
 use rand::distributions::{Distribution, Standard};
+use rand::RngCore;
 
 pub trait Randomizable: Sized {
     /// Generates and returns a random `T`. Currently essentially just an alias for `rand::random`
@@ -12,6 +13,9 @@ pub trait Randomizable: Sized {
     }
     /// Generates and returns a cryptographically secure random `T`.
     fn random_secure() -> Self;
+}
+pub fn secure_random_fill_bytes(bytes: &mut [u8]) {
+    rand::thread_rng().fill_bytes(bytes)
 }
 impl<T> Randomizable for T
 where

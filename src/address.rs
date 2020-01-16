@@ -117,6 +117,11 @@ impl AsRef<UUID> for VirtualAddress {
         &self.1
     }
 }
+impl From<&UUID> for VirtualAddress {
+    fn from(uuid: &UUID) -> Self {
+        Self::new(uuid)
+    }
+}
 impl UnicastAddress {
     /// Creates a Unicast address by masking any u16 into it.
     #[must_use]
@@ -197,10 +202,50 @@ pub enum Address {
 
 impl Address {
     #[must_use]
-    fn is_assigned(&self) -> bool {
+    pub fn is_assigned(&self) -> bool {
         match self {
             Address::Unassigned => false,
             _ => true,
+        }
+    }
+    #[must_use]
+    pub fn is_unicast(&self) -> bool {
+        match self {
+            Address::Unicast(_) => true,
+            _ => false,
+        }
+    }
+
+    #[must_use]
+    pub fn is_group(&self) -> bool {
+        match self {
+            Address::Group(_) => true,
+            _ => false,
+        }
+    }
+
+    #[must_use]
+    pub fn is_virtual(&self) -> bool {
+        match self {
+            Address::Virtual(_) => true,
+            Address::VirtualHash(_) => true,
+            _ => false,
+        }
+    }
+
+    #[must_use]
+    pub fn is_full_virtual(&self) -> bool {
+        match self {
+            Address::Virtual(_) => true,
+            _ => false,
+        }
+    }
+    #[must_use]
+    pub fn virtual_hash(&self) -> Option<VirtualAddressHash> {
+        match self {
+            Address::Virtual(v) => Some(v.0),
+            Address::VirtualHash(h) => Some(*h),
+            _ => None,
         }
     }
     #[must_use]
