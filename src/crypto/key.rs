@@ -1,6 +1,8 @@
 //! Crypto Keys uses for Mesh Security.
 use crate::crypto::k_funcs::{k1, s1};
 use crate::crypto::{hex_16_to_array, ECDHSecret, NetworkID, ProvisioningSalt, Salt, AID, AKF};
+use crate::random;
+use crate::random::Randomizable;
 use core::convert::{TryFrom, TryInto};
 
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
@@ -25,6 +27,13 @@ impl Key {
     }
     pub fn as_salt(&self) -> Salt {
         Salt(self.0)
+    }
+}
+impl random::Randomizable for Key {
+    fn random_secure() -> Self {
+        let mut out = [0_u8; KEY_LEN];
+        random::secure_random_fill_bytes(&mut out[..]);
+        Self::new(out)
     }
 }
 impl TryFrom<&[u8]> for Key {
@@ -87,6 +96,11 @@ impl TryFrom<&[u8]> for NetKey {
 impl From<Key> for NetKey {
     fn from(k: Key) -> Self {
         Self(k)
+    }
+}
+impl Randomizable for NetKey {
+    fn random_secure() -> Self {
+        Self(Key::random_secure())
     }
 }
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
@@ -277,6 +291,11 @@ impl From<Key> for DevKey {
         Self(k)
     }
 }
+impl Randomizable for DevKey {
+    fn random_secure() -> Self {
+        Self(Key::random_secure())
+    }
+}
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
 pub struct AppKey(Key);
 
@@ -319,7 +338,11 @@ impl From<Key> for AppKey {
         Self(k)
     }
 }
-
+impl Randomizable for AppKey {
+    fn random_secure() -> Self {
+        Self(Key::random_secure())
+    }
+}
 impl From<NetKey> for Key {
     #[must_use]
     fn from(k: NetKey) -> Self {

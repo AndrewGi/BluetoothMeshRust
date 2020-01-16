@@ -1,5 +1,4 @@
 //! Bluetooth Mesh Control Layer.
-use core::convert::TryFrom;
 
 /// 7 Bit Control Opcode
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]

@@ -241,10 +241,6 @@ impl From<&key::NetKey> for NetworkID {
         NetworkID(k3(k.key()))
     }
 }
-#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Debug, Hash)]
-pub struct NetKeyIndex(u16);
-#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Debug, Hash)]
-pub struct AppKeyIndex(u16);
 
 #[repr(u8)]
 pub enum KeyRefreshPhases {
