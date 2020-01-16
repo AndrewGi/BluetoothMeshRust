@@ -77,6 +77,16 @@ impl<'a, Storage: AsRef<[u8]> + AsMut<[u8]>> AppPayload<Storage> {
     pub fn new(payload: Storage) -> Self {
         Self(payload)
     }
+    #[must_use]
+    pub fn should_segment(&self, mic_size: MicSize) -> bool {
+        self.0.as_ref().len() + mic_size.byte_size() > UnsegmentedAccessPDU::max_len()
+    }
+}
+pub fn calculate_seg_o(data_len: usize, pdu_size: usize) -> SegO {
+    let l = data_len;
+    let n = data_len / pdu_size;
+    let n = if n * pdu_size * n != l { n + 1 } else { n };
+    SegO::new(u8::try_from(n).expect("data_len longer than ENCRYPTED_APP_PAYLOAD_MAX_LEN"))
 }
 pub struct EncryptedAppPayload<Storage: AsRef<[u8]> + AsMut<[u8]>> {
     data: Storage,
@@ -122,15 +132,8 @@ impl<Storage: AsRef<[u8]> + AsMut<[u8]>> EncryptedAppPayload<Storage> {
         self.data_len() + self.mic.byte_size()
     }
     #[must_use]
-    pub fn seg_n(&self) -> SegN {
-        let l = self.len();
-        let n = self.len() / SegmentedAccessPDU::max_seg_len();
-        let n = if n * SegmentedAccessPDU::max_seg_len() * n != l {
-            n + 1
-        } else {
-            n
-        };
-        SegN::new(u8::try_from(n).expect("data_len longer than ENCRYPTED_APP_PAYLOAD_MAX_LEN"))
+    pub fn seg_o(&self) -> SegO {
+        calculate_seg_o(self.len(), SegmentedAccessPDU::max_seg_len())
     }
     pub fn should_segment(&self) -> bool {
         self.len() > UnsegmentedAccessPDU::max_len()

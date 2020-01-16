@@ -27,7 +27,6 @@ pub struct Models(BTreeMap<ModelIdentifier, ModelInfo>);
 pub struct DeviceState {
     element_address: UnicastAddress,
     element_count: u8,
-    pub seq_counter: SeqCounter,
     relay_state: RelayState,
     gatt_proxy_state: GATTProxyState,
     secure_network_beacon_state: SecureNetworkBeaconState,
@@ -41,18 +40,27 @@ pub struct DeviceState {
     iv_index: IVIndex,
     pub security_materials: SecurityMaterials,
 }
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Default, Hash, Debug)]
-pub struct SeqCounter(SequenceNumber);
+/// Atomic SeqCounter so no PDUs get the same SeqNumber. Sequence Numbers are a finite resource
+/// (only 24-bits) that only get reset every IVIndex update. Also segmented PDUs require sequential
+#[derive(Default, Debug)]
+pub struct SeqCounter(core::sync::atomic::AtomicU32);
 impl SeqCounter {
-    /// Allocates a SequenceNumber and increments the internal counter.
+    /// Allocates a or some SequenceNumbers and increments the internal counter by amount. Allocating
+    /// `amount` Sequence Numbers is useful for Segmented Transport PDUs.
     /// Returns `None` if `SequenceNumber` is at its max.
-    pub fn inc_seq(&mut self) -> Option<SequenceNumber> {
-        if (self.0).0 == U24::max_value() {
+    pub fn inc_seq(&self, amount: u32) -> Option<SequenceNumber> {
+        let next = self
+            .0
+            .fetch_add(amount, core::sync::atomic::Ordering::SeqCst);
+        if next >= U24::max_value().value() {
+            /// Overflow of Seq Number
+            self.0.store(
+                U24::max_value().value(),
+                core::sync::atomic::Ordering::SeqCst,
+            );
             None
         } else {
-            let out = self.0;
-            *self = SeqCounter(SequenceNumber(U24::new(out.0.value() + 1)));
-            Some(out)
+            Some(SequenceNumber(U24::new(next)))
         }
     }
 }
@@ -60,9 +68,8 @@ impl DeviceState {
     /// Generates a new `DeviceState`. `SecurityMaterials` will be new random keys.
     pub fn new(element_count: u8) -> Self {
         Self {
-            element_count: element_count,
+            element_count,
             element_address: UnicastAddress::from_mask_u16(1u16),
-            seq_counter: SeqCounter::default(),
             relay_state: RelayState::Disabled,
             gatt_proxy_state: GATTProxyState::Disabled,
             secure_network_beacon_state: SecureNetworkBeaconState::NotBroadcasting,

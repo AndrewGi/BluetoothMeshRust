@@ -1,14 +1,14 @@
 //! Transport Layer Reassembler.
-use crate::lower::{BlockAck, SegN};
+use crate::lower::{BlockAck, SegO};
 use alloc::boxed::Box;
 
 pub struct ContextHeader {
     is_control: bool,
-    seg_n: SegN,
+    seg_n: SegO,
     block_ack: BlockAck,
 }
 impl ContextHeader {
-    pub fn new(seg_n: SegN, is_control: bool) -> Self {
+    pub fn new(seg_n: SegO, is_control: bool) -> Self {
         Self {
             is_control,
             seg_n,
@@ -28,7 +28,7 @@ impl ContextHeader {
         !self.is_control
     }
     #[must_use]
-    pub const fn seg_n(&self) -> SegN {
+    pub const fn seg_n(&self) -> SegO {
         self.seg_n
     }
     #[must_use]

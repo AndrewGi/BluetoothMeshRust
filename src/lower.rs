@@ -108,7 +108,7 @@ impl BlockAck {
     }
     /// Returns if the block ack (up to `seg_n` bits) is all 1s. False if otherwise
     #[must_use]
-    pub fn all_acked(self, seg_n: SegN) -> bool {
+    pub fn all_acked(self, seg_n: SegO) -> bool {
         self.0 == (1_u32 << u32::from(seg_n.0)).wrapping_sub(1)
     }
     /// Returns the max length of BlockAck in bits (32).
