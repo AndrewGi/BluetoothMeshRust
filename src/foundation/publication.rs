@@ -1,5 +1,8 @@
-use crate::address::Address;
-use crate::mesh::{AppKeyIndex, TransmitInterval, TTL};
+use crate::address::{Address, VirtualAddress};
+use crate::mesh::{AppKeyIndex, KeyIndex, TransmitInterval, TTL};
+use crate::serializable::bytes::ToFromBytesEndian;
+use crate::uuid::UUID;
+use core::convert::TryInto;
 use core::time;
 
 /// 2-bit Step Resoution used for `PublishPeriod`, etc.
@@ -97,10 +100,88 @@ impl From<PublishRetransmit> for u8 {
 }
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub struct ModelPublishInfo {
-    address: Address,
-    app_key_index: AppKeyIndex,
-    credential_flag: bool,
-    ttl: Option<TTL>, // None means default TTL
-    period: PublishPeriod,
-    retransmit: PublishRetransmit,
+    pub address: Address,
+    pub app_key_index: AppKeyIndex,
+    pub credential_flag: bool,
+    pub ttl: Option<TTL>, // None means default TTL
+    pub period: PublishPeriod,
+    pub retransmit: PublishRetransmit,
+}
+
+impl ModelPublishInfo {
+    pub const NON_VIRTUAL_LEN: usize = 7;
+    pub const VIRTUAL_LEN: usize = 7 + 14;
+    pub fn byte_len(&self) -> usize {
+        if self.address.is_full_virtual() {
+            Self::VIRTUAL_LEN
+        } else {
+            Self::NON_VIRTUAL_LEN
+        }
+    }
+    pub fn unpack(buf: &[u8]) -> Option<Self> {
+        match buf.len() {
+            Self::NON_VIRTUAL_LEN => {
+                //Sig NonVirtual
+                let address = Address::from_bytes_le(&buf[..2])?;
+                let index = u16::from_bytes_le(&buf[2..4])?;
+                let credential_flag = index & (1 << 12) != 0;
+                let publish_ttl = if buf[4] == 0xFF {
+                    None
+                } else {
+                    if buf[4] & 0x80 != 0 {
+                        return None;
+                    }
+                    Some(TTL::from_masked_u8(buf[4]))
+                };
+                Some(Self {
+                    address,
+                    app_key_index: AppKeyIndex(KeyIndex::new_masked(index)),
+                    credential_flag,
+                    ttl: publish_ttl,
+                    period: PublishPeriod::unpack(buf[5]),
+                    retransmit: PublishRetransmit::from(buf[6]),
+                })
+            }
+            Self::VIRTUAL_LEN => {
+                let uuid = UUID((&buf[..16]).try_into().ok()?);
+                let index = u16::from_bytes_le(&buf[16..18])?;
+                let credential_flag = index & (1 << 12) != 0;
+                let publish_ttl = if buf[18] == 0xFF {
+                    None
+                } else {
+                    if buf[0] & 0x80 != 0 {
+                        return None;
+                    }
+                    Some(TTL::from_masked_u8(buf[18]))
+                };
+                Some(Self {
+                    address: Address::Virtual(VirtualAddress::from(&uuid)),
+                    app_key_index: AppKeyIndex(KeyIndex::new_masked(index)),
+                    credential_flag,
+                    ttl: publish_ttl,
+                    period: PublishPeriod::unpack(buf[19]),
+                    retransmit: PublishRetransmit::from(buf[20]),
+                })
+            }
+            _ => None,
+        }
+    }
+    pub fn pack_into(&self, buf: &mut [u8]) {
+        assert!(
+            buf.len() >= self.byte_len(),
+            "not enough room for publication"
+        );
+        let address = u16::from(&self.address);
+        let pos = match &self.address {
+            Address::Virtual(va) => {
+                buf[..16].copy_from_slice(va.uuid().as_ref());
+                16
+            }
+            _ => {
+                buf[..2].copy_from_slice(&address.to_le_bytes());
+                2
+            }
+        };
+        unimplemented!()
+    }
 }

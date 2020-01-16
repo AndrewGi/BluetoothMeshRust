@@ -1,5 +1,6 @@
 //! Common Bluetooth Mesh Objects/Structures.
 use crate::serializable::bytes::ToFromBytesEndian;
+use core::convert::TryFrom;
 use core::fmt::{Display, Error, Formatter};
 use core::time;
 
@@ -98,6 +99,24 @@ impl TTL {
         }
     }
 }
+#[derive(Copy, Clone, PartialOrd, PartialEq, Ord, Eq, Hash, Debug)]
+pub struct TTLConversationError(());
+impl TryFrom<u8> for TTL {
+    type Error = TTLConversationError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        if value > TTL_MAX {
+            Err(TTLConversationError(()))
+        } else {
+            Ok(TTL(value))
+        }
+    }
+}
+impl From<TTL> for u8 {
+    fn from(ttl: TTL) -> Self {
+        ttl.0
+    }
+}
 impl Display for TTL {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         write!(f, "TTL({})", self.0)
@@ -167,6 +186,10 @@ impl U24 {
     #[must_use]
     pub const fn value(self) -> u32 {
         self.0
+    }
+    #[must_use]
+    pub const fn max_value() -> U24 {
+        U24(U24_MAX)
     }
 }
 impl ToFromBytesEndian for U24 {
@@ -366,9 +389,47 @@ impl ToFromBytesEndian for ModelID {
     }
 }
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
-pub struct NetworkKeyIndex(u16);
+pub struct KeyIndexConversationError(());
+const KEY_INDEX_MAX: u16 = (1 << 12) - 1;
+/// 12-bit KeyIndex
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
-pub struct AppKeyIndex(u16);
+pub struct KeyIndex(u16);
+impl KeyIndex {
+    /// # Panics
+    /// Panics if `key > KEY_INDEX_MAX`.
+    pub fn new(key_index: u16) -> Self {
+        match Self::try_from(key_index) {
+            Ok(i) => i,
+            Err(_) => panic!("key index too high"),
+        }
+    }
+    pub fn new_masked(key_index: u16) -> Self {
+        KeyIndex(key_index & KEY_INDEX_MAX)
+    }
+}
+impl TryFrom<u16> for KeyIndex {
+    type Error = KeyIndexConversationError;
+
+    fn try_from(value: u16) -> Result<Self, Self::Error> {
+        if value > KEY_INDEX_MAX {
+            Err(KeyIndexConversationError(()))
+        } else {
+            Ok(KeyIndex(value))
+        }
+    }
+}
+impl From<KeyIndex> for u16 {
+    fn from(i: KeyIndex) -> Self {
+        i.0
+    }
+}
+/// 12-bit NetKeyIndex
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
+pub struct NetKeyIndex(pub KeyIndex);
+/// 12-bit AppKeyIndex
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
+pub struct AppKeyIndex(pub KeyIndex);
+
 const COUNT_MAX: u8 = 0b111;
 /// 3-bit Transit Count,
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]

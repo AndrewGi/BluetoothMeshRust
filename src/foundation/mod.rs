@@ -1,11 +1,12 @@
 //! Foundation Layer. Handles Publication, Config, etc.
 use crate::access::{SigModelID, VendorModelID};
-use crate::foundation::element::Elements;
+use crate::foundation::element::ElementsComposition;
 use crate::mesh::{CompanyID, ModelID};
 use crate::serializable::bytes::ToFromBytesEndian;
 use crate::upper::AppPayload;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::convert::TryFrom;
 
 pub mod element;
 pub mod health;
@@ -15,8 +16,29 @@ pub mod state;
 // LITTLE ENDIAN
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
-pub enum StatusCode {}
+pub struct StatusCodeConversationError(());
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
+#[repr(u8)]
+pub enum StatusCode {
+    Ok = 0x00,
+}
+impl StatusCode {
+    pub const fn byte_len() -> usize {
+        1
+    }
+}
+impl From<StatusCode> for u8 {
+    fn from(code: StatusCode) -> Self {
+        code as u8
+    }
+}
+impl TryFrom<u8> for StatusCode {
+    type Error = StatusCodeConversationError;
 
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        unimplemented!()
+    }
+}
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
 pub struct FoundationStateError(());
 
@@ -178,7 +200,7 @@ pub struct CompositionDataPage0 {
     vid: VersionID,
     crpl: CRPL,
     features: Features,
-    elements: Elements,
+    elements: ElementsComposition,
 }
 impl CompositionDataPage0 {
     pub fn byte_len(&self) -> usize {

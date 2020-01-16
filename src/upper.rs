@@ -11,9 +11,9 @@ use core::mem;
 
 /// Application Security Materials used to encrypt and decrypt at the application layer.
 pub enum SecurityMaterials<'a> {
-    VirtualAddress(&'a AppNonce, &'a AppKey, AID, &'a VirtualAddress),
-    App(&'a AppNonce, &'a AppKey, AID),
-    Device(&'a DeviceNonce, &'a DevKey),
+    VirtualAddress(AppNonce, &'a AppKey, AID, &'a VirtualAddress),
+    App(AppNonce, &'a AppKey, AID),
+    Device(DeviceNonce, &'a DevKey),
 }
 impl SecurityMaterials<'_> {
     /// Unpacks the Security Materials into a `Nonce`, `Key` and associated data.1
@@ -51,9 +51,7 @@ impl SecurityMaterials<'_> {
     }
 }
 /// Unencrypted Application payload.
-pub struct AppPayload<Storage: AsRef<[u8]> + AsMut<[u8]>> {
-    data: Storage,
-}
+pub struct AppPayload<Storage: AsRef<[u8]> + AsMut<[u8]>>(pub Storage);
 impl<'a, Storage: AsRef<[u8]> + AsMut<[u8]>> AppPayload<Storage> {
     /// Encrypts the Access Payload in-place. It reuses the data `Box` containing the plaintext
     /// data to hold the encrypted data.
@@ -63,13 +61,13 @@ impl<'a, Storage: AsRef<[u8]> + AsMut<[u8]>> AppPayload<Storage> {
         sm: &SecurityMaterials,
         mic_size: MicSize,
     ) -> EncryptedAppPayload<Storage> {
-        let mut data = self.data;
+        let mut data = self.0;
         let mic = sm.encrypt(data.as_mut(), mic_size);
         EncryptedAppPayload::new(data, mic, sm.aid())
     }
     #[must_use]
     pub fn payload(&self) -> &[u8] {
-        self.data.as_ref()
+        self.0.as_ref()
     }
     #[must_use]
     pub fn len(&self) -> usize {
@@ -77,7 +75,7 @@ impl<'a, Storage: AsRef<[u8]> + AsMut<[u8]>> AppPayload<Storage> {
     }
     #[must_use]
     pub fn new(payload: Storage) -> Self {
-        Self { data: payload }
+        Self(payload)
     }
 }
 pub struct EncryptedAppPayload<Storage: AsRef<[u8]> + AsMut<[u8]>> {

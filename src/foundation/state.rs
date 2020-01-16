@@ -26,8 +26,13 @@ impl TryFrom<u8> for RelayState {
         }
     }
 }
+impl Default for RelayState {
+    fn default() -> Self {
+        RelayState::Disabled
+    }
+}
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
-pub struct RelayRetransmit(TransmitInterval);
+pub struct RelayRetransmit(pub TransmitInterval);
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
 #[repr(u8)]
 pub enum SecureNetworkBeaconState {
@@ -182,3 +187,19 @@ impl DefaultTTLState {
         }
     }
 }
+impl From<DefaultTTLState> for u8 {
+    fn from(ttl: DefaultTTLState) -> Self {
+        ttl.0
+    }
+}
+
+#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
+pub struct DefaultTTLStateError(());
+impl TryFrom<u8> for DefaultTTLState {
+    type Error = DefaultTTLStateError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        Self::try_new(value).ok_or(DefaultTTLStateError(()))
+    }
+}
+pub struct NetworkTransmit(pub TransmitInterval);
