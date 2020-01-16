@@ -1,4 +1,11 @@
 # Bluetooth Mesh Rust
+
+[Docs](https://docs.rs/bluetooth_mesh/)
+
+[Crates.io](https://crates.io/crates/bluetooth_mesh)
+
+!! Very WIP and not finished !!
+
 Bluetooth Mesh stack implemented in Rust. In progress port/rewrite of Ero Bluetooth Mesh. Following the Bluetooth Mesh Spec Core v1.0. Designed to work with any BLE radio but currently targeting linux for testing. The complete stack still needs more glue between the layers but all the parts should be fully functional. If any mistake are found, please contact me!
 
 `#![no_std]` excepts for dependence on `std::Instant` for time but a different source can be provided. While not provided, on ARM; a crystal oscilator can be the time source. 
