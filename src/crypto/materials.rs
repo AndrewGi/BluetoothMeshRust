@@ -2,8 +2,8 @@
 use crate::crypto::key::{
     AppKey, BeaconKey, DevKey, EncryptionKey, IdentityKey, NetKey, PrivacyKey,
 };
-use crate::crypto::{k2, KeyRefreshPhases, NetKeyIndex, NetworkID, AID};
-use crate::mesh::{AppKeyIndex, NID};
+use crate::crypto::{k2, KeyRefreshPhases, NetworkID, AID};
+use crate::mesh::{AppKeyIndex, NetKeyIndex, NID};
 use alloc::collections::btree_map;
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
 pub struct NetworkKeys {
@@ -162,9 +162,9 @@ impl NetKeyMap {
     }
 }
 pub struct ApplicationSecurityMaterials {
-    app_key: AppKey,
-    aid: AID,
-    net_key_index: NetKeyIndex,
+    pub app_key: AppKey,
+    pub aid: AID,
+    pub net_key_index: NetKeyIndex,
 }
 impl ApplicationSecurityMaterials {
     pub fn new(app_key: AppKey, net_key_index: NetKeyIndex) -> Self {

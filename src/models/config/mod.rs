@@ -1,6 +1,7 @@
 use crate::access::SigOpcode::{DoubleOctet, SingleOctet};
 use crate::access::{Opcode, OpcodeConversationError, SigOpcode};
 use crate::control::ControlOpcode;
+use crate::foundation::health::FaultID::ConfigurationError;
 use core::convert::TryFrom;
 
 pub mod messages;
@@ -92,6 +93,10 @@ pub enum ConfigOpcode {
     VendorModelAppList,
     VendorModelSubscriptionGet,
     VendorModelSubscriptionList,
+
+    NodeIdentityGet,
+    NodeIdentitySet,
+    NodeIdentityStatus,
 }
 
 impl ControlOpcode {}
@@ -105,6 +110,7 @@ impl TryFrom<Opcode> for ConfigOpcode {
                     0x01 => Ok(ConfigOpcode::AppKeyUpdate),
                     0x02 => Ok(ConfigOpcode::CompositionDataStatus),
                     0x03 => Ok(ConfigOpcode::ModelPublicationSet),
+
                     _ => Err(OpcodeConversationError(())),
                 },
                 DoubleOctet(d) => {
@@ -116,6 +122,68 @@ impl TryFrom<Opcode> for ConfigOpcode {
                             0x01 => Ok(ConfigOpcode::AppKeyGet),
                             0x02 => Ok(ConfigOpcode::AppKeyList),
                             0x03 => Ok(ConfigOpcode::AppKeyStatus),
+                            0x08 => Ok(ConfigOpcode::CompositionDataGet),
+                            0x09 => Ok(ConfigOpcode::BeaconGet),
+                            0x0A => Ok(ConfigOpcode::BeaconSet),
+                            0x0B => Ok(ConfigOpcode::BeaconStatus),
+                            0x0C => Ok(ConfigOpcode::DefaultTTLGet),
+                            0x0D => Ok(ConfigOpcode::DefaultTTLSet),
+                            0x0E => Ok(ConfigOpcode::DefaultTTLStatus),
+                            0x0F => Ok(ConfigOpcode::FriendGet),
+                            0x10 => Ok(ConfigOpcode::FriendSet),
+                            0x11 => Ok(ConfigOpcode::FriendStatus),
+                            0x12 => Ok(ConfigOpcode::GATTProxyGet),
+                            0x13 => Ok(ConfigOpcode::GATTProxySet),
+                            0x14 => Ok(ConfigOpcode::GATTProxyStatus),
+                            0x15 => Ok(ConfigOpcode::KeyRefreshPhaseGet),
+                            0x16 => Ok(ConfigOpcode::KeyRefreshPhaseSet),
+                            0x17 => Ok(ConfigOpcode::KeyRefreshPhaseStatus),
+                            0x18 => Ok(ConfigOpcode::ModelPublicationGet),
+                            0x19 => Ok(ConfigOpcode::ModelPublicationStatus),
+                            0x1A => Ok(ConfigOpcode::ModelPublicationVirtualAddressSet),
+                            0x1B => Ok(ConfigOpcode::ModelSubscriptionAdd),
+                            0x1C => Ok(ConfigOpcode::ModelSubscriptionDelete),
+                            0x1D => Ok(ConfigOpcode::ModelSubscriptionDeleteAll),
+                            0x1E => Ok(ConfigOpcode::ModelSubscriptionOverwrite),
+                            0x1F => Ok(ConfigOpcode::ModelSubscriptionStatus),
+                            0x20 => Ok(ConfigOpcode::ModelSubscriptionVirtualAddressAdd),
+                            0x21 => Ok(ConfigOpcode::ModelSubscriptionVirtualAddressDelete),
+                            0x22 => Ok(ConfigOpcode::ModelSubscriptionVirtualAddressOverwrite),
+                            0x23 => Ok(ConfigOpcode::NetworkTransmitGet),
+                            0x24 => Ok(ConfigOpcode::NetworkTransmitSet),
+                            0x25 => Ok(ConfigOpcode::NetworkTransmitStatus),
+                            0x26 => Ok(ConfigOpcode::RelayGet),
+                            0x27 => Ok(ConfigOpcode::RelaySet),
+                            0x28 => Ok(ConfigOpcode::RelayStatus),
+                            0x29 => Ok(ConfigOpcode::SIGModelSubscriptionGet),
+                            0x2A => Ok(ConfigOpcode::SIGModelSubscriptionGet),
+                            0x2B => Ok(ConfigOpcode::VendorModelSubscriptionGet),
+                            0x2C => Ok(ConfigOpcode::VendorModelSubscriptionList),
+                            0x2D => Ok(ConfigOpcode::LowPowerNodePollTimeoutGet),
+                            0x2E => Ok(ConfigOpcode::LowPowerNodePollTimeoutStatus),
+                            0x38 => Ok(ConfigOpcode::HeartbeatPublicationGet),
+                            0x39 => Ok(ConfigOpcode::HeartbeatPublicationSet),
+                            0x3A => Ok(ConfigOpcode::HeartbeatSubscriptionGet),
+                            0x3B => Ok(ConfigOpcode::HeartbeatSubscriptionSet),
+                            0x3C => Ok(ConfigOpcode::HeartbeatSubscriptionStatus),
+                            0x3D => Ok(ConfigOpcode::ModelAppBind),
+                            0x3E => Ok(ConfigOpcode::ModelAppStatus),
+                            0x3F => Ok(ConfigOpcode::ModelAppUnbind),
+                            0x40 => Ok(ConfigOpcode::NetKeyAdd),
+                            0x41 => Ok(ConfigOpcode::NetKeyDelete),
+                            0x42 => Ok(ConfigOpcode::NetKeyGet),
+                            0x43 => Ok(ConfigOpcode::NetKeyList),
+                            0x44 => Ok(ConfigOpcode::NetKeyStatus),
+                            0x45 => Ok(ConfigOpcode::NetKeyUpdate),
+                            0x46 => Ok(ConfigOpcode::NodeIdentityGet),
+                            0x47 => Ok(ConfigOpcode::NodeIdentitySet),
+                            0x48 => Ok(ConfigOpcode::NodeIdentityStatus),
+                            0x49 => Ok(ConfigOpcode::NodeReset),
+                            0x4A => Ok(ConfigOpcode::NodeResetStatus),
+                            0x4B => Ok(ConfigOpcode::SIGModelAppGet),
+                            0x4C => Ok(ConfigOpcode::SIGModelAppList),
+                            0x4D => Ok(ConfigOpcode::VendorModelAppGet),
+                            0x4E => Ok(ConfigOpcode::VendorModelAppList),
                             _ => Err(OpcodeConversationError(())),
                         }
                     }
@@ -197,6 +265,9 @@ impl From<ConfigOpcode> for Opcode {
             ConfigOpcode::VendorModelAppList => DoubleOctet(0x804E).into(),
             ConfigOpcode::VendorModelSubscriptionGet => DoubleOctet(0x802B).into(),
             ConfigOpcode::VendorModelSubscriptionList => DoubleOctet(0x802C).into(),
+            ConfigOpcode::NodeIdentityGet => DoubleOctet(0x8046).into(),
+            ConfigOpcode::NodeIdentitySet => DoubleOctet(0x8047).into(),
+            ConfigOpcode::NodeIdentityStatus => DoubleOctet(0x8048).into(),
         }
     }
 }

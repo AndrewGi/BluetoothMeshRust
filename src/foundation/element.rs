@@ -12,16 +12,14 @@ use core::convert::TryInto;
 //use alloc::collections::BTreeMap;
 const MAX_MODELS: usize = 255;
 #[derive(Clone, Ord, PartialOrd, PartialEq, Debug, Hash, Eq)]
-pub struct Element {
-    location: Location,
-    address: UnicastAddress,
-    sig_models: Vec<ModelComposition>,
-    vendor_models: Vec<ModelComposition>,
+pub struct ElementComposition {
+    pub location: Location,
+    pub sig_models: Vec<ModelIdentifier>,
+    pub vendor_models: Vec<ModelIdentifier>,
 }
-impl Element {
-    pub fn new_empty(location: Location, element_address: UnicastAddress) -> Self {
+impl ElementComposition {
+    pub fn new_empty(location: Location) -> Self {
         Self {
-            address: element_address,
             location,
             sig_models: Vec::new(),
             vendor_models: Vec::new(),
@@ -64,11 +62,26 @@ impl Element {
                 None
             } else {
                 let mut sig_models = Vec::new();
-                for i in 0..usize::from(num_s) {
-                    sig_models.push(ModelIdentifier::from)
+                let mut pos = 3;
+                for _ in 0..num_s {
+                    sig_models.push(ModelIdentifier::unpack_from(
+                        &buf[pos..pos + ModelIdentifier::sig_byte_len()],
+                    )?);
+                    pos += ModelIdentifier::sig_byte_len();
                 }
-                //let mut vendor_models = Vec::new();
-                unimplemented!()
+                let mut vendor_models = Vec::new();
+                for _ in 0..num_v {
+                    vendor_models.push(ModelIdentifier::unpack_from(
+                        &buf[pos..pos + ModelIdentifier::vendor_byte_len()],
+                    )?);
+                    pos += ModelIdentifier::vendor_byte_len();
+                }
+                debug_assert_eq!(pos, buf.len());
+                Some(Self {
+                    location: loc,
+                    sig_models,
+                    vendor_models,
+                })
             }
         }
     }
@@ -83,14 +96,12 @@ impl Element {
             // This could be change to a debug_assert.
             assert!(model.is_sig(), "non SIG model in sig_models");
             buf[position..position + ModelID::byte_size()]
-                .copy_from_slice(&model.model_identifier.model_id().to_bytes_le());
+                .copy_from_slice(&model.model_id().to_bytes_le());
             position += ModelID::byte_size();
         }
         for model in self.vendor_models.iter() {
             assert!(model.is_vendor(), "SIG model in vendor_models");
-            model
-                .model_identifier
-                .pack_into(&mut buf[position..position + ModelIdentifier::vendor_byte_len()]);
+            model.pack_into(&mut buf[position..position + ModelIdentifier::vendor_byte_len()]);
             position += ModelIdentifier::vendor_byte_len();
         }
         debug_assert!(position == buf.len());
@@ -98,13 +109,19 @@ impl Element {
     /// # Panics
     /// Panics if a model with the same `ModelIdentifier` exists.
     /// Or if there are already 255 vendor or sig models.
-    pub fn add_model(&mut self, model: ModelComposition) {
+    pub fn add_model(&mut self, model: ModelIdentifier) {
         if model.is_sig() {
             assert!(
                 self.sig_models.len() < MAX_MODELS,
                 "too many SIG models exist"
             );
             self.sig_models.push(model)
+        } else {
+            assert!(
+                self.vendor_models.len() < MAX_MODELS,
+                "too many vendor models exist"
+            );
+            self.vendor_models.push(model)
         }
     }
 }
@@ -220,11 +237,11 @@ impl ToFromBytesEndian for Location {
 }
 
 #[derive(Clone, Ord, PartialOrd, PartialEq, Debug, Hash, Eq)]
-pub struct Elements(Vec<Element>);
-impl Elements {
+pub struct ElementsComposition(Vec<ElementComposition>);
+impl ElementsComposition {
     #[must_use]
     pub fn byte_len(&self) -> usize {
-        self.0.iter().map(Element::byte_len).sum()
+        self.0.iter().map(ElementComposition::byte_len).sum()
     }
     /// # Panics
     /// Panics if `buf.len() < self.byte_len()`.
@@ -241,11 +258,11 @@ impl Elements {
     pub fn try_unpack_from(mut buf: &[u8]) -> Option<Self> {
         let mut out = Vec::new();
         while !buf.is_empty() {
-            let element = Element::try_unpack_from(buf)?;
+            let element = ElementComposition::try_unpack_from(buf)?;
             let (_, rest) = buf.split_at(element.byte_len());
             buf = rest;
             out.push(element);
         }
-        Some(Elements(out))
+        Some(ElementsComposition(out))
     }
 }

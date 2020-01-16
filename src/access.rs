@@ -46,7 +46,7 @@ impl VendorOpcode {
     }
 }
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
-pub struct OpcodeConversationError(());
+pub struct OpcodeConversationError(pub ());
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
 pub enum Opcode {
     SIG(SigOpcode),
@@ -112,12 +112,12 @@ impl ModelIdentifier {
     }
     /// Returns the byte length of a vendor `ModelIdentifier`.
     /// (`vendor_byte_len() == ModelID::byte_len() + CompanyID::byte_len()`)
-    pub fn vendor_byte_len() -> usize {
+    pub const fn vendor_byte_len() -> usize {
         ModelID::byte_len() + CompanyID::byte_len()
     }
     /// Returns the byte length of a SIG `ModelIdentifier`.
     /// (`sig_byte_len() == ModelID::byte_len()`)
-    pub fn sig_byte_len() -> usize {
+    pub const fn sig_byte_len() -> usize {
         ModelID::byte_len()
     }
     pub fn byte_len(&self) -> usize {

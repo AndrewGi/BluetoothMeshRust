@@ -19,7 +19,7 @@ pub enum MessagePackError {
     BadState,
 }
 
-pub trait PackableMessage {
+pub trait PackableMessage: Sized {
     fn opcode() -> Opcode;
     /// Bytes need to fit the entire message in bytes (excluding opcode).
     fn message_size(&self) -> usize;
