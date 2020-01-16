@@ -386,7 +386,7 @@ impl<'a> EncryptedPDU<'a> {
         if iv_index.ivi() != self.ivi() {
             return Err(NetworkDataError::BadIVI);
         }
-        let pecb = PrivacyRandom::from(self)
+        let pecb = PrivacyRandom::from(*self)
             .pack_with_iv(iv_index)
             .encrypt_with(keys.privacy_key());
         let deobfuscated = self

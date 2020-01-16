@@ -1,7 +1,9 @@
 //! Bluetooth Mesh Stack that connects all the layers together.
 
-pub mod application;
 pub mod element;
+#[cfg(std)]
+pub mod full;
+pub mod messages;
 pub mod model;
 
 use crate::address::{Address, UnicastAddress, VirtualAddress};
@@ -10,26 +12,15 @@ use crate::crypto::materials::{
     ApplicationSecurityMaterials, KeyPhase, NetKeyMap, NetworkSecurityMaterials,
 };
 use crate::crypto::nonce::{AppNonce, AppNonceParts, DeviceNonceParts};
+use crate::device_state::{DeviceState, SeqCounter};
+use crate::lower::SegO;
 use crate::mesh::{AppKeyIndex, IVIndex, NetKeyIndex, SequenceNumber, TTL};
-use crate::mesh_io::IOBearer;
-use crate::stack::application::{EncryptedOutgoingMessage, MessageKeys, OutgoingMessage};
+use crate::stack::messages::{EncryptedOutgoingMessage, MessageKeys, OutgoingMessage};
 use crate::upper;
 use crate::{device_state, lower, net, replay};
 use alloc::boxed::Box;
 
-pub enum IncomingPDU {
-    EncryptedNet {
-        pdu: net::EncryptedPDU,
-        rssi: Option<RSSI>,
-    },
-    DecryptedNet {
-        net_key_index: NetKeyIndex,
-        rssi: Option<RSSI>,
-        pdu: net::PDU,
-    },
-}
-
-/// Full Bluetooth Mesh Stack for
+/// Bluetooth Mesh Stack Internals for
 /// Layers:
 /// - Access
 /// - Control
@@ -38,10 +29,12 @@ pub enum IncomingPDU {
 /// - Network
 /// - Bearer/IO
 /// This stack acts as glue between the Mesh layers.
-pub struct Stack {
+/// This stack is inherently single threaded which Bluetooth Mesh requires some type of scheduling.
+/// The scheduling and input/output queues are handled by `FullStack`.
+pub struct StackInternals {
     device_state: device_state::DeviceState,
     replay_cache: replay::Cache,
-    io_bearer: Box<dyn IOBearer>,
+    seq_counter: SeqCounter,
 }
 pub enum SendError {
     InvalidAppKeyIndex,
@@ -50,16 +43,17 @@ pub enum SendError {
     InvalidSourceElement,
     OutOfSeq,
 }
-impl Stack {
-    pub fn new(io_bearer: Box<dyn IOBearer>, device_state: device_state::DeviceState) -> Self {
+impl StackInternals {
+    pub fn new(device_state: device_state::DeviceState) -> Self {
         Self {
-            io_bearer,
             replay_cache: replay::Cache::default(),
             device_state,
+            seq_counter: SeqCounter::default(),
         }
     }
+    /// Encrypts and Assigns a Sequence Numbe
     pub fn app_encrypt<Storage: AsRef<[u8]> + AsMut<[u8]>>(
-        &mut self,
+        &self,
         msg: OutgoingMessage<Storage>,
     ) -> Result<EncryptedOutgoingMessage<Storage>, (SendError, OutgoingMessage<Storage>)> {
         // If DST is a VirtualAddress, it must have the full Label UUID.
@@ -76,6 +70,7 @@ impl Stack {
             Some(address) => address,
         };
         let aszmic = msg.should_segment();
+        let seg_count = u8::from(msg.seg_o().unwrap_or(SegO::new(1)));
         let (sm, net_sm, seq) = match msg.encryption_key {
             MessageKeys::Device(net_key_index) => {
                 // Check for a valid net_key
@@ -88,7 +83,7 @@ impl Stack {
                     None => return Err((SendError::InvalidNetKeyIndex, msg)),
                     Some(phase) => phase.tx_key(),
                 };
-                let seq = match self.device_state.seq_counter.inc_seq() {
+                let seq = match self.seq_counter.inc_seq(seg_count.into()) {
                     None => return Err((SendError::OutOfSeq, msg)),
                     Some(seq) => seq,
                 };
@@ -129,7 +124,7 @@ impl Stack {
                     None => return Err((SendError::InvalidNetKeyIndex, msg)),
                     Some(phase) => phase.tx_key(),
                 };
-                let seq = match self.device_state.seq_counter.inc_seq() {
+                let seq = match self.seq_counter.inc_seq(seg_count.into()) {
                     None => return Err((SendError::OutOfSeq, msg)),
                     Some(seq) => seq,
                 };
@@ -163,6 +158,8 @@ impl Stack {
         let encrypted = msg.app_payload.encrypt(&sm, msg.mic_size);
         Ok(EncryptedOutgoingMessage {
             encrypted_app_payload: encrypted,
+            seq,
+            seg_count: SegO::new(seg_count),
             net_sm,
             dst,
             ttl,
@@ -183,21 +180,21 @@ impl Stack {
     pub fn replay_cache(&self) -> &replay::Cache {
         &self.replay_cache
     }
-    pub fn iv_index(&self) -> IVIndex {
-        self.device_state.iv_index()
+    pub fn replay_cache_mut(&mut self) -> &mut replay::Cache {
+        &mut self.replay_cache
     }
-    pub fn handle_lower_transport_pdu(&mut self, _pdu: &lower::PDU) {
-        unimplemented!()
+    pub fn device_state_mut(&mut self) -> &mut DeviceState {
+        &mut self.device_state
     }
-    pub fn handle_encrypted_network_pdu(&mut self, _pdu: &net::EncryptedPDU) {
-        unimplemented!()
+    pub fn device_state(&self) -> &DeviceState {
+        &self.device_state
     }
     /// Tries to find the matching `NetworkSecurityMaterials` from the device state manager. Once
     /// it finds a `NetworkSecurityMaterials` with a matching `NID`, it tries to decrypt the PDU.
     /// If the MIC is authenticated (the materials match), it'll return the decrypted PDU.
     /// If no security materials match, it'll return `None`
     pub fn decrypt_network_pdu(&self, pdu: &net::EncryptedPDU) -> Option<(NetKeyIndex, net::PDU)> {
-        let iv_index = self.iv_index();
+        let iv_index = self.device_state.rx_iv_index(pdu.ivi())?;
         for (index, sm) in self.net_keys().matching_nid(pdu.nid()) {
             if let Ok(decrypted_pdu) = pdu.try_decrypt(sm.network_keys(), iv_index) {
                 return Some((index, decrypted_pdu));
