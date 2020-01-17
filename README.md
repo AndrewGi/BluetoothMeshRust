@@ -32,12 +32,12 @@ TODO:
 - [ ] Model
   - [ ] Isolated SDK layer
 - [ ] Stack
-  - [ ] Access
+  - [x] Access
     - [x] Elements
     - [x] Models
-    - [ ] States
+    - [x] States
     - [x] Messages
-    - [ ] Acknowledgements
+    - [x] Acknowledgements
   - [ ] Transport
     - [ ] Upper
       - [x] Control
@@ -57,8 +57,8 @@ TODO:
       - [x] Segment
       - [x] Reassembly
       - [ ] Friend Queue
-  - [ ] Net
-    - [ ] Encrypting
+  - [x] Net
+    - [x] Encrypting
     - [x] Payload
     - [x] Header
   - [ ] Bearers
@@ -88,32 +88,32 @@ TODO:
     - [ ] Reassembly
     
 - [ ] Serialization
-  - [ ] Wire Serialization
+  - [x] Wire Serialization
     - [x] Tests written
   - [ ] Text Serialization
 
 - [ ] Models
   - [ ] Config
-    - [ ] Composition Data
-    - [ ] Model Publication
+    - [x] Composition Data
+    - [x] Model Publication
     - [ ] Subscription List
-    - [ ] NetKey List
-    - [ ] AppKey List
-    - [ ] Model to AppKey List
-    - [ ] Default TTL
-    - [ ] Relay
-    - [ ] Attention Timer
-    - [ ] Secure Network Beacon
-    - [ ] GATT Proxy
-    - [ ] Node Identity
-    - [ ] Friend
-    - [ ] Key Refresh Phase
+    - [x] NetKey List
+    - [x] AppKey List
+    - [x] Model to AppKey List
+    - [x] Default TTL
+    - [x] Relay
+    - [x] Attention Timer
+    - [x] Secure Network Beacon
+    - [x] GATT Proxy
+    - [x] Node Identity
+    - [x] Friend
+    - [x] Key Refresh Phase
     - [ ] Health Fault
     - [ ] Health Fast Period Divisor
     - [ ] Heartbeat Publication
     - [ ] Heartbeat Subscription
-    - [ ] Network Transmit
-    - [ ] Relay Retransmit
+    - [x] Network Transmit
+    - [x] Relay Retransmit
     - [ ] PollTimeout List
   - [ ] Health
   
