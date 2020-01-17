@@ -1,12 +1,14 @@
 //! Bluetooth Mesh Stack that connects all the layers together.
 
 pub mod element;
-#[cfg(std)]
+#[cfg(feature = "std")]
 pub mod full;
 pub mod messages;
 pub mod model;
+pub mod segments;
 
 use crate::address::{Address, UnicastAddress, VirtualAddress};
+use crate::bearer::BearerError;
 use crate::ble::RSSI;
 use crate::crypto::materials::{
     ApplicationSecurityMaterials, KeyPhase, NetKeyMap, NetworkSecurityMaterials,
@@ -18,7 +20,6 @@ use crate::mesh::{AppKeyIndex, IVIndex, NetKeyIndex, SequenceNumber, TTL};
 use crate::stack::messages::{EncryptedOutgoingMessage, MessageKeys, OutgoingMessage};
 use crate::upper;
 use crate::{device_state, lower, net, replay};
-use alloc::boxed::Box;
 
 /// Bluetooth Mesh Stack Internals for
 /// Layers:
@@ -33,7 +34,6 @@ use alloc::boxed::Box;
 /// The scheduling and input/output queues are handled by `FullStack`.
 pub struct StackInternals {
     device_state: device_state::DeviceState,
-    replay_cache: replay::Cache,
     seq_counter: SeqCounter,
 }
 pub enum SendError {
@@ -42,11 +42,11 @@ pub enum SendError {
     InvalidDestination,
     InvalidSourceElement,
     OutOfSeq,
+    BearerError(BearerError),
 }
 impl StackInternals {
     pub fn new(device_state: device_state::DeviceState) -> Self {
         Self {
-            replay_cache: replay::Cache::default(),
             device_state,
             seq_counter: SeqCounter::default(),
         }
@@ -71,22 +71,23 @@ impl StackInternals {
         };
         let aszmic = msg.should_segment();
         let seg_count = u8::from(msg.seg_o().unwrap_or(SegO::new(1)));
-        let (sm, net_sm, seq) = match msg.encryption_key {
+        let (sm, net_key_index, seq) = match msg.encryption_key {
             MessageKeys::Device(net_key_index) => {
                 // Check for a valid net_key
-                let net_sm = match self
+                match self
                     .device_state
-                    .security_materials
+                    .security_materials()
                     .net_key_map
                     .get_keys(net_key_index)
                 {
                     None => return Err((SendError::InvalidNetKeyIndex, msg)),
-                    Some(phase) => phase.tx_key(),
+                    Some(_) => (),
                 };
-                let seq = match self.seq_counter.inc_seq(seg_count.into()) {
+                let seq_range = match self.seq_counter.inc_seq(seg_count.into()) {
                     None => return Err((SendError::OutOfSeq, msg)),
                     Some(seq) => seq,
                 };
+                let seq = seq_range.start();
                 (
                     upper::SecurityMaterials::Device(
                         DeviceNonceParts {
@@ -99,14 +100,14 @@ impl StackInternals {
                         .to_nonce(),
                         self.device_state.device_key(),
                     ),
-                    net_sm,
-                    seq,
+                    net_key_index,
+                    seq_range,
                 )
             }
             MessageKeys::App(app_key_index) => {
                 let app_sm = match self
                     .device_state
-                    .security_materials
+                    .security_materials()
                     .app_key_map
                     .get_key(app_key_index)
                 {
@@ -115,19 +116,20 @@ impl StackInternals {
                 };
                 let net_key_index = app_sm.net_key_index;
                 // Check for a valid net_key
-                let net_sm = match self
+                match self
                     .device_state
-                    .security_materials
+                    .security_materials()
                     .net_key_map
                     .get_keys(net_key_index)
                 {
                     None => return Err((SendError::InvalidNetKeyIndex, msg)),
-                    Some(phase) => phase.tx_key(),
+                    Some(_) => (),
                 };
-                let seq = match self.seq_counter.inc_seq(seg_count.into()) {
+                let seq_range = match self.seq_counter.inc_seq(seg_count.into()) {
                     None => return Err((SendError::OutOfSeq, msg)),
                     Some(seq) => seq,
                 };
+                let seq = seq_range.start();
                 let nonce = AppNonceParts {
                     aszmic,
                     seq,
@@ -149,8 +151,8 @@ impl StackInternals {
                         ),
                         _ => upper::SecurityMaterials::App(nonce, &app_sm.app_key, app_sm.aid),
                     },
-                    net_sm,
-                    seq,
+                    net_key_index,
+                    seq_range,
                 )
             }
         };
@@ -160,13 +162,13 @@ impl StackInternals {
             encrypted_app_payload: encrypted,
             seq,
             seg_count: SegO::new(seg_count),
-            net_sm,
+            net_key_index,
             dst,
             ttl,
         })
     }
     pub fn default_ttl(&self) -> TTL {
-        unimplemented!()
+        self.device_state.default_ttl()
     }
     pub fn get_app_key(&self, app_key_index: AppKeyIndex) -> Option<&ApplicationSecurityMaterials> {
         self.device_state
@@ -176,12 +178,6 @@ impl StackInternals {
     }
     pub fn net_keys(&self) -> &NetKeyMap {
         &self.device_state.security_materials().net_key_map
-    }
-    pub fn replay_cache(&self) -> &replay::Cache {
-        &self.replay_cache
-    }
-    pub fn replay_cache_mut(&mut self) -> &mut replay::Cache {
-        &mut self.replay_cache
     }
     pub fn device_state_mut(&mut self) -> &mut DeviceState {
         &mut self.device_state
@@ -193,14 +189,25 @@ impl StackInternals {
     /// it finds a `NetworkSecurityMaterials` with a matching `NID`, it tries to decrypt the PDU.
     /// If the MIC is authenticated (the materials match), it'll return the decrypted PDU.
     /// If no security materials match, it'll return `None`
-    pub fn decrypt_network_pdu(&self, pdu: &net::EncryptedPDU) -> Option<(NetKeyIndex, net::PDU)> {
+    pub fn decrypt_network_pdu(
+        &self,
+        pdu: net::EncryptedPDU,
+    ) -> Option<(NetKeyIndex, IVIndex, net::PDU)> {
         let iv_index = self.device_state.rx_iv_index(pdu.ivi())?;
         for (index, sm) in self.net_keys().matching_nid(pdu.nid()) {
             if let Ok(decrypted_pdu) = pdu.try_decrypt(sm.network_keys(), iv_index) {
-                return Some((index, decrypted_pdu));
+                return Some((index, iv_index, decrypted_pdu));
             }
         }
 
         None
+    }
+    pub fn encrypted_network_pdu(
+        &self,
+        network_pdu: net::PDU,
+        net_key_index: NetKeyIndex,
+        iv_index: IVIndex,
+    ) -> Result<net::PDU, SendError> {
+        unimplemented!()
     }
 }

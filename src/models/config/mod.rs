@@ -1,7 +1,6 @@
 use crate::access::SigOpcode::{DoubleOctet, SingleOctet};
-use crate::access::{Opcode, OpcodeConversationError, SigOpcode};
+use crate::access::{Opcode, OpcodeConversationError};
 use crate::control::ControlOpcode;
-use crate::foundation::health::FaultID::ConfigurationError;
 use core::convert::TryFrom;
 
 pub mod messages;

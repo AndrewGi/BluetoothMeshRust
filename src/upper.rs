@@ -1,14 +1,87 @@
 //! Upper Transport Layer. Primarily focusing on segmentation and reassembly.
 use crate::address::VirtualAddress;
+use crate::control::ControlOpcode;
 use crate::crypto::aes::{AESCipher, Error, MicSize};
 use crate::crypto::key::{AppKey, DevKey, Key};
 use crate::crypto::nonce::{AppNonce, DeviceNonce, Nonce};
 use crate::crypto::{AID, AKF, MIC};
-use crate::lower::{SegN, SegO, SegmentedAccessPDU, SeqZero, UnsegmentedAccessPDU, SZMIC};
+use crate::lower::{
+    SegN, SegO, SegmentedAccessPDU, SegmentedControlPDU, SeqZero, UnsegmentedAccessPDU, SZMIC,
+};
 use alloc::boxed::Box;
 use core::convert::TryFrom;
 use core::mem;
 
+pub struct UpperPDU<Storage: AsRef<[u8]>> {
+    pub payload: Storage,
+    pub mic: Option<MIC>,
+    pub aid: Option<AID>,
+    pub opcode: Option<ControlOpcode>,
+}
+impl<Storage: AsRef<[u8]>> UpperPDU<Storage> {
+    pub fn new(
+        payload: Storage,
+        mic: Option<MIC>,
+        aid: Option<AID>,
+        opcode: Option<ControlOpcode>,
+    ) -> Self {
+        Self {
+            payload,
+            mic,
+            aid,
+            opcode,
+        }
+    }
+    pub fn max_seg_len(&self) -> usize {
+        if self.is_control() {
+            SegmentedControlPDU::max_seg_len()
+        } else {
+            SegmentedAccessPDU::max_seg_len()
+        }
+    }
+    pub fn szmic(&self) -> bool {
+        self.mic.map(|mic| mic.is_big()).unwrap_or(false)
+    }
+    pub fn seg_o(&self) -> SegO {
+        assert!(
+            self.total_len() < ENCRYPTED_APP_PAYLOAD_MAX_LEN,
+            "payload overflow"
+        );
+        let l = self.total_len();
+        let n = l / self.max_seg_len();
+        SegO::new(
+            u8::try_from(if n * self.max_seg_len() != l {
+                n + 1
+            } else {
+                n
+            })
+            .expect("can't send this much data"),
+        )
+    }
+    /// Gets Segment N's data to be sent. !! THE MIC WON'T BE INCLUDED !!. Access Messages
+    /// include a MIC and will have to be append to the end of the payload manually.
+    /// # Panics
+    /// Panics if seg_n > seg_o
+    pub fn seg_n_data(&self, seg_n: SegN) -> &[u8] {
+        let seg_i = u8::from(seg_n);
+        assert!(seg_i <= u8::from(self.seg_o()));
+        let seg_i = usize::from(seg_i);
+        let max_seg = self.max_seg_len();
+        &self.payload.as_ref()[seg_i * max_seg..(seg_i + 1) * max_seg]
+    }
+    pub fn is_control(&self) -> bool {
+        self.mic.is_none()
+    }
+    pub fn is_access(&self) -> bool {
+        self.mic.is_some()
+    }
+    pub fn payload_len(&self) -> usize {
+        self.payload.as_ref().len()
+    }
+    pub fn total_len(&self) -> usize {
+        self.payload_len() + self.mic.map(|mic| mic.byte_size()).unwrap_or(0)
+    }
+}
 /// Application Security Materials used to encrypt and decrypt at the application layer.
 pub enum SecurityMaterials<'a> {
     VirtualAddress(AppNonce, &'a AppKey, AID, &'a VirtualAddress),
@@ -16,7 +89,7 @@ pub enum SecurityMaterials<'a> {
     Device(DeviceNonce, &'a DevKey),
 }
 impl SecurityMaterials<'_> {
-    /// Unpacks the Security Materials into a `Nonce`, `Key` and associated data.1
+    /// Unpacks the Security Materials into a `Nonce`, `Key` and associated data.
     #[must_use]
     pub fn unpack(&self) -> (&'_ Nonce, &'_ Key, &'_ [u8]) {
         match &self {

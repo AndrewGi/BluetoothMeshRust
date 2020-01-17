@@ -9,12 +9,14 @@ use crate::foundation::state::{
 };
 use crate::mesh::{
     AppKeyIndex, IVIndex, IVUpdateFlag, SequenceNumber, TransmitCount, TransmitInterval,
-    TransmitSteps, IVI, U24,
+    TransmitSteps, IVI, TTL, U24,
 };
 use crate::random::Randomizable;
+use crate::relay::RelayPDU;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use core::cell::Cell;
+use core::convert::TryInto;
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct ModelInfo {
@@ -38,7 +40,32 @@ pub struct DeviceState {
 
     iv_update_flag: IVUpdateFlag,
     iv_index: IVIndex,
-    pub security_materials: SecurityMaterials,
+    security_materials: SecurityMaterials,
+}
+pub struct SeqRange(core::ops::Range<u32>);
+impl SeqRange {
+    pub fn start(&self) -> SequenceNumber {
+        SequenceNumber(U24::new(self.0.start))
+    }
+    pub fn seqs_lefts(&self) -> u32 {
+        (self.0.end - self.0.start)
+    }
+    pub fn is_empty(&self) -> bool {
+        self.0.start >= self.0.end
+    }
+}
+impl Iterator for SeqRange {
+    type Item = SequenceNumber;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.is_empty() {
+            None
+        } else {
+            let out = self.0.start;
+            self.0.start = out + 1;
+            Some(SequenceNumber(U24::new(out)))
+        }
+    }
 }
 /// Atomic SeqCounter so no PDUs get the same SeqNumber. Sequence Numbers are a finite resource
 /// (only 24-bits) that only get reset every IVIndex update. Also segmented PDUs require sequential
@@ -48,7 +75,7 @@ impl SeqCounter {
     /// Allocates a or some SequenceNumbers and increments the internal counter by amount. Allocating
     /// `amount` Sequence Numbers is useful for Segmented Transport PDUs.
     /// Returns `None` if `SequenceNumber` is at its max.
-    pub fn inc_seq(&self, amount: u32) -> Option<SequenceNumber> {
+    pub fn inc_seq(&self, amount: u32) -> Option<SeqRange> {
         let next = self
             .0
             .fetch_add(amount, core::sync::atomic::Ordering::SeqCst);
@@ -60,7 +87,7 @@ impl SeqCounter {
             );
             None
         } else {
-            Some(SequenceNumber(U24::new(next)))
+            Some(SeqRange(next..next + amount))
         }
     }
 }
@@ -114,5 +141,11 @@ impl DeviceState {
     }
     pub fn device_key(&self) -> &DevKey {
         &self.security_materials.dev_key
+    }
+    pub fn default_ttl(&self) -> TTL {
+        TTL::new(self.default_ttl.into())
+    }
+    pub fn relay_state(&self) -> RelayState {
+        self.relay_state
     }
 }
