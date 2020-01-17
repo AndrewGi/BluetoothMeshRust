@@ -14,9 +14,9 @@ pub struct CacheEntry {
     ivi: IVI,
 }
 impl CacheEntry {
-    pub fn is_old_header(&self, header: PrivateHeader) -> Option<bool> {
-        if self.ivi == header.ivi() {
-            Some(self.seq < header.seq())
+    pub fn is_old_header(&self, ivi: IVI, seq: SequenceNumber) -> Option<bool> {
+        if self.ivi == ivi {
+            Some(self.seq < seq)
         } else {
             None
         }
@@ -41,26 +41,28 @@ impl Cache {
     pub fn get_entry(&self, address: UnicastAddress) -> Option<&CacheEntry> {
         self.map.get(&address)
     }
-    pub fn is_old_header(&self, header: PrivateHeader) -> Option<bool> {
-        self.get_entry(header.src())?.is_old_header(header)
-    }
-    pub fn remember_new_header(&mut self, header: PrivateHeader) {
-        self.map.insert(header.src(), header.into());
+    pub fn is_old_header(
+        &self,
+        src: UnicastAddress,
+        ivi: IVI,
+        seq: SequenceNumber,
+    ) -> Option<bool> {
+        self.get_entry(src)?.is_old_header(ivi, seq)
     }
     /// Returns `true` if the `header` is old or `false` if the `header` is new and valid.
     /// If no information about the source of the PDU (Src and Seq), it records the header
     /// and returns `false`
-    pub fn replay_check(&mut self, header: net::PrivateHeader<'_>) -> bool {
-        match self.map.entry(header.src()) {
+    pub fn replay_check(&mut self, src: UnicastAddress, seq: SequenceNumber, ivi: IVI) -> bool {
+        match self.map.entry(src) {
             Entry::Vacant(v) => {
-                v.insert(header.into());
+                v.insert(CacheEntry { seq, ivi });
                 false
             }
             Entry::Occupied(mut o) => {
-                if o.get().is_old_header(header).unwrap_or(false) {
+                if o.get().is_old_header(ivi, seq).unwrap_or(false) {
                     true
                 } else {
-                    o.insert(header.into());
+                    o.insert(CacheEntry { seq, ivi });
                     false
                 }
             }

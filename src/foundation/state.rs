@@ -31,6 +31,11 @@ impl Default for RelayState {
         RelayState::Disabled
     }
 }
+impl RelayState {
+    pub fn is_enabled(self) -> bool {
+        self == RelayState::Enabled
+    }
+}
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
 pub struct RelayRetransmit(pub TransmitInterval);
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]

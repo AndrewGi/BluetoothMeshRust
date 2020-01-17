@@ -211,7 +211,6 @@ pub mod relay {
     use crate::access::Opcode;
     use crate::foundation::state::{RelayRetransmit, RelayState};
     use crate::models::config::ConfigOpcode;
-    use crate::models::config::ConfigOpcode::RelaySet;
     use crate::models::{MessagePackError, PackableMessage};
     use core::convert::TryInto;
 
@@ -318,11 +317,9 @@ pub mod relay {
 pub mod model_publication {
     use crate::access::{ModelIdentifier, Opcode};
     use crate::address::{Address, UnicastAddress, ADDRESS_LEN};
-    use crate::ble::advertisement::AdType::MeshBeacon;
     use crate::foundation::publication::ModelPublishInfo;
     use crate::foundation::StatusCode;
     use crate::models::config::ConfigOpcode;
-    use crate::models::config::ConfigOpcode::ModelPublicationGet;
     use crate::models::{MessagePackError, PackableMessage};
     use crate::serializable::bytes::ToFromBytesEndian;
     use core::convert::TryInto;
@@ -553,7 +550,6 @@ pub mod model_subscription {
     use crate::access::ModelIdentifier;
     use crate::address::{Address, UnicastAddress, VirtualAddress};
     use crate::foundation::StatusCode;
-    use crate::mesh::ModelID;
     use alloc::vec::Vec;
 
     #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
@@ -653,7 +649,7 @@ pub mod net_key_list {
     }
 }
 pub mod app_key_list {
-    use crate::crypto::key::{AppKey, NetKey};
+    use crate::crypto::key::AppKey;
     use crate::foundation::StatusCode;
     use crate::mesh::{AppKeyIndex, NetKeyIndex};
     use alloc::vec::Vec;

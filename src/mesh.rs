@@ -295,7 +295,12 @@ impl ToFromBytesEndian for IVIndex {
 /// 24-bit Sequence number. Sent with each Network PDU. Each element has their own Sequence Number.
 #[derive(Copy, Clone, Eq, Ord, PartialOrd, PartialEq, Debug, Default, Hash)]
 pub struct SequenceNumber(pub U24);
-
+impl SequenceNumber {
+    pub fn next(&self) -> SequenceNumber {
+        assert!(self.0.value() <= U24_MAX);
+        SequenceNumber(U24((self.0).0 + 1))
+    }
+}
 impl Display for SequenceNumber {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         write!(f, "SequenceNumber({})", (self.0).value())
@@ -429,6 +434,9 @@ pub struct NetKeyIndex(pub KeyIndex);
 /// 12-bit AppKeyIndex
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub struct AppKeyIndex(pub KeyIndex);
+
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
+pub struct ElementIndex(pub u8);
 
 const COUNT_MAX: u8 = 0b111;
 /// 3-bit Transit Count,

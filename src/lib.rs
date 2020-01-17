@@ -14,6 +14,10 @@
     clippy::module_name_repetitions
 )]
 
+#[cfg(feature = "std")]
+#[macro_use]
+extern crate std;
+
 extern crate alloc;
 
 pub mod ble;
@@ -36,10 +40,13 @@ pub mod mesh;
 pub mod net;
 pub mod reassembler;
 pub mod replay;
+pub mod segmenter;
 pub mod upper;
 
 pub mod device_state;
 pub mod friend;
+pub mod interface;
+pub mod relay;
 //pub mod mesh_io;
 pub mod stack;
 

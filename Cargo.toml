@@ -1,6 +1,7 @@
 [package]
 name = "bluetooth_mesh"
 description = """
+!! VERY WIP AND NOT STABLE !!
 Bluetooth Mesh stack implemented in Rust. In progress port/rewrite of Ero Bluetooth Mesh. Following the Bluetooth Mesh Spec Core v1.0. Designed to work with any BLE radio but currently targeting linux for testing. The complete stack still needs more glue between the layers but all the parts should be fully functional. If any mistake are found, please contact me!
 
 #![no_std] excepts for dependence on std::Instant for time but a different source can be provided. While not provided, on ARM; a crystal oscilator can be the time source.
@@ -16,7 +17,9 @@ authors = ["Andrew Gilbrough <andrew@gilbrough.com>"]
 edition = "2018"
 
 [features]
-default = ["serde"]
+default = ["full_stack"]
+full_stack = ["parking_lot", "std"]
+std = []
 
 [dependencies]
 rand = "0.7"
@@ -28,3 +31,4 @@ dbl = "0.2.1"
 block-modes = "0.3.3"
 subtle = "2.2.2"
 serde = {version = "1.0.104", default-features = false, features = ["derive"], optional = true }
+parking_lot = {version = "0.10.0", optional = true}

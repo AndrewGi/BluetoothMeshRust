@@ -5,10 +5,11 @@ use crate::ble::RSSI;
 use crate::crypto::aes::MicSize;
 use crate::crypto::materials::NetworkSecurityMaterials;
 use crate::crypto::AID;
+use crate::device_state::SeqRange;
 use crate::lower::SegO;
-use crate::mesh::{AppKeyIndex, IVIndex, NetKeyIndex, SequenceNumber, TTL};
+use crate::mesh::{AppKeyIndex, IVIndex, NetKeyIndex, SequenceNumber, TransmitInterval, TTL};
 use crate::upper::{AppPayload, EncryptedAppPayload};
-use crate::{lower, upper};
+use crate::{lower, net, upper};
 
 pub enum MessageKeys {
     Device(NetKeyIndex),
@@ -43,11 +44,11 @@ impl<Storage: AsRef<[u8]> + AsMut<[u8]>> OutgoingMessage<Storage> {
         }
     }
 }
-pub struct EncryptedOutgoingMessage<'a, Storage: AsRef<[u8]> + AsMut<[u8]>> {
+pub struct EncryptedOutgoingMessage<Storage: AsRef<[u8]> + AsMut<[u8]>> {
     pub(crate) encrypted_app_payload: EncryptedAppPayload<Storage>,
-    pub(crate) seq: SequenceNumber,
+    pub(crate) seq: SeqRange,
     pub(crate) seg_count: SegO,
-    pub(crate) net_sm: &'a NetworkSecurityMaterials,
+    pub(crate) net_key_index: NetKeyIndex,
     pub(crate) dst: Address,
     pub(crate) ttl: TTL,
 }
@@ -59,4 +60,15 @@ pub struct IncomingMessage<Storage: AsRef<[u8]> + AsMut<[u8]>> {
     pub app_key_index: Option<AppKeyIndex>,
     pub ttl: TTL,
     pub rssi: Option<RSSI>,
+}
+pub struct IncomingNetworkPDU {
+    pub pdu: net::PDU,
+    pub net_key_index: NetKeyIndex,
+    pub iv_index: IVIndex,
+    pub rssi: Option<RSSI>,
+}
+pub struct IncomingTransportPDU {
+    pub lower_pdu: lower::PDU,
+    pub seq: SequenceNumber,
+    pub ttl: TTL,
 }

@@ -1,5 +1,8 @@
 //! Bluetooth Mesh Control Layer.
 
+use crate::lower::{BlockAck, SeqZero, SEQ_ZERO_MAX};
+use crate::serializable::bytes::ToFromBytesEndian;
+
 /// 7 Bit Control Opcode
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 #[repr(u8)]
@@ -39,5 +42,96 @@ impl From<ControlOpcode> for u8 {
         opcode as u8
     }
 }
+pub struct ControlPayload<Storage: AsRef<[u8]> + AsMut<[u8]>> {
+    opcode: ControlOpcode,
+    payload: Storage,
+}
+pub enum ControlPDU {
+    Ack(Ack),
+    FriendPoll(FriendPoll),
+    FriendUpdate(FriendUpdate),
+    FriendRequest(FriendRequest),
+    FriendOffer(FriendOffer),
+    FriendClear(FriendClear),
+    FriendClearConfirm(FriendClearConfirm),
+    FriendSubscriptionListAdd(FriendSubscriptionListAdd),
+    FriendSubscriptionListRemove(FriendSubscriptionListRemove),
+    FriendSubscriptionListConfirm(FriendSubscriptionListConfirm),
+    Heartbeat(Heartbeat),
+}
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+pub struct ControlPDUError(());
+impl ControlPDU {
+    pub fn try_unpack(opcode: ControlOpcode, buf: &[u8]) -> Result<Self, ControlPDUError> {
+        unimplemented!()
+    }
+    pub fn try_pack(buf: &mut [u8]) -> Result<(), ControlPDUError> {
+        unimplemented!()
+    }
+}
+pub enum ControlMessageError {
+    BufferTooSmall,
+    BadBytes,
+    BadState,
+    BadLength,
+}
+trait ControlMessage: Sized {
+    const OPCODE: ControlOpcode;
+    fn byte_len(&self) -> usize;
+    fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError>;
+    fn pack(buf: &mut [u8]) -> Result<(), ControlMessageError>;
+}
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+pub struct Ack {
+    pub obo: bool,
+    pub seq_zero: SeqZero,
+    pub block_ack: BlockAck,
+}
+impl ControlMessage for Ack {
+    const OPCODE: ControlOpcode = ControlOpcode::Ack;
 
-pub struct PDU {}
+    fn byte_len(&self) -> usize {
+        6
+    }
+
+    fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError> {
+        if buf.len() != 6 {
+            Err(ControlMessageError::BadLength)
+        } else {
+            let seq = u16::from_bytes_le(&buf[..2]).expect("seq_zero is always here");
+            let seq_zero = SeqZero::new((seq >> 2) & SEQ_ZERO_MAX);
+            let obo = seq & 0x8000 != 0;
+            let block_ack =
+                BlockAck(u32::from_bytes_le(&buf[2..6]).expect("block_ack is always here"));
+            Ok(Self {
+                obo,
+                seq_zero,
+                block_ack,
+            })
+        }
+    }
+
+    fn pack(buf: &mut [u8]) -> Result<(), ControlMessageError> {
+        unimplemented!()
+    }
+}
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+pub struct FriendPoll {}
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+pub struct FriendUpdate {}
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+pub struct FriendRequest {}
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+pub struct FriendOffer {}
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+pub struct FriendClear {}
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+pub struct FriendClearConfirm {}
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+pub struct FriendSubscriptionListAdd {}
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+pub struct FriendSubscriptionListRemove {}
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+pub struct FriendSubscriptionListConfirm {}
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+pub struct Heartbeat {}

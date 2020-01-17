@@ -7,7 +7,7 @@
 //! | Control   | [SegmentedControlPDU]     | [UnsegmentedControlPDU]   |
 use crate::control::ControlOpcode;
 use crate::crypto::{AID, AKF, MIC};
-use crate::mesh::{CTL, U24};
+use crate::mesh::{SequenceNumber, CTL, U24};
 use crate::serializable::bytes::ToFromBytesEndian;
 use core::convert::{TryFrom, TryInto};
 
@@ -23,7 +23,7 @@ impl From<bool> for SZMIC {
         SZMIC(b)
     }
 }
-const SEQ_ZERO_MAX: u16 = (1u16 << 13) - 1;
+pub const SEQ_ZERO_MAX: u16 = (1u16 << 13) - 1;
 ///13 Bits SeqZero. Derived from `SeqAuth`
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct SeqZero(u16);
@@ -34,6 +34,15 @@ impl SeqZero {
     pub fn new(seq_zero: u16) -> Self {
         assert!(seq_zero <= SEQ_ZERO_MAX);
         SeqZero(seq_zero)
+    }
+}
+impl From<SequenceNumber> for SeqZero {
+    fn from(n: SequenceNumber) -> Self {
+        SeqZero(
+            (n.0.value() & u32::from(SEQ_ZERO_MAX))
+                .try_into()
+                .expect("masking upper bits"),
+        )
     }
 }
 impl From<SeqZero> for u16 {
@@ -86,7 +95,7 @@ impl From<SegN> for u8 {
 }
 /// 32-bit BlockAck used for Lower Transport ACKs.
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq, Default)]
-pub struct BlockAck(u32);
+pub struct BlockAck(pub u32);
 impl BlockAck {
     /// Sets the `bit` bit to 1. Does nothing if bit > 32
     pub fn set(&mut self, bit: u8) {
@@ -106,14 +115,25 @@ impl BlockAck {
             (self.0 & (1_u32 << u32::from(bit))) != 0
         }
     }
-    /// Returns if the block ack (up to `seg_n` bits) is all 1s. False if otherwise
+    /// Returns if the block ack (up to `seg_o` bits) is all 1s. False if otherwise
     #[must_use]
-    pub fn all_acked(self, seg_n: SegO) -> bool {
-        self.0 == (1_u32 << u32::from(seg_n.0)).wrapping_sub(1)
+    pub fn all_acked(self, seg_o: SegO) -> bool {
+        self.0 == (1_u32 << u32::from(seg_o.0)).wrapping_sub(1)
     }
     /// Returns the max length of BlockAck in bits (32).
     pub const fn max_len() -> usize {
         32
+    }
+    pub fn count_ones(self) -> u8 {
+        self.0
+            .count_ones()
+            .try_into()
+            .expect("count_ones can only return <= 32")
+    }
+    pub fn seg_left(mut self, seg_o: SegO) -> u8 {
+        // Mask Upper bits so we don't underflow
+        self = BlockAck(self.0 & ((1 << u32::from(u8::from(seg_o))) - 1));
+        u8::from(seg_o) - self.count_ones()
     }
 }
 /// SEG Flag for signaling segmented PDUs. Unsegmented PDUs have `SEG(false)` while segmented
@@ -533,6 +553,10 @@ impl SegmentedControlPDU {
         let segment_header = SegmentHeader::unpack_from_u24(packed_header);
         Some(Self::new(opcode, segment_header, &bytes[4..]))
     }
+    #[must_use]
+    pub const fn max_seg_len() -> usize {
+        MAX_SEGMENTED_CONTROL_PDU_LEN
+    }
 }
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
 pub struct SegmentAckPDU {
@@ -654,5 +678,23 @@ impl TryFrom<&[u8]> for PDUBytes {
             buf[..l].copy_from_slice(value);
             Ok(Self { buf, buf_len: l })
         }
+    }
+}
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
+pub enum SegmentedPDU {
+    Access(SegmentedAccessPDU),
+    Control(SegmentedControlPDU),
+}
+impl From<&SegmentedPDU> for PDU {
+    fn from(pdu: &SegmentedPDU) -> Self {
+        match pdu {
+            SegmentedPDU::Access(pdu) => PDU::SegmentedAccess(*pdu),
+            SegmentedPDU::Control(pdu) => PDU::SegmentedControl(*pdu),
+        }
+    }
+}
+impl From<SegmentedPDU> for PDU {
+    fn from(pdu: SegmentedPDU) -> Self {
+        (&pdu).into()
     }
 }

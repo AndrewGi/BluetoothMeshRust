@@ -450,8 +450,8 @@ impl AsMut<[u8]> for OwnedEncryptedPDU {
 /// Mesh Network PDU Structure
 #[derive(Eq, PartialEq, Copy, Clone, Hash, Debug)]
 pub struct PDU {
-    header: Header,
-    payload: lower::PDU,
+    pub header: Header,
+    pub payload: lower::PDU,
 }
 impl PDU {
     #[must_use]
@@ -465,11 +465,17 @@ impl PDU {
     pub const fn max_len() -> usize {
         Header::len() + lower::PDU::max_len()
     }
+    #[must_use]
     pub fn payload(&self) -> &lower::PDU {
         &self.payload
     }
+    #[must_use]
     pub fn header(&self) -> &Header {
         &self.header
+    }
+    #[must_use]
+    pub fn segmented(&self) -> bool {
+        self.payload.is_seg()
     }
 }
 
