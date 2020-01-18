@@ -62,10 +62,10 @@ pub enum ControlPDU {
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct ControlPDUError(());
 impl ControlPDU {
-    pub fn try_unpack(opcode: ControlOpcode, buf: &[u8]) -> Result<Self, ControlPDUError> {
+    pub fn try_unpack(_opcode: ControlOpcode, _buf: &[u8]) -> Result<Self, ControlPDUError> {
         unimplemented!()
     }
-    pub fn try_pack(buf: &mut [u8]) -> Result<(), ControlPDUError> {
+    pub fn try_pack(_buf: &mut [u8]) -> Result<(), ControlPDUError> {
         unimplemented!()
     }
 }
@@ -111,7 +111,7 @@ impl ControlMessage for Ack {
         }
     }
 
-    fn pack(buf: &mut [u8]) -> Result<(), ControlMessageError> {
+    fn pack(_buf: &mut [u8]) -> Result<(), ControlMessageError> {
         unimplemented!()
     }
 }

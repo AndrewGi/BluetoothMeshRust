@@ -7,19 +7,25 @@ pub mod messages;
 pub mod model;
 pub mod segments;
 
-use crate::address::{Address, UnicastAddress, VirtualAddress};
+use crate::address::{Address, UnicastAddress};
 use crate::bearer::BearerError;
-use crate::ble::RSSI;
-use crate::crypto::materials::{
-    ApplicationSecurityMaterials, KeyPhase, NetKeyMap, NetworkSecurityMaterials,
-};
-use crate::crypto::nonce::{AppNonce, AppNonceParts, DeviceNonceParts};
+
+use crate::crypto::materials::{ApplicationSecurityMaterials, NetKeyMap};
+use crate::crypto::nonce::{AppNonceParts, DeviceNonceParts};
 use crate::device_state::{DeviceState, SeqCounter};
 use crate::lower::SegO;
-use crate::mesh::{AppKeyIndex, IVIndex, NetKeyIndex, SequenceNumber, TTL};
+use crate::mesh::{AppKeyIndex, IVIndex, NetKeyIndex, TTL};
 use crate::stack::messages::{EncryptedOutgoingMessage, MessageKeys, OutgoingMessage};
 use crate::upper;
-use crate::{device_state, lower, net, replay};
+use crate::{device_state, net};
+
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
+pub struct NetworkHeader {
+    pub src: UnicastAddress,
+    pub dst: Address,
+    pub ttl: TTL,
+    pub iv_index: IVIndex,
+}
 
 /// Bluetooth Mesh Stack Internals for
 /// Layers:
@@ -204,9 +210,9 @@ impl StackInternals {
     }
     pub fn encrypted_network_pdu(
         &self,
-        network_pdu: net::PDU,
-        net_key_index: NetKeyIndex,
-        iv_index: IVIndex,
+        _network_pdu: net::PDU,
+        _net_key_index: NetKeyIndex,
+        _iv_index: IVIndex,
     ) -> Result<net::PDU, SendError> {
         unimplemented!()
     }
