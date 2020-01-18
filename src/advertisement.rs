@@ -37,7 +37,14 @@ impl<'a> ScannerSink for ScannerInputSink<'a> {
         }
     }
 }
-
+impl<'a, S: Scanner<'a>> From<S> for ScannerInterface<'a, S> {
+    fn from(scanner: S) -> Self {
+        Self {
+            scanner,
+            scanner_sink: None,
+        }
+    }
+}
 impl<A: Advertiser> OutputInterface for A {
     fn send_pdu(&self, pdu: &OutgoingEncryptedNetworkPDU) -> Result<(), BearerError> {
         for _ in 0..u8::from(pdu.transmit_parameters.count) {
@@ -52,7 +59,4 @@ impl<'a, S: Scanner<'a>> InputInterface<'a> for ScannerInterface<'a, S> {
         self.scanner_sink = Some(ScannerInputSink(sink));
         self.scanner.take_sink(self.scanner_sink.as_ref().unwrap())
     }
-}
-impl<'a, ISink: InterfaceSink + ?Sized> ScannerSink for &'a ISink {
-    fn consume_advertisement(&self, advertisement: &RawAdvertisement) {}
 }
