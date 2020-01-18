@@ -5,20 +5,20 @@ use crate::crypto::aes::{AESCipher, Error, MicSize};
 use crate::crypto::key::{AppKey, DevKey, Key};
 use crate::crypto::nonce::{AppNonce, DeviceNonce, Nonce};
 use crate::crypto::{AID, AKF, MIC};
-use crate::lower::{
-    SegN, SegO, SegmentedAccessPDU, SegmentedControlPDU, SeqZero, UnsegmentedAccessPDU, SZMIC,
-};
+use crate::lower;
+use crate::lower::{SegN, SegO, SegmentedAccessPDU, SegmentedControlPDU, UnsegmentedAccessPDU};
 use alloc::boxed::Box;
 use core::convert::TryFrom;
-use core::mem;
 
-pub struct UpperPDU<Storage: AsRef<[u8]>> {
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+pub struct UpperPDUConversionError(());
+pub struct PDU<Storage: AsRef<[u8]>> {
     pub payload: Storage,
     pub mic: Option<MIC>,
     pub aid: Option<AID>,
     pub opcode: Option<ControlOpcode>,
 }
-impl<Storage: AsRef<[u8]>> UpperPDU<Storage> {
+impl<Storage: AsRef<[u8]>> PDU<Storage> {
     pub fn new(
         payload: Storage,
         mic: Option<MIC>,
@@ -80,6 +80,31 @@ impl<Storage: AsRef<[u8]>> UpperPDU<Storage> {
     }
     pub fn total_len(&self) -> usize {
         self.payload_len() + self.mic.map(|mic| mic.byte_size()).unwrap_or(0)
+    }
+}
+impl<Storage: AsRef<[u8]> + AsMut<[u8]>> TryFrom<PDU<Storage>> for EncryptedAppPayload<Storage> {
+    type Error = (UpperPDUConversionError, PDU<Storage>);
+
+    fn try_from(value: PDU<Storage>) -> Result<Self, Self::Error> {
+        match value.mic {
+            Some(mic) => Ok(EncryptedAppPayload::new(value.payload, mic, value.aid)),
+            None => Err((UpperPDUConversionError(()), value)),
+        }
+    }
+}
+impl<Storage: Clone + AsRef<[u8]>> Clone for PDU<Storage> {
+    fn clone(&self) -> Self {
+        Self {
+            payload: self.payload.clone(),
+            mic: self.mic,
+            aid: self.aid,
+            opcode: self.opcode,
+        }
+    }
+}
+impl From<lower::UnsegmentedAccessPDU> for EncryptedAppPayload<Box<[u8]>> {
+    fn from(pdu: UnsegmentedAccessPDU) -> Self {
+        Self::new(pdu.upper_pdu().into(), pdu.mic(), pdu.aid())
     }
 }
 /// Application Security Materials used to encrypt and decrypt at the application layer.
@@ -237,80 +262,5 @@ impl From<&UnsegmentedAccessPDU> for EncryptedAppPayload<Box<[u8]>> {
         let upper_pdu = pdu.upper_pdu();
         let upper_pdu = Box::<[u8]>::from(&upper_pdu[..upper_pdu.len() - MIC::small_size()]);
         Self::new(upper_pdu, mic, pdu.aid())
-    }
-}
-/// Generates `SegmentedAccessPDU`s from an Encrypted Payload.
-pub struct SegmentIterator<'a> {
-    seq_zero: SeqZero,
-    aid: Option<AID>,
-    seg_n: SegN,
-    seg_o: SegO,
-    data: &'a [u8],
-    mic: MIC,
-}
-impl SegmentIterator<'_> {
-    pub fn is_done(&self) -> bool {
-        u8::from(self.seg_n) > u8::from(self.seg_o)
-    }
-    pub fn is_last_seg(&self) -> bool {
-        u8::from(self.seg_n) == u8::from(self.seg_o)
-    }
-    pub fn szmic(&self) -> SZMIC {
-        self.mic.is_big().into()
-    }
-    pub fn pop_bytes(&mut self, amount: usize) -> Option<&[u8]> {
-        if self.data.len() < amount {
-            None
-        } else {
-            let (b, rest) = mem::replace(&mut self.data, &[]).split_at(amount);
-            self.data = rest;
-            Some(b)
-        }
-    }
-}
-impl Iterator for SegmentIterator<'_> {
-    type Item = SegmentedAccessPDU;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.is_done() {
-            None
-        } else {
-            assert!(!self.data.is_empty());
-            if self.is_last_seg() {
-                let seg_len = self.data.len() + self.mic.byte_size();
-                debug_assert!(
-                    seg_len <= SegmentedAccessPDU::max_seg_len(),
-                    "too much data to fit in last segment"
-                );
-                let mut buf = [0_u8; SegmentedAccessPDU::max_seg_len()];
-                buf[..self.data.len()].copy_from_slice(&self.data);
-                self.data = &[];
-                // Insert MIC on the end of the segment.
-                let mic_bytes = &self.mic.mic().to_be_bytes()[..self.mic.byte_size()];
-                buf[self.data.len()..self.data.len() + mic_bytes.len()].copy_from_slice(&mic_bytes);
-                Some(SegmentedAccessPDU::new(
-                    self.aid,
-                    self.szmic(),
-                    self.seq_zero,
-                    self.seg_o,
-                    self.seg_n,
-                    &buf,
-                ))
-            } else {
-                let aid = self.aid;
-                let szmic = self.szmic();
-                let seq_zero = self.seq_zero;
-                let seg_o = self.seg_o;
-                let seg_n = self.seg_n;
-                let b = self
-                    .pop_bytes(SegmentedAccessPDU::max_seg_len())
-                    .expect("seg_n < seg_o so there must be at least full segment of bytes left");
-                let out = Some(SegmentedAccessPDU::new(
-                    aid, szmic, seq_zero, seg_o, seg_n, b,
-                ));
-                self.seg_n = self.seg_n.next();
-                out
-            }
-        }
     }
 }

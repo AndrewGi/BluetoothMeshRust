@@ -23,11 +23,11 @@ impl NetworkKeys {
     pub fn nid(&self) -> NID {
         self.nid
     }
-    pub fn encryption_key(&self) -> EncryptionKey {
-        self.encryption
+    pub fn encryption_key(&self) -> &EncryptionKey {
+        &self.encryption
     }
-    pub fn privacy_key(&self) -> PrivacyKey {
-        self.privacy
+    pub fn privacy_key(&self) -> &PrivacyKey {
+        &self.privacy
     }
 }
 impl From<&NetKey> for NetworkKeys {

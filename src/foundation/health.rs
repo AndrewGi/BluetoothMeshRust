@@ -170,7 +170,7 @@ impl From<u8> for FaultID {
             0x32 => FaultID::MechanismJammedError,
             0x33..=0x7F => FaultID::RFU(b),
             0x80..=0xFF => FaultID::Vendor(b),
-            _ => unreachable!("all u8 values should be handled"),
+            _ => unreachable!("all u8 values should be handled"), //IntellJ complains if I remove this line
         }
     }
 }

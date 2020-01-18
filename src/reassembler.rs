@@ -2,7 +2,7 @@
 use crate::crypto::aes::MicSize;
 use crate::crypto::MIC;
 use crate::lower::{BlockAck, SegN, SegO, SegmentedAccessPDU, SegmentedControlPDU};
-use alloc::boxed::Box;
+
 use alloc::vec::Vec;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]

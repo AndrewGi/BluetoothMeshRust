@@ -1,12 +1,11 @@
 use crate::bearer::{IncomingEncryptedNetworkPDU, OutgoingEncryptedNetworkPDU};
 use crate::interface::{InputInterfaces, InterfaceSink, OutputInterfaces};
-use crate::net::PrivateHeader;
+
 use crate::relay::RelayPDU;
 use crate::stack::messages::IncomingNetworkPDU;
 use crate::stack::{SendError, StackInternals};
-use crate::{lower, net, replay, upper};
-use core::borrow::BorrowMut;
-use core::ops::Deref;
+use crate::{net, replay};
+
 use parking_lot::{Mutex, RwLock};
 use std::sync::mpsc;
 
@@ -59,7 +58,7 @@ impl<'a> FullStack<'a> {
             .lock()
             .replay_check(header.src, header.seq, header.ivi)
     }
-    fn handle_net_pdu(&self, incoming: IncomingNetworkPDU) {}
+    fn handle_net_pdu(&self, _incoming: IncomingNetworkPDU) {}
     /// Send encrypted net_pdu through all output interfaces.
     fn send_encrypted_net_pdu(
         &self,
