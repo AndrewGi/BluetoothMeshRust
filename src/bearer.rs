@@ -5,7 +5,9 @@ use crate::mesh::TransmitInterval;
 use crate::net;
 use alloc::boxed::Box;
 
-pub struct BearerError(());
+pub enum BearerError {
+    AdvertiseError,
+}
 
 #[derive(Copy, Clone)]
 pub struct IncomingEncryptedNetworkPDU {

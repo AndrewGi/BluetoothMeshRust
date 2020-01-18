@@ -1,23 +1,25 @@
 //! Network Input/Output Interface and Filter.
 use crate::bearer::{BearerError, IncomingEncryptedNetworkPDU, OutgoingEncryptedNetworkPDU};
+use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::marker::PhantomData;
 
 pub trait InterfaceSink {
     fn consume_pdu(&self, pdu: &IncomingEncryptedNetworkPDU);
 }
-pub trait InputInterface {
-    fn take_sink(&mut self, sink: &dyn InterfaceSink);
+pub trait InputInterface<'a> {
+    fn take_sink(&'a mut self, sink: Box<dyn InterfaceSink + 'a>);
 }
 
-pub struct InputInterfaces<Sink: InterfaceSink> {
+pub struct InputInterfaces<Sink: InterfaceSink + Clone + 'static> {
     sink: Sink,
 }
-impl<Sink: InterfaceSink> InputInterfaces<Sink> {
+impl<'a, Sink: InterfaceSink + Clone + 'static> InputInterfaces<Sink> {
     pub fn new(sink: Sink) -> Self {
         Self { sink }
     }
-    pub fn add_interface(&self, interface: &mut dyn InputInterface) {
-        interface.take_sink(&self.sink)
+    pub fn add_interface(&'a self, interface: &'a mut dyn InputInterface<'a>) {
+        interface.take_sink(Box::new(self.sink.clone()))
     }
 }
 pub trait OutputInterface {
