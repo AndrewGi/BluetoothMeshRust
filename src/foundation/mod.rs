@@ -1,7 +1,7 @@
 //! Foundation Layer. Handles Publication, Config, etc.
-use crate::access::{SigModelID, VendorModelID};
+
 use crate::foundation::element::ElementsComposition;
-use crate::mesh::{CompanyID, ModelID};
+use crate::mesh::{CompanyID};
 use crate::serializable::bytes::ToFromBytesEndian;
 use crate::upper::AppPayload;
 use alloc::boxed::Box;
@@ -35,7 +35,7 @@ impl From<StatusCode> for u8 {
 impl TryFrom<u8> for StatusCode {
     type Error = StatusCodeConversationError;
 
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
+    fn try_from(_value: u8) -> Result<Self, Self::Error> {
         unimplemented!()
     }
 }
@@ -218,7 +218,7 @@ impl CompositionDataPage0 {
             + CRPL::byte_len()
             + Features::byte_len()
     }
-    pub fn try_unpack_from(&self, data: &[u8]) {
+    pub fn try_unpack_from(&self, _data: &[u8]) {
         unimplemented!()
     }
     pub fn pack_into(&self, buf: &mut [u8]) {

@@ -9,8 +9,7 @@ use crate::crypto::nonce::{NetworkNonce, NetworkNonceParts};
 use crate::crypto::MIC;
 use crate::lower;
 use crate::mesh::{IVIndex, SequenceNumber, CTL, IVI, NID, TTL};
-use crate::serializable::bytes::{Buf, BufError, BufMut, Bytes, BytesMut, ToFromBytesEndian};
-use crate::serializable::ByteSerializable;
+use crate::serializable::bytes::ToFromBytesEndian;
 use core::convert::TryInto;
 use core::fmt;
 
@@ -84,6 +83,9 @@ impl OwnedEncryptedData {
             mic,
         }
     }
+    pub fn data(&self) -> EncryptedData {
+        self.into()
+    }
 }
 impl<'a> From<&'a OwnedEncryptedData> for EncryptedData<'a> {
     fn from(data: &'a OwnedEncryptedData) -> Self {
@@ -124,14 +126,11 @@ impl EncryptedData<'_> {
     /// encrypted DST and TransportPDU excluding MIC
     #[must_use]
     pub fn data(&self) -> &[u8] {
-        &self.data[..self.len() - self.mic_size()]
+        &self.data[..]
     }
     #[must_use]
     pub fn data_len(&self) -> usize {
         self.len() - self.mic_size()
-    }
-    pub fn entire_data(&self) -> &[u8] {
-        &self.data[..]
     }
     pub fn mic_size(&self) -> usize {
         self.mic.byte_size()
@@ -139,6 +138,19 @@ impl EncryptedData<'_> {
     #[must_use]
     pub fn mic(&self) -> MIC {
         self.mic
+    }
+    #[must_use]
+    pub fn packed_privacy_random(&self, dst: Address, iv_index: IVIndex) -> PackedPrivacy {
+        let mut privacy_random_buf = [0_u8; PRIVACY_RANDOM_LEN + MIC::max_len()];
+        privacy_random_buf[..ADDRESS_LEN].copy_from_slice(&dst.value().to_le_bytes());
+        privacy_random_buf[ADDRESS_LEN..ADDRESS_LEN + self.data.len()].copy_from_slice(self.data());
+        if self.data.len() < PRIVACY_RANDOM_LEN - ADDRESS_LEN {
+            self.mic.be_pack_into(
+                &mut privacy_random_buf[ADDRESS_LEN + self.data.len()
+                    ..ADDRESS_LEN + self.data().len() + self.mic.byte_size()],
+            );
+        };
+        PrivacyRandom(&privacy_random_buf[..PRIVACY_RANDOM_LEN]).pack_with_iv(iv_index)
     }
     #[must_use]
     pub const fn max_len() -> usize {
@@ -179,7 +191,7 @@ impl EncryptedData<'_> {
 impl AsRef<[u8]> for EncryptedData<'_> {
     #[must_use]
     fn as_ref(&self) -> &[u8] {
-        self.entire_data()
+        self.data()
     }
 }
 
@@ -216,6 +228,11 @@ const PDU_HEADER_LEN: usize = 1 + 1 + 3 + 2 + 2;
 
 impl Header {
     #[must_use]
+    pub fn with_seq(&self, seq: SequenceNumber) -> Self {
+        Self { seq, ..*self }
+    }
+
+    #[must_use]
     pub const fn len() -> usize {
         PDU_HEADER_LEN
     }
@@ -224,7 +241,7 @@ impl Header {
         self.ctl.into()
     }
     #[must_use]
-    pub fn mic_size(&self) -> usize {
+    pub fn mic_byte_size(&self) -> usize {
         if self.big_mic() {
             MIC::big_size()
         } else {
@@ -232,52 +249,26 @@ impl Header {
         }
     }
     #[must_use]
+    pub fn mic_size(&self) -> MicSize {
+        if self.big_mic() {
+            MicSize::Big
+        } else {
+            MicSize::Small
+        }
+    }
+    #[must_use]
     pub fn obfuscate(&self, pecb: PECB) -> ObfuscatedHeader {
         DeobfuscatedHeader::from(self).obfuscate(pecb)
+    }
+    #[must_use]
+    pub fn deobfuscated(&self) -> DeobfuscatedHeader {
+        self.into()
     }
 }
 impl From<&Header> for DeobfuscatedHeader {
     #[must_use]
     fn from(h: &Header) -> Self {
         DeobfuscatedHeader::new(h.ctl, h.ttl, h.seq, h.src)
-    }
-}
-impl ByteSerializable for Header {
-    fn serialize_to(&self, buf: &mut BytesMut) -> Result<(), BufError> {
-        if buf.remaining_empty_space() < PDU_HEADER_LEN {
-            Err(BufError::OutOfSpace(PDU_HEADER_LEN))
-        } else if let Address::Unassigned = self.dst {
-            // Can't have a PDU destination be unassigned
-            Err(BufError::InvalidInput)
-        } else {
-            buf.push_be(self.nid.with_flag(self.ivi.into()))?;
-            buf.push_be(self.ttl.with_flag(self.ctl.into()))?;
-            buf.push_be(self.seq)?;
-            buf.push_be(self.src)?;
-            buf.push_be(self.dst)?;
-            Ok(())
-        }
-    }
-
-    fn serialize_from(buf: &mut Bytes) -> Result<Self, BufError> {
-        if buf.length() < PDU_HEADER_LEN {
-            Err(BufError::InvalidInput)
-        } else {
-            let dst: Address = buf.pop_be().expect("dst address is infallible");
-            let src: UnicastAddress = buf.pop_be().ok_or(BufError::BadBytes(2))?;
-            let seq: SequenceNumber = buf.pop_be().expect("sequence number is infallible");
-            let (ttl, ctl_b) = TTL::new_with_flag(buf.pop_be().unwrap());
-            let (nid, ivi_b) = NID::new_with_flag(buf.pop_be().unwrap());
-            Ok(Header {
-                ivi: ivi_b.into(),
-                nid,
-                ctl: ctl_b.into(),
-                ttl,
-                seq,
-                src,
-                dst,
-            })
-        }
     }
 }
 impl fmt::Display for Header {
@@ -322,13 +313,16 @@ impl OwnedEncryptedPDU {
         ivi: IVI,
         nid: NID,
         obfuscated: &ObfuscatedHeader,
-        encrypted_data: &EncryptedData,
+        encrypted_data: EncryptedData,
     ) -> Self {
         let mut out = Self::new_zeroed(encrypted_data.len() + ObfuscatedHeader::len() + 1);
         let buf = out.as_mut();
         buf[0] = nid.with_flag(ivi.into());
         obfuscated.pack_into(&mut buf[1..1 + ObfuscatedHeader::len()]);
         encrypted_data.pack_into(&mut buf[1 + ObfuscatedHeader::len()..]);
+        encrypted_data
+            .mic
+            .be_pack_into(&mut buf[1 + ObfuscatedHeader::len() + encrypted_data.data_len()..]);
         out
     }
 
@@ -453,6 +447,12 @@ pub struct PDU {
     pub header: Header,
     pub payload: lower::PDU,
 }
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
+pub enum PDUEncryptError {
+    WrongNID,
+    WrongIVI,
+    BadDst,
+}
 impl PDU {
     #[must_use]
     pub fn new(header: &Header, payload: &lower::PDU) -> PDU {
@@ -474,8 +474,50 @@ impl PDU {
         &self.header
     }
     #[must_use]
-    pub fn segmented(&self) -> bool {
+    pub fn is_segmented(&self) -> bool {
         self.payload.is_seg()
+    }
+    #[must_use]
+    pub fn decrypted_data(&self) -> DecryptedData {
+        let mut buf = [0_u8; TRANSPORT_PDU_MAX_LEN];
+        self.payload.pack_into(&mut buf[..]);
+        DecryptedData {
+            dst: self.header.dst,
+            transport_buf: buf,
+            transport_len: self.payload.len(),
+            mic: None,
+        }
+    }
+    /// Encrypts the PDU. Ignores the IVI, NID, and CTL.
+    #[must_use]
+    pub fn encrypt(
+        &self,
+        net_keys: &NetworkKeys,
+        iv_index: IVIndex,
+    ) -> Result<OwnedEncryptedPDU, PDUEncryptError> {
+        if !self.header.dst.is_assigned()
+            || (self.payload.is_control() && self.header.dst.is_virtual())
+        {
+            Err(PDUEncryptError::BadDst)
+        } else {
+            let deobfuscated = self.header.deobfuscated();
+            let unencrypted = self.decrypted_data();
+            let encrypted = unencrypted.encrypt(
+                &deobfuscated.nonce(iv_index),
+                net_keys,
+                self.header.mic_size(),
+            );
+            let pecb = encrypted
+                .data()
+                .packed_privacy_random(self.header.dst, iv_index)
+                .encrypt_with(net_keys.privacy_key());
+            Ok(OwnedEncryptedPDU::new_parts(
+                iv_index.ivi(),
+                net_keys.nid(),
+                &deobfuscated.obfuscate(pecb),
+                encrypted.data(),
+            ))
+        }
     }
 }
 
@@ -651,7 +693,7 @@ impl PackedPrivacy {
     pub fn new_bytes(bytes: [u8; PACKED_PRIVACY_LEN]) -> Self {
         Self(bytes)
     }
-    pub fn encrypt_with(mut self, key: PrivacyKey) -> PECB {
+    pub fn encrypt_with(mut self, key: &PrivacyKey) -> PECB {
         AESCipher::new(key.key()).ecb_encrypt(&mut self.0[..]);
         PECB(
             (&self.0[..PECB_LEN])
