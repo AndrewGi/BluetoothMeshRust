@@ -1,11 +1,13 @@
 use crate::ble::advertisement::{AdStructureError, IncomingAdvertisement, RawAdvertisement};
 use alloc::boxed::Box;
-
-pub trait Scanner {
-    fn on_advertisement(&mut self, callback: Box<dyn FnMut(&IncomingAdvertisement)>);
+pub trait ScannerSink {
+    fn consume_advertisement(&self, advertisement: &RawAdvertisement);
+}
+pub trait Scanner<'a> {
+    fn take_sink(&mut self, sink: Box<dyn ScannerSink + 'a>);
 }
 
 pub enum AdvertiserError {}
 pub trait Advertiser {
-    fn advertise(&mut self, advertisement: &RawAdvertisement) -> Result<(), AdStructureError>;
+    fn advertise(&self, advertisement: &RawAdvertisement) -> Result<(), AdvertiserError>;
 }

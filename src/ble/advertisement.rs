@@ -202,6 +202,7 @@ const MAX_ADV_LEN: usize = 31;
 pub struct RawAdvertisement {
     buf: [u8; MAX_ADV_LEN],
     len: usize,
+    rssi: Option<RSSI>,
 }
 impl RawAdvertisement {
     /// Inserts a `AdStructure` into a `RawAdvertisement`
@@ -236,6 +237,9 @@ impl RawAdvertisement {
         AdStructureIterator {
             data: self.as_ref(),
         }
+    }
+    pub fn rssi(&self) -> Option<RSSI> {
+        self.rssi
     }
 }
 impl AsRef<[u8]> for RawAdvertisement {
