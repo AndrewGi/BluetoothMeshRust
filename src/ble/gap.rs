@@ -4,7 +4,7 @@ pub trait ScannerSink {
     fn consume_advertisement(&self, advertisement: &RawAdvertisement);
 }
 pub trait Scanner<'a> {
-    fn take_sink(&mut self, sink: Box<dyn ScannerSink + 'a>);
+    fn take_sink(&mut self, sink: &'a dyn ScannerSink);
 }
 
 pub enum AdvertiserError {}

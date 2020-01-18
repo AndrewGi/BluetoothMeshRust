@@ -3,6 +3,7 @@ use crate::ble::advertisement::{AdStructure, AdStructureDataBuffer, RawAdvertise
 use crate::ble::gap::{Advertiser, AdvertiserError, Scanner, ScannerSink};
 use crate::interface::{InputInterface, InterfaceSink, OutputInterface};
 use crate::net::OwnedEncryptedPDU;
+use crate::stack::full::InputInterfaceSink;
 use crate::{ble, net};
 use alloc::boxed::Box;
 use core::marker::PhantomData;
@@ -13,11 +14,11 @@ impl From<net::EncryptedPDU<'_>> for ble::advertisement::AdStructure {
     }
 }
 
-pub struct AdvertisementInterface<'a, A: Advertiser, S: Scanner<'a>> {
-    advertiser: A,
+pub struct ScannerInterface<'a, S: Scanner<'a>> {
     scanner: S,
-    scanner_sink: Option<Box<dyn InterfaceSink + 'a>>,
+    scanner_sink: Option<ScannerInputSink<'a>>,
 }
+#[derive(Clone, Copy)]
 pub struct ScannerInputSink<'a>(&'a (dyn InterfaceSink + 'a));
 impl<'a> ScannerSink for ScannerInputSink<'a> {
     fn consume_advertisement(&self, advertisement: &RawAdvertisement) {
@@ -37,27 +38,21 @@ impl<'a> ScannerSink for ScannerInputSink<'a> {
     }
 }
 
-impl<'a, A: Advertiser, S: Scanner<'a>> Advertiser for AdvertisementInterface<'a, A, S> {
-    fn advertise(&self, advertisement: &RawAdvertisement) -> Result<(), AdvertiserError> {
-        self.advertiser.advertise(advertisement)
-    }
-}
-impl<'a, A: Advertiser, S: Scanner<'a>> OutputInterface for AdvertisementInterface<'a, A, S> {
+impl<A: Advertiser> OutputInterface for A {
     fn send_pdu(&self, pdu: &OutgoingEncryptedNetworkPDU) -> Result<(), BearerError> {
         for _ in 0..u8::from(pdu.transmit_parameters.count) {
-            self.advertiser
-                .advertise(&(&AdStructure::from(pdu.pdu.as_ref())).into())
+            self.advertise(&(&AdStructure::from(pdu.pdu.as_ref())).into())
                 .map_err(|_| BearerError::AdvertiseError)?;
         }
         Ok(())
     }
 }
-impl<'a, A: Advertiser, S: Scanner<'a>> InputInterface<'a> for AdvertisementInterface<'a, A, S> {
-    fn take_sink(&'a mut self, sink: Box<dyn InterfaceSink + 'a>) {
-        self.scanner_sink = Some(sink);
-
-        self.scanner.take_sink(Box::new(ScannerInputSink(
-            self.scanner_sink.as_ref().unwrap().as_ref(),
-        )))
+impl<'a, S: Scanner<'a>> InputInterface<'a> for ScannerInterface<'a, S> {
+    fn take_sink(&'a mut self, sink: &'a dyn InterfaceSink) {
+        self.scanner_sink = Some(ScannerInputSink(sink));
+        self.scanner.take_sink(self.scanner_sink.as_ref().unwrap())
     }
+}
+impl<'a, ISink: InterfaceSink + ?Sized> ScannerSink for &'a ISink {
+    fn consume_advertisement(&self, advertisement: &RawAdvertisement) {}
 }
