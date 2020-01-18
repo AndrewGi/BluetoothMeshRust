@@ -8,18 +8,18 @@ pub trait InterfaceSink {
     fn consume_pdu(&self, pdu: &IncomingEncryptedNetworkPDU);
 }
 pub trait InputInterface<'a> {
-    fn take_sink(&'a mut self, sink: Box<dyn InterfaceSink + 'a>);
+    fn take_sink(&'a mut self, sink: &'a InterfaceSink);
 }
 
-pub struct InputInterfaces<Sink: InterfaceSink + Clone + 'static> {
+pub struct InputInterfaces<Sink: InterfaceSink> {
     sink: Sink,
 }
-impl<'a, Sink: InterfaceSink + Clone + 'static> InputInterfaces<Sink> {
+impl<'a, Sink: InterfaceSink + 'a> InputInterfaces<Sink> {
     pub fn new(sink: Sink) -> Self {
         Self { sink }
     }
     pub fn add_interface(&'a self, interface: &'a mut dyn InputInterface<'a>) {
-        interface.take_sink(Box::new(self.sink.clone()))
+        interface.take_sink(&self.sink)
     }
 }
 pub trait OutputInterface {
