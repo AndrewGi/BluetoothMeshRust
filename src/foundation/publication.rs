@@ -172,7 +172,7 @@ impl ModelPublishInfo {
             "not enough room for publication"
         );
         let address = u16::from(&self.address);
-        let pos = match &self.address {
+        let _pos = match &self.address {
             Address::Virtual(va) => {
                 buf[..16].copy_from_slice(va.uuid().as_ref());
                 16

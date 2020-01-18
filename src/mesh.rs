@@ -500,7 +500,7 @@ impl From<u8> for TransmitInterval {
     fn from(b: u8) -> Self {
         Self::new(
             TransmitCount::new(b & COUNT_MAX),
-            TransmitSteps::new((b >> 3)),
+            TransmitSteps::new(b >> 3),
         )
     }
 }

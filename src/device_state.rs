@@ -12,11 +12,9 @@ use crate::mesh::{
     TransmitSteps, IVI, TTL, U24,
 };
 use crate::random::Randomizable;
-use crate::relay::RelayPDU;
+
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
-use core::cell::Cell;
-use core::convert::TryInto;
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct ModelInfo {
@@ -80,7 +78,7 @@ impl SeqCounter {
             .0
             .fetch_add(amount, core::sync::atomic::Ordering::SeqCst);
         if next >= U24::max_value().value() {
-            /// Overflow of Seq Number
+            // Overflow of Seq Number
             self.0.store(
                 U24::max_value().value(),
                 core::sync::atomic::Ordering::SeqCst,

@@ -3,11 +3,9 @@
 use crate::address::{Address, UnicastAddress};
 use crate::ble::RSSI;
 use crate::crypto::aes::MicSize;
-use crate::crypto::materials::NetworkSecurityMaterials;
-use crate::crypto::AID;
 use crate::device_state::SeqRange;
 use crate::lower::SegO;
-use crate::mesh::{AppKeyIndex, IVIndex, NetKeyIndex, SequenceNumber, TransmitInterval, TTL};
+use crate::mesh::{AppKeyIndex, IVIndex, NetKeyIndex, SequenceNumber, TTL};
 use crate::upper::{AppPayload, EncryptedAppPayload};
 use crate::{lower, net, upper};
 
@@ -67,8 +65,8 @@ pub struct IncomingNetworkPDU {
     pub iv_index: IVIndex,
     pub rssi: Option<RSSI>,
 }
-pub struct IncomingTransportPDU {
-    pub lower_pdu: lower::PDU,
+pub struct IncomingTransportPDU<Storage: AsRef<[u8]> + AsMut<[u8]>> {
+    pub lower_pdu: upper::PDU<Storage>,
     pub seq: SequenceNumber,
     pub ttl: TTL,
 }

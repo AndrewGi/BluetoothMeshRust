@@ -3,7 +3,7 @@
 use crate::ble::RSSI;
 use crate::mesh::TransmitInterval;
 use crate::net;
-use alloc::boxed::Box;
+
 
 pub struct BearerError(());
 

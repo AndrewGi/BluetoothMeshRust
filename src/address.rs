@@ -249,7 +249,7 @@ impl Address {
         }
     }
     #[must_use]
-    fn value(&self) -> u16 {
+    pub fn value(&self) -> u16 {
         self.into()
     }
 }

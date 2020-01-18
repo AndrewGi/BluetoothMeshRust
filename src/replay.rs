@@ -3,7 +3,7 @@
 //! any 'too' old IVIndices.
 use crate::address::UnicastAddress;
 use crate::mesh::{SequenceNumber, IVI};
-use crate::net;
+
 use crate::net::PrivateHeader;
 use alloc::collections::btree_map::Entry;
 use alloc::collections::BTreeMap;
