@@ -5,6 +5,7 @@ pub mod element;
 pub mod full;
 pub mod messages;
 pub mod model;
+#[cfg(feature = "std")]
 pub mod segments;
 
 use crate::address::{Address, UnicastAddress};
