@@ -285,3 +285,13 @@ impl From<OCF> for u16 {
 }
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub struct Opcode(pub OGF, pub OCF);
+
+const MAX_PARAMETERS_LEN: usize = 0xFF;
+pub struct CommandPacket<Storage: AsRef<[u8]> + AsMut<[u8]>> {
+    opcode: Opcode,
+    parameters: Storage,
+}
+pub struct EventPacket<Storage: AsRef<[u8]> + AsMut<[u8]>> {
+    event_opcode: EventCode,
+    parameters: Storage,
+}
