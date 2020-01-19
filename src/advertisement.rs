@@ -2,11 +2,7 @@ use crate::bearer::{BearerError, IncomingEncryptedNetworkPDU, OutgoingEncryptedN
 use crate::ble::advertisement::{AdStructure, AdStructureDataBuffer, RawAdvertisement};
 use crate::ble::gap::{Advertiser, AdvertiserError, Scanner, ScannerSink};
 use crate::interface::{InputInterface, InterfaceSink, OutputInterface};
-use crate::net::OwnedEncryptedPDU;
-use crate::stack::full::InputInterfaceSink;
 use crate::{ble, net};
-use alloc::boxed::Box;
-use core::marker::PhantomData;
 
 impl From<net::EncryptedPDU<'_>> for ble::advertisement::AdStructure {
     fn from(pdu: net::EncryptedPDU<'_>) -> Self {

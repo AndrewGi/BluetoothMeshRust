@@ -457,6 +457,10 @@ impl UnsegmentedControlPDU {
         let opcode = ControlOpcode::new(bytes[0] & 0x7F)?;
         Some(Self::new(opcode, &bytes[1..]))
     }
+    #[must_use]
+    pub fn opcode(&self) -> ControlOpcode {
+        self.opcode
+    }
 }
 const MAX_SEGMENTED_CONTROL_PDU_LEN: usize = 8;
 
@@ -601,6 +605,14 @@ impl PDU {
             PDU::SegmentedControl(p) => p.len(),
         }
     }
+    pub fn seq_zero(&self) -> Option<SeqZero> {
+        match self {
+            PDU::UnsegmentedAccess(_) => None,
+            PDU::SegmentedAccess(pdu) => Some(pdu.segment_header.seq_zero),
+            PDU::UnsegmentedControl(pdu) => None,
+            PDU::SegmentedControl(pdu) => Some(pdu.segment_header.seq_zero),
+        }
+    }
     /// Number of bytes required to hold any serialized `Lower::PDU` in a byte buffer.
     pub const fn max_len() -> usize {
         16
@@ -623,6 +635,13 @@ impl PDU {
             (false, false) => PDU::UnsegmentedAccess(UnsegmentedAccessPDU::unpack_from(bytes)?),
             (false, true) => PDU::SegmentedAccess(SegmentedAccessPDU::unpack_from(bytes)?),
         })
+    }
+    pub fn segmented(&self) -> Option<SegmentedPDU> {
+        match self {
+            PDU::SegmentedAccess(seg) => Some(SegmentedPDU::Access(*seg)),
+            PDU::SegmentedControl(seg) => Some(SegmentedPDU::Control(*seg)),
+            _ => None,
+        }
     }
 }
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
@@ -684,6 +703,17 @@ impl TryFrom<&[u8]> for PDUBytes {
 pub enum SegmentedPDU {
     Access(SegmentedAccessPDU),
     Control(SegmentedControlPDU),
+}
+impl SegmentedPDU {
+    pub fn segment_header(&self) -> &SegmentHeader {
+        match self {
+            SegmentedPDU::Access(pdu) => &pdu.segment_header,
+            SegmentedPDU::Control(pdu) => &pdu.segment_header,
+        }
+    }
+    pub fn seq_zero(&self) -> SeqZero {
+        self.segment_header().seq_zero
+    }
 }
 impl From<&SegmentedPDU> for PDU {
     fn from(pdu: &SegmentedPDU) -> Self {

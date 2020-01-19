@@ -162,14 +162,14 @@ impl<Storage: AsRef<[u8]>> NetworkSegments<Storage> {
     }
     /// Returns an Iterator generating all the Encrypted Unacked Segmented PDUs. `seq` should have enough
     /// `SequenceNumbers` to encrypt all the PDUs.
-    pub fn encrypted_network_pdu_iter<'b>(
+    pub fn encrypted_network_pdu_iter<'a>(
         &self,
         seq: SeqRange,
-        net_keys: &'b NetworkKeys,
-    ) -> Option<EncryptedNetworkPDUIterator<'_, 'b, Storage>> {
+        net_keys: &'a NetworkKeys,
+    ) -> Option<EncryptedNetworkPDUIterator<'a, NetworkPDUIterator<Storage>>> {
         Some(EncryptedNetworkPDUIterator {
             // NID and CTL get updated with the PDUs are encrypted
-            segments: self.network_pdu_iter(seq, NID::new(0), CTL(false))?,
+            pdus: self.network_pdu_iter(seq, NID::new(0), CTL(false))?,
             iv_index: self.header.iv_index,
             net_keys,
         })
@@ -218,17 +218,26 @@ impl<'a, Storage: AsRef<[u8]>> Iterator for NetworkPDUIterator<'a, Storage> {
         })
     }
 }
-pub struct EncryptedNetworkPDUIterator<'a, 'b, Storage: AsRef<[u8]>> {
-    segments: NetworkPDUIterator<'a, Storage>,
+pub struct EncryptedNetworkPDUIterator<'a, PDUIter: Iterator<Item = net::PDU>> {
+    pdus: PDUIter,
     iv_index: IVIndex,
-    net_keys: &'b NetworkKeys,
+    net_keys: &'a NetworkKeys,
 }
-impl<'a, 'b, Storage: AsRef<[u8]>> Iterator for EncryptedNetworkPDUIterator<'a, 'b, Storage> {
+impl<'a, PDUIter: Iterator<Item = net::PDU>> EncryptedNetworkPDUIterator<'a, PDUIter> {
+    pub fn new(pdus: PDUIter, iv_index: IVIndex, net_keys: &'a NetworkKeys) -> Self {
+        Self {
+            pdus,
+            iv_index,
+            net_keys,
+        }
+    }
+}
+impl<'a, PDUIter: Iterator<Item = net::PDU>> Iterator for EncryptedNetworkPDUIterator<'a, PDUIter> {
     type Item = OwnedEncryptedPDU;
 
     fn next(&mut self) -> Option<Self::Item> {
         Some(
-            self.segments
+            self.pdus
                 .next()?
                 .encrypt(self.net_keys, self.iv_index)
                 .expect("header wasn't correct"),

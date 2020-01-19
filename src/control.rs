@@ -1,7 +1,8 @@
 //! Bluetooth Mesh Control Layer.
 
-use crate::lower::{BlockAck, SeqZero, SEQ_ZERO_MAX};
+use crate::lower::{BlockAck, SeqZero, UnsegmentedControlPDU, SEQ_ZERO_MAX};
 use crate::serializable::bytes::ToFromBytesEndian;
+use core::convert::TryFrom;
 
 /// 7 Bit Control Opcode
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
@@ -74,12 +75,20 @@ pub enum ControlMessageError {
     BadBytes,
     BadState,
     BadLength,
+    BadOpcode,
 }
-trait ControlMessage: Sized {
+pub trait ControlMessage: Sized {
     const OPCODE: ControlOpcode;
     fn byte_len(&self) -> usize;
     fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError>;
     fn pack(buf: &mut [u8]) -> Result<(), ControlMessageError>;
+    fn try_from_pdu(value: &UnsegmentedControlPDU) -> Result<Self, ControlMessageError> {
+        if value.opcode() == Self::OPCODE {
+            Self::unpack(value.data())
+        } else {
+            Err(ControlMessageError::BadOpcode)
+        }
+    }
 }
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct Ack {
