@@ -8,13 +8,14 @@ use crate::foundation::state::{
     DefaultTTLState, GATTProxyState, NetworkTransmit, RelayState, SecureNetworkBeaconState,
 };
 use crate::mesh::{
-    AppKeyIndex, IVIndex, IVUpdateFlag, SequenceNumber, TransmitCount, TransmitInterval,
-    TransmitSteps, IVI, TTL, U24,
+    AppKeyIndex, ElementIndex, IVIndex, IVUpdateFlag, SequenceNumber, TransmitCount,
+    TransmitInterval, TransmitSteps, IVI, TTL, U24,
 };
 use crate::random::Randomizable;
 
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
+use core::ops::Range;
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct ModelInfo {
@@ -40,7 +41,7 @@ pub struct DeviceState {
     iv_index: IVIndex,
     security_materials: SecurityMaterials,
 }
-pub struct SeqRange(core::ops::Range<u32>);
+pub struct SeqRange(pub core::ops::Range<u32>);
 impl SeqRange {
     pub fn start(&self) -> SequenceNumber {
         SequenceNumber(U24::new(self.0.start))
@@ -50,6 +51,11 @@ impl SeqRange {
     }
     pub fn is_empty(&self) -> bool {
         self.0.start >= self.0.end
+    }
+}
+impl From<SequenceNumber> for SeqRange {
+    fn from(seq: SequenceNumber) -> Self {
+        Self([seq.0.value()..seq.0.value() + 1])
     }
 }
 impl Iterator for SeqRange {
@@ -113,12 +119,23 @@ impl DeviceState {
             },
         }
     }
-    pub fn element_address(&self, element_index: u8) -> Option<UnicastAddress> {
-        if element_index >= self.element_count {
+    pub fn unicast_range(&self) -> Range<UnicastAddress> {
+        Range {
+            start: self.element_address,
+            end: UnicastAddress::new(
+                u16::from(self.element_address) + u16::from(self.element_count),
+            ),
+        }
+    }
+    pub fn element_count(&self) -> u8 {
+        self.element_count
+    }
+    pub fn element_address(&self, element_index: ElementIndex) -> Option<UnicastAddress> {
+        if element_index.0 >= self.element_count {
             None
         } else {
             Some(UnicastAddress::from_mask_u16(
-                u16::from(self.element_address) + u16::from(element_index),
+                u16::from(self.element_address) + u16::from(element_index.0),
             ))
         }
     }

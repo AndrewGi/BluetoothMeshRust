@@ -123,6 +123,11 @@ impl From<&UUID> for VirtualAddress {
     }
 }
 impl UnicastAddress {
+    #[must_use]
+    pub fn new(v: u16) -> UnicastAddress {
+        assert!(v & UNICAST_BIT == 0, "non unicast address");
+        UnicastAddress(v)
+    }
     /// Creates a Unicast address by masking any u16 into it.
     #[must_use]
     pub const fn from_mask_u16(v: u16) -> UnicastAddress {

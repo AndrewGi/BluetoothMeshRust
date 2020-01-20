@@ -2,12 +2,16 @@ use crate::bearer::{IncomingEncryptedNetworkPDU, OutgoingEncryptedNetworkPDU};
 use crate::interface::{InputInterfaces, InterfaceSink, OutputInterfaces};
 
 use crate::relay::RelayPDU;
-use crate::stack::messages::IncomingNetworkPDU;
+use crate::stack::messages::{
+    EncryptedIncomingMessage, IncomingControlMessage, IncomingNetworkPDU, IncomingTransportPDU,
+};
 use crate::stack::{segments, SendError, StackInternals};
-use crate::{net, replay};
+use crate::{lower, net, replay};
 
-use crate::control::ControlPDU;
+use crate::control::{ControlMessageError, ControlOpcode, ControlPDU};
+use crate::lower::SegmentedPDU::Control;
 use crate::lower::SeqZero;
+use crate::upper::{EncryptedAppPayload, UpperPDUConversionError, PDU};
 use core::convert::{TryFrom, TryInto};
 use parking_lot::{Mutex, RwLock};
 use std::sync::mpsc;
@@ -34,7 +38,10 @@ pub enum FullStackError {
     NetworkPDUQueueClosed,
     SendError(SendError),
 }
-
+pub enum RecvError {
+    MalformedNetworkPDU,
+    MalformedControlPDU,
+}
 impl<'a> FullStack<'a> {
     pub fn new(internals: StackInternals) -> Self {
         let (tx, rx) = mpsc::channel();
@@ -65,13 +72,46 @@ impl<'a> FullStack<'a> {
             .lock()
             .replay_net_check(header.src, header.seq, header.ivi, seq_zero)
     }
-    fn handle_net_pdu(&self, incoming: IncomingNetworkPDU) {
+    fn handle_net_pdu(&self, incoming: IncomingNetworkPDU) -> Result<(), RecvError> {
         if let Ok(seg_event) = segments::SegmentEvent::try_from(&incoming) {
             self.segments.feed_event(seg_event);
         }
+        match &incoming.pdu.payload {
+            lower::PDU::UnsegmentedAccess(unseg_access) => {
+                self.handle_encrypted_incoming_message(EncryptedIncomingMessage {
+                    encrypted_app_payload: unseg_access.into(),
+                    seq: incoming.pdu.header.seq.into(),
+                    seg_count: 0,
+                    net_key_index: incoming.net_key_index,
+                    dst: incoming.pdu.header.dst,
+                    src: incoming.pdu.header.src,
+                    ttl: Some(incoming.pdu.header.ttl),
+                    rssi: incoming.rssi,
+                })
+            }
+            lower::PDU::UnsegmentedControl(unseg_control) => {
+                self.handle_control(IncomingControlMessage {
+                    control_pdu: {
+                        match ControlPDU::try_from(unseg_control) {
+                            Ok(pdu) => pdu,
+                            Err(_) => return Err(RecvError::MalformedControlPDU), // Badly formatted Control PDU
+                        }
+                    },
+                    src: incoming.pdu.header.src,
+                    rssi: incoming.rssi,
+                    ttl: Some(incoming.pdu.header.ttl),
+                })
+            }
+            // The rest of Segmented PDUs which are SegmentEvents. If they made it this far
+            // they are badly formatted Segmented PDUs
+            _ => Err(RecvError::MalformedNetworkPDU),
+        }
     }
-    fn handle_control(&self, _control_pdu: ControlPDU) {
-        unimplemented!()
+    fn handle_control(&self, control_pdu: IncomingControlMessage) {}
+    fn handle_encrypted_incoming_message<Storage: AsRef<[u8]> + AsMut<[u8]>>(
+        &self,
+        msg: EncryptedIncomingMessage<Storage>,
+    ) -> Result<(), RecvError> {
     }
     /// Send encrypted net_pdu through all output interfaces.
     fn send_encrypted_net_pdu(
@@ -92,7 +132,15 @@ impl<'a> FullStack<'a> {
         }
         todo!("relay PDU")
     }
-
+    fn handle_upper_pdu<Storage: AsRef<[u8]> + AsMut<[u8]>>(
+        &self,
+        pdu: IncomingTransportPDU<Storage>,
+    ) {
+        match EncryptedAppPayload::try_from(pdu.upper_pdu) {
+            Ok(app_pdu) => {}
+            Err(_) => {}
+        }
+    }
     pub fn handle_encrypted_net_pdu(&self, incoming: IncomingEncryptedNetworkPDU) {
         let internals = self.internals.read();
         if let Some((net_key_index, iv_index, pdu)) =
