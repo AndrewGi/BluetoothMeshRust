@@ -2,7 +2,8 @@
 
 use crate::lower::{BlockAck, SeqZero, UnsegmentedControlPDU, SEQ_ZERO_MAX};
 use crate::serializable::bytes::ToFromBytesEndian;
-use core::convert::TryFrom;
+use alloc::vec::Vec;
+use core::convert::{TryFrom, TryInto};
 
 /// 7 Bit Control Opcode
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
@@ -43,9 +44,9 @@ impl From<ControlOpcode> for u8 {
         opcode as u8
     }
 }
-pub struct ControlPayload<Storage: AsRef<[u8]> + AsMut<[u8]>> {
-    opcode: ControlOpcode,
-    payload: Storage,
+pub struct ControlPayload<Storage: AsRef<[u8]>> {
+    pub opcode: ControlOpcode,
+    pub payload: Storage,
 }
 pub enum ControlPDU {
     Ack(Ack),
@@ -60,14 +61,107 @@ pub enum ControlPDU {
     FriendSubscriptionListConfirm(FriendSubscriptionListConfirm),
     Heartbeat(Heartbeat),
 }
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
-pub struct ControlPDUError(());
 impl ControlPDU {
-    pub fn try_unpack(_opcode: ControlOpcode, _buf: &[u8]) -> Result<Self, ControlPDUError> {
-        unimplemented!()
+    pub fn try_unpack(opcode: ControlOpcode, payload: &[u8]) -> Result<Self, ControlMessageError> {
+        ControlPayload { opcode, payload }.try_into()
     }
-    pub fn try_pack(_buf: &mut [u8]) -> Result<(), ControlPDUError> {
-        unimplemented!()
+    pub fn len(&self) -> usize {
+        match self {
+            ControlPDU::Ack(pdu) => pdu.byte_len(),
+            ControlPDU::FriendPoll(pdu) => pdu.byte_len(),
+            ControlPDU::FriendUpdate(pdu) => pdu.byte_len(),
+            ControlPDU::FriendRequest(pdu) => pdu.byte_len(),
+            ControlPDU::FriendOffer(pdu) => pdu.byte_len(),
+            ControlPDU::FriendClear(pdu) => pdu.byte_len(),
+            ControlPDU::FriendClearConfirm(pdu) => pdu.byte_len(),
+            ControlPDU::FriendSubscriptionListAdd(pdu) => pdu.byte_len(),
+            ControlPDU::FriendSubscriptionListRemove(pdu) => pdu.byte_len(),
+            ControlPDU::FriendSubscriptionListConfirm(pdu) => pdu.byte_len(),
+            ControlPDU::Heartbeat(pdu) => pdu.byte_len(),
+        }
+    }
+    pub fn opcode(&self) -> ControlOpcode {
+        match self {
+            ControlPDU::Ack(_) => Ack::OPCODE,
+            ControlPDU::FriendPoll(_) => FriendPoll::OPCODE,
+            ControlPDU::FriendUpdate(_) => FriendUpdate::OPCODE,
+            ControlPDU::FriendRequest(_) => FriendRequest::OPCODE,
+            ControlPDU::FriendOffer(_) => FriendOffer::OPCODE,
+            ControlPDU::FriendClear(_) => FriendClear::OPCODE,
+            ControlPDU::FriendClearConfirm(_) => FriendClearConfirm::OPCODE,
+            ControlPDU::FriendSubscriptionListAdd(_) => FriendSubscriptionListAdd::OPCODE,
+            ControlPDU::FriendSubscriptionListRemove(_) => FriendSubscriptionListRemove::OPCODE,
+            ControlPDU::FriendSubscriptionListConfirm(_) => FriendSubscriptionListConfirm::OPCODE,
+            ControlPDU::Heartbeat(_) => Heartbeat::OPCODE,
+        }
+    }
+    pub fn try_pack<Storage: AsMut<u8>>(
+        &self,
+        payload: &mut ControlPayload<Storage>,
+    ) -> Result<(), ControlMessageError> {
+        match self {
+            ControlPDU::Ack(pdu) => pdu.try_pack(payload),
+            ControlPDU::FriendPoll(pdu) => pdu.try_pack(payload),
+            ControlPDU::FriendUpdate(pdu) => pdu.try_pack(payload),
+            ControlPDU::FriendRequest(pdu) => pdu.try_pack(payload),
+            ControlPDU::FriendOffer(pdu) => pdu.try_pack(payload),
+            ControlPDU::FriendClear(pdu) => pdu.try_pack(payload),
+            ControlPDU::FriendClearConfirm(pdu) => pdu.try_pack(payload),
+            ControlPDU::FriendSubscriptionListAdd(pdu) => pdu.try_pack(payload),
+            ControlPDU::FriendSubscriptionListRemove(pdu) => pdu.try_pack(payload),
+            ControlPDU::FriendSubscriptionListConfirm(pdu) => pdu.try_pack(payload),
+            ControlPDU::Heartbeat(pdu) => pdu.try_pack(payload),
+        }
+    }
+    pub fn to_vec_payload(&self) -> Result<ControlPayload<Vec<u8>>, ControlMessageError> {
+        let mut out = ControlPayload {
+            opcode: ControlOpcode::Ack,
+            payload: Vec::with_capacity(self.len()),
+        };
+        out.payload.resize_with(self.len(), u8::default);
+        self.try_pack(&mut out)?;
+        Ok(out)
+    }
+}
+impl<Storage: AsRef<[u8]>> TryFrom<ControlPayload<Storage>> for ControlPDU {
+    type Error = ControlMessageError;
+
+    fn try_from(value: ControlPayload<Storage>) -> Result<Self, Self::Error> {
+        let buf = value.payload.as_ref();
+        Ok(match value.opcode {
+            ControlOpcode::Ack => ControlPDU::Ack(Ack::unpack(buf)?),
+            ControlOpcode::FriendPoll => ControlPDU::FriendPoll(FriendPoll::unpack(buf)?),
+            ControlOpcode::FriendUpdate => ControlPDU::FriendUpdate(FriendUpdate::unpack(buf)?),
+            ControlOpcode::FriendRequest => ControlPDU::FriendRequest(FriendRequest::unpack(buf)?),
+            ControlOpcode::FriendOffer => ControlPDU::FriendOffer(FriendOffer::unpack(buf)?),
+            ControlOpcode::FriendClear => ControlPDU::FriendClear(FriendClear::unpack(buf)?),
+            ControlOpcode::FriendClearConfirm => {
+                ControlPDU::FriendClearConfirm(FriendClearConfirm::unpack(buf)?)
+            }
+            ControlOpcode::FriendSubscriptionListAdd => {
+                ControlPDU::FriendSubscriptionListAdd(FriendSubscriptionListAdd::unpack(buf)?)
+            }
+            ControlOpcode::FriendSubscriptionListRemove => {
+                ControlPDU::FriendSubscriptionListRemove(FriendSubscriptionListRemove::unpack(buf)?)
+            }
+            ControlOpcode::FriendSubscriptionListConfirm => {
+                ControlPDU::FriendSubscriptionListConfirm(FriendSubscriptionListConfirm::unpack(
+                    buf,
+                )?)
+            }
+            ControlOpcode::Heartbeat => ControlPDU::Heartbeat(Heartbeat::unpack(buf)?),
+        })
+    }
+}
+impl TryFrom<&UnsegmentedControlPDU> for ControlPDU {
+    type Error = ControlMessageError;
+
+    fn try_from(value: &UnsegmentedControlPDU) -> Result<Self, Self::Error> {
+        ControlPayload {
+            opcode: value.opcode(),
+            payload: value.data(),
+        }
+        .try_into()
     }
 }
 pub enum ControlMessageError {
@@ -82,6 +176,13 @@ pub trait ControlMessage: Sized {
     fn byte_len(&self) -> usize;
     fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError>;
     fn pack(buf: &mut [u8]) -> Result<(), ControlMessageError>;
+    fn try_pack<Storage: AsMut<[u8]>>(
+        payload: &mut ControlPayload<Storage>,
+    ) -> Result<(), ControlMessageError> {
+        Self::pack(payload.payload.as_mut())?;
+        payload.opcode = Self::OPCODE;
+        Ok(())
+    }
     fn try_from_pdu(value: &UnsegmentedControlPDU) -> Result<Self, ControlMessageError> {
         if value.opcode() == Self::OPCODE {
             Self::unpack(value.data())
@@ -126,21 +227,173 @@ impl ControlMessage for Ack {
 }
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct FriendPoll {}
+impl ControlMessage for FriendPoll {
+    const OPCODE: ControlOpcode = unimplemented!();
+
+    fn byte_len(&self) -> usize {
+        unimplemented!()
+    }
+
+    fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError> {
+        unimplemented!()
+    }
+
+    fn pack(buf: &mut [u8]) -> Result<(), ControlMessageError> {
+        unimplemented!()
+    }
+}
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct FriendUpdate {}
+impl ControlMessage for FriendUpdate {
+    const OPCODE: ControlOpcode = unimplemented!();
+
+    fn byte_len(&self) -> usize {
+        unimplemented!()
+    }
+
+    fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError> {
+        unimplemented!()
+    }
+
+    fn pack(buf: &mut [u8]) -> Result<(), ControlMessageError> {
+        unimplemented!()
+    }
+}
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct FriendRequest {}
+impl ControlMessage for FriendRequest {
+    const OPCODE: ControlOpcode = unimplemented!();
+
+    fn byte_len(&self) -> usize {
+        unimplemented!()
+    }
+
+    fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError> {
+        unimplemented!()
+    }
+
+    fn pack(buf: &mut [u8]) -> Result<(), ControlMessageError> {
+        unimplemented!()
+    }
+}
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct FriendOffer {}
+impl ControlMessage for FriendOffer {
+    const OPCODE: ControlOpcode = unimplemented!();
+
+    fn byte_len(&self) -> usize {
+        unimplemented!()
+    }
+
+    fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError> {
+        unimplemented!()
+    }
+
+    fn pack(buf: &mut [u8]) -> Result<(), ControlMessageError> {
+        unimplemented!()
+    }
+}
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct FriendClear {}
+impl ControlMessage for FriendClear {
+    const OPCODE: ControlOpcode = unimplemented!();
+
+    fn byte_len(&self) -> usize {
+        unimplemented!()
+    }
+
+    fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError> {
+        unimplemented!()
+    }
+
+    fn pack(buf: &mut [u8]) -> Result<(), ControlMessageError> {
+        unimplemented!()
+    }
+}
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct FriendClearConfirm {}
+impl ControlMessage for FriendClearConfirm {
+    const OPCODE: ControlOpcode = unimplemented!();
+
+    fn byte_len(&self) -> usize {
+        unimplemented!()
+    }
+
+    fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError> {
+        unimplemented!()
+    }
+
+    fn pack(buf: &mut [u8]) -> Result<(), ControlMessageError> {
+        unimplemented!()
+    }
+}
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct FriendSubscriptionListAdd {}
+impl ControlMessage for FriendSubscriptionListAdd {
+    const OPCODE: ControlOpcode = unimplemented!();
+
+    fn byte_len(&self) -> usize {
+        unimplemented!()
+    }
+
+    fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError> {
+        unimplemented!()
+    }
+
+    fn pack(buf: &mut [u8]) -> Result<(), ControlMessageError> {
+        unimplemented!()
+    }
+}
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct FriendSubscriptionListRemove {}
+impl ControlMessage for FriendSubscriptionListRemove {
+    const OPCODE: ControlOpcode = unimplemented!();
+
+    fn byte_len(&self) -> usize {
+        unimplemented!()
+    }
+
+    fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError> {
+        unimplemented!()
+    }
+
+    fn pack(buf: &mut [u8]) -> Result<(), ControlMessageError> {
+        unimplemented!()
+    }
+}
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct FriendSubscriptionListConfirm {}
+
+impl ControlMessage for FriendSubscriptionListConfirm {
+    const OPCODE: ControlOpcode = unimplemented!();
+
+    fn byte_len(&self) -> usize {
+        unimplemented!()
+    }
+
+    fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError> {
+        unimplemented!()
+    }
+
+    fn pack(buf: &mut [u8]) -> Result<(), ControlMessageError> {
+        unimplemented!()
+    }
+}
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct Heartbeat {}
+
+impl ControlMessage for Heartbeat {
+    const OPCODE: ControlOpcode = unimplemented!();
+
+    fn byte_len(&self) -> usize {
+        unimplemented!()
+    }
+
+    fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError> {
+        unimplemented!()
+    }
+
+    fn pack(buf: &mut [u8]) -> Result<(), ControlMessageError> {
+        unimplemented!()
+    }
+}
