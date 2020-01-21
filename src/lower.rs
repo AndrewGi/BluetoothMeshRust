@@ -609,7 +609,7 @@ impl PDU {
         match self {
             PDU::UnsegmentedAccess(_) => None,
             PDU::SegmentedAccess(pdu) => Some(pdu.segment_header.seq_zero),
-            PDU::UnsegmentedControl(pdu) => None,
+            PDU::UnsegmentedControl(_) => None,
             PDU::SegmentedControl(pdu) => Some(pdu.segment_header.seq_zero),
         }
     }

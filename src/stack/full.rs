@@ -2,12 +2,18 @@ use crate::bearer::{IncomingEncryptedNetworkPDU, OutgoingEncryptedNetworkPDU};
 use crate::interface::{InputInterfaces, InterfaceSink, OutputInterfaces};
 
 use crate::relay::RelayPDU;
-use crate::stack::messages::IncomingNetworkPDU;
+use crate::stack::messages::{
+    EncryptedIncomingMessage, IncomingControlMessage, IncomingMessage, IncomingNetworkPDU,
+    IncomingTransportPDU,
+};
 use crate::stack::{segments, SendError, StackInternals};
-use crate::{net, replay};
+use crate::{lower, net, replay};
 
-use crate::control::ControlPDU;
+use crate::control::{ControlMessageError, ControlOpcode, ControlPDU};
+use crate::lower::SegmentedPDU::Control;
 use crate::lower::SeqZero;
+use crate::upper::{EncryptedAppPayload, UpperPDUConversionError, PDU};
+use alloc::boxed::Box;
 use core::convert::{TryFrom, TryInto};
 use parking_lot::{Mutex, RwLock};
 use std::sync::mpsc;
@@ -15,6 +21,8 @@ use std::sync::mpsc;
 pub struct FullStack<'a> {
     network_pdu_sender: mpsc::Sender<IncomingEncryptedNetworkPDU>,
     network_pdu_receiver: mpsc::Receiver<IncomingEncryptedNetworkPDU>,
+    app_pdu_sender: mpsc::Sender<IncomingMessage<Box<[u8]>>>,
+    app_pdu_receiver: mpsc::Receiver<IncomingMessage<Box<[u8]>>>,
     input_interfaces: InputInterfaces<InputInterfaceSink>,
     output_interfaces: OutputInterfaces<'a>,
     segments: segments::Segments,
@@ -31,32 +39,41 @@ impl InterfaceSink for InputInterfaceSink {
     }
 }
 pub enum FullStackError {
-    NetworkPDUQueueClosed,
     SendError(SendError),
 }
-
+pub enum RecvError {
+    NoMatchingNetKey,
+    MalformedNetworkPDU,
+    MalformedControlPDU,
+    OldSeq,
+    NetworkPDUQueueClosed,
+    OldSeqZero,
+}
 impl<'a> FullStack<'a> {
     pub fn new(internals: StackInternals) -> Self {
-        let (tx, rx) = mpsc::channel();
+        let (tx_net, rx_net) = mpsc::channel();
+        let (tx_app, rx_app) = mpsc::channel();
         Self {
-            network_pdu_sender: tx.clone(),
-            network_pdu_receiver: rx,
-            input_interfaces: InputInterfaces::new(InputInterfaceSink(tx)),
+            network_pdu_sender: tx_net.clone(),
+            network_pdu_receiver: rx_net,
+            app_pdu_sender: tx_app,
+            app_pdu_receiver: rx_app,
+            input_interfaces: InputInterfaces::new(InputInterfaceSink(tx_net)),
             output_interfaces: Default::default(),
             internals: RwLock::new(internals),
             replay_cache: Mutex::new(replay::Cache::new()),
             segments: segments::Segments::new(),
         }
     }
-    fn handle_next_encrypted_network_pdu(&self) -> Result<(), FullStackError> {
-        self.handle_encrypted_net_pdu(self.next_encrypted_network_pdu()?);
-        Ok(())
+    fn handle_next_encrypted_network_pdu(&self) -> Result<(), RecvError> {
+        self.handle_encrypted_net_pdu(self.next_encrypted_network_pdu()?)
     }
-    fn next_encrypted_network_pdu(&self) -> Result<IncomingEncryptedNetworkPDU, FullStackError> {
+    fn next_encrypted_network_pdu(&self) -> Result<IncomingEncryptedNetworkPDU, RecvError> {
         self.network_pdu_receiver
             .recv()
-            .map_err(|_| FullStackError::NetworkPDUQueueClosed)
+            .map_err(|_| RecvError::NetworkPDUQueueClosed)
     }
+    fn handle_recv_error(&self, error: RecvError, pdu: &IncomingNetworkPDU) {}
     /// Returns `true` if the `header` is old or `false` if the `header` is new and valid.
     /// If no information about the source of the PDU (Src and Seq), it records the header
     /// and returns `false`
@@ -65,22 +82,55 @@ impl<'a> FullStack<'a> {
             .lock()
             .replay_net_check(header.src, header.seq, header.ivi, seq_zero)
     }
-    fn handle_net_pdu(&self, incoming: IncomingNetworkPDU) {
+    fn handle_net_pdu(&self, incoming: IncomingNetworkPDU) -> Result<(), RecvError> {
         if let Ok(seg_event) = segments::SegmentEvent::try_from(&incoming) {
             self.segments.feed_event(seg_event);
         }
+        match &incoming.pdu.payload {
+            lower::PDU::UnsegmentedAccess(unseg_access) => {
+                self.handle_encrypted_incoming_message(EncryptedIncomingMessage {
+                    encrypted_app_payload: unseg_access.into(),
+                    seq: incoming.pdu.header.seq.into(),
+                    seg_count: 0,
+                    net_key_index: incoming.net_key_index,
+                    dst: incoming.pdu.header.dst,
+                    src: incoming.pdu.header.src,
+                    ttl: Some(incoming.pdu.header.ttl),
+                    rssi: incoming.rssi,
+                })
+            }
+            lower::PDU::UnsegmentedControl(unseg_control) => {
+                self.handle_control(IncomingControlMessage {
+                    control_pdu: {
+                        match ControlPDU::try_from(unseg_control) {
+                            Ok(pdu) => pdu,
+                            Err(_) => return Err(RecvError::MalformedControlPDU), // Badly formatted Control PDU
+                        }
+                    },
+                    src: incoming.pdu.header.src,
+                    rssi: incoming.rssi,
+                    ttl: Some(incoming.pdu.header.ttl),
+                })
+            }
+            // The rest of Segmented PDUs which are SegmentEvents. If they made it this far
+            // they are badly formatted Segmented PDUs
+            _ => Err(RecvError::MalformedNetworkPDU),
+        }
     }
-    fn handle_control(&self, _control_pdu: ControlPDU) {
+    fn handle_control(&self, control_pdu: IncomingControlMessage) -> Result<(), RecvError> {
+        unimplemented!()
+    }
+    fn handle_encrypted_incoming_message<Storage: AsRef<[u8]> + AsMut<[u8]>>(
+        &self,
+        msg: EncryptedIncomingMessage<Storage>,
+    ) -> Result<(), RecvError> {
         unimplemented!()
     }
     /// Send encrypted net_pdu through all output interfaces.
-    fn send_encrypted_net_pdu(
-        &self,
-        pdu: OutgoingEncryptedNetworkPDU,
-    ) -> Result<(), FullStackError> {
+    fn send_encrypted_net_pdu(&self, pdu: OutgoingEncryptedNetworkPDU) -> Result<(), SendError> {
         self.output_interfaces
             .send_pdu(&pdu)
-            .map_err(|e| FullStackError::SendError(SendError::BearerError(e)))
+            .map_err(|e| SendError::BearerError(e))
     }
     fn relay_pdu(&self, pdu: RelayPDU) {
         let internals = self.internals.read_recursive();
@@ -92,8 +142,19 @@ impl<'a> FullStack<'a> {
         }
         todo!("relay PDU")
     }
-
-    pub fn handle_encrypted_net_pdu(&self, incoming: IncomingEncryptedNetworkPDU) {
+    fn handle_upper_pdu<Storage: AsRef<[u8]> + AsMut<[u8]>>(
+        &self,
+        pdu: IncomingTransportPDU<Storage>,
+    ) {
+        match EncryptedAppPayload::try_from(pdu.upper_pdu) {
+            Ok(app_pdu) => {}
+            Err(_) => {}
+        }
+    }
+    pub fn handle_encrypted_net_pdu(
+        &self,
+        incoming: IncomingEncryptedNetworkPDU,
+    ) -> Result<(), RecvError> {
         let internals = self.internals.read();
         if let Some((net_key_index, iv_index, pdu)) =
             internals.decrypt_network_pdu(incoming.encrypted_pdu.as_ref())
@@ -102,7 +163,7 @@ impl<'a> FullStack<'a> {
                 self.check_replay_cache(pdu.header(), pdu.payload.seq_zero());
             if is_old_seq {
                 // We've already seen this PDU
-                return;
+                return Err(RecvError::OldSeq);
             }
             // Seq isn't old but SeqZero might be. Even if SeqZero is old, we still relay it to other nodes.
             if !incoming.dont_relay
@@ -117,7 +178,7 @@ impl<'a> FullStack<'a> {
             }
             if is_old_seq_zero {
                 // We've already handle this PDU
-                return;
+                return Err(RecvError::OldSeqZero);
             }
             self.handle_net_pdu(IncomingNetworkPDU {
                 pdu,
@@ -125,6 +186,8 @@ impl<'a> FullStack<'a> {
                 iv_index,
                 rssi: incoming.rssi,
             })
+        } else {
+            Err(RecvError::NoMatchingNetKey)
         }
     }
 }

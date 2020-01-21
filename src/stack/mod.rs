@@ -15,10 +15,13 @@ use crate::crypto::materials::{ApplicationSecurityMaterials, NetKeyMap};
 use crate::crypto::nonce::{AppNonceParts, DeviceNonceParts};
 use crate::device_state::{DeviceState, SeqCounter};
 use crate::lower::SegO;
-use crate::mesh::{AppKeyIndex, IVIndex, NetKeyIndex, TTL};
+use crate::mesh::{AppKeyIndex, ElementIndex, IVIndex, NetKeyIndex, TTL};
+use crate::segmenter::EncryptedNetworkPDUIterator;
 use crate::stack::messages::{EncryptedOutgoingMessage, MessageKeys, OutgoingMessage};
 use crate::upper;
 use crate::{device_state, net};
+use alloc::vec::Vec;
+use core::convert::TryFrom;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub struct NetworkHeader {
@@ -41,10 +44,11 @@ pub struct NetworkHeader {
 /// The scheduling and input/output queues are handled by `FullStack`.
 pub struct StackInternals {
     device_state: device_state::DeviceState,
-    seq_counter: SeqCounter,
+    seq_counters: Vec<SeqCounter>,
 }
 pub enum SendError {
     InvalidAppKeyIndex,
+    InvalidIVIndex,
     InvalidNetKeyIndex,
     InvalidDestination,
     InvalidSourceElement,
@@ -53,10 +57,17 @@ pub enum SendError {
 }
 impl StackInternals {
     pub fn new(device_state: device_state::DeviceState) -> Self {
+        let mut counters = Vec::with_capacity(device_state.element_count().into());
+        counters.resize_with(device_state.element_count().into(), SeqCounter::default);
         Self {
             device_state,
-            seq_counter: SeqCounter::default(),
+            seq_counters: counters,
         }
+    }
+    pub fn seq_counter(&self, element_index: ElementIndex) -> &SeqCounter {
+        self.seq_counters
+            .get(usize::from(element_index.0))
+            .expect("invalid element_index")
     }
     /// Encrypts and Assigns a Sequence Numbe
     pub fn app_encrypt<Storage: AsRef<[u8]> + AsMut<[u8]>>(
@@ -77,7 +88,7 @@ impl StackInternals {
             Some(address) => address,
         };
         let aszmic = msg.should_segment();
-        let seg_count = u8::from(msg.seg_o().unwrap_or(SegO::new(1)));
+        let seg_count = u8::from(msg.seg_o().unwrap_or(SegO::new(0))) + 1;
         let (sm, net_key_index, seq) = match msg.encryption_key {
             MessageKeys::Device(net_key_index) => {
                 // Check for a valid net_key
@@ -90,7 +101,10 @@ impl StackInternals {
                     None => return Err((SendError::InvalidNetKeyIndex, msg)),
                     Some(_) => (),
                 };
-                let seq_range = match self.seq_counter.inc_seq(seg_count.into()) {
+                let seq_range = match self
+                    .seq_counter(msg.source_element_index)
+                    .inc_seq(seg_count.into())
+                {
                     None => return Err((SendError::OutOfSeq, msg)),
                     Some(seq) => seq,
                 };
@@ -132,7 +146,10 @@ impl StackInternals {
                     None => return Err((SendError::InvalidNetKeyIndex, msg)),
                     Some(_) => (),
                 };
-                let seq_range = match self.seq_counter.inc_seq(seg_count.into()) {
+                let seq_range = match self
+                    .seq_counter(msg.source_element_index)
+                    .inc_seq(seg_count.into())
+                {
                     None => return Err((SendError::OutOfSeq, msg)),
                     Some(seq) => seq,
                 };
@@ -174,6 +191,17 @@ impl StackInternals {
             ttl,
         })
     }
+    pub fn owns_unicast_address(&self, unicast_address: UnicastAddress) -> Option<ElementIndex> {
+        let range = self.device_state.unicast_range();
+        if range.contains(&unicast_address) {
+            Some(ElementIndex(
+                u8::try_from(u16::from(range.start) - u16::from(unicast_address))
+                    .expect("too many elements"),
+            ))
+        } else {
+            None
+        }
+    }
     pub fn default_ttl(&self) -> TTL {
         self.device_state.default_ttl()
     }
@@ -209,12 +237,30 @@ impl StackInternals {
 
         None
     }
-    pub fn encrypted_network_pdu(
+    fn is_valid_iv_index(&self, iv_index: IVIndex) -> bool {
+        self.device_state
+            .rx_iv_index(iv_index.ivi())
+            .map(|iv| iv == iv_index)
+            .unwrap_or(false)
+    }
+    fn encrypted_network_pdus<I: Iterator<Item = net::PDU>>(
         &self,
-        _network_pdu: net::PDU,
-        _net_key_index: NetKeyIndex,
-        _iv_index: IVIndex,
-    ) -> Result<net::PDU, SendError> {
-        unimplemented!()
+        network_pdus: I,
+        net_key_index: NetKeyIndex,
+        iv_index: IVIndex,
+    ) -> Result<EncryptedNetworkPDUIterator<I>, SendError> {
+        if !self.is_valid_iv_index(iv_index) {
+            return Err(SendError::InvalidIVIndex);
+        }
+        let net_sm = self
+            .net_keys()
+            .get_keys(net_key_index)
+            .ok_or(SendError::InvalidNetKeyIndex)?
+            .tx_key();
+        Ok(EncryptedNetworkPDUIterator {
+            pdus: network_pdus,
+            iv_index,
+            net_keys: net_sm.network_keys(),
+        })
     }
 }
