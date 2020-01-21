@@ -5,9 +5,9 @@ use crate::ble::RSSI;
 use crate::crypto::aes::MicSize;
 use crate::device_state::SeqRange;
 use crate::lower::SegO;
-use crate::mesh::{AppKeyIndex, IVIndex, NetKeyIndex, SequenceNumber, TTL};
+use crate::mesh::{AppKeyIndex, ElementIndex, IVIndex, NetKeyIndex, SequenceNumber, TTL};
 use crate::upper::{AppPayload, EncryptedAppPayload};
-use crate::{lower, net, upper};
+use crate::{control, lower, net, upper};
 
 pub enum MessageKeys {
     Device(NetKeyIndex),
@@ -20,7 +20,7 @@ pub struct OutgoingMessage<Storage: AsRef<[u8]> + AsMut<[u8]>> {
     pub force_segment: bool,
     pub encryption_key: MessageKeys,
     pub iv_index: IVIndex,
-    pub source_element_index: u8,
+    pub source_element_index: ElementIndex,
     pub dst: Address,
     pub ttl: Option<TTL>,
 }
@@ -50,6 +50,22 @@ pub struct EncryptedOutgoingMessage<Storage: AsRef<[u8]> + AsMut<[u8]>> {
     pub(crate) dst: Address,
     pub(crate) ttl: TTL,
 }
+pub struct EncryptedIncomingMessage<Storage: AsRef<[u8]> + AsMut<[u8]>> {
+    pub(crate) encrypted_app_payload: EncryptedAppPayload<Storage>,
+    pub(crate) seq: SeqRange,
+    pub(crate) seg_count: u8,
+    pub(crate) net_key_index: NetKeyIndex,
+    pub(crate) dst: Address,
+    pub(crate) src: UnicastAddress,
+    pub(crate) ttl: Option<TTL>,
+    pub(crate) rssi: Option<RSSI>,
+}
+pub struct IncomingControlMessage {
+    pub control_pdu: control::ControlPDU,
+    pub src: UnicastAddress,
+    pub rssi: Option<RSSI>,
+    pub ttl: Option<TTL>,
+}
 pub struct IncomingMessage<Storage: AsRef<[u8]> + AsMut<[u8]>> {
     pub app_payload: Storage,
     pub src: UnicastAddress,
@@ -66,7 +82,9 @@ pub struct IncomingNetworkPDU {
     pub rssi: Option<RSSI>,
 }
 pub struct IncomingTransportPDU<Storage: AsRef<[u8]> + AsMut<[u8]>> {
-    pub lower_pdu: upper::PDU<Storage>,
+    pub upper_pdu: upper::PDU<Storage>,
     pub seq: SequenceNumber,
     pub ttl: TTL,
+    pub src: UnicastAddress,
+    pub dst: Address,
 }

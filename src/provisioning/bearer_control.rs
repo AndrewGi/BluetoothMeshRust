@@ -1,3 +1,4 @@
+use crate::provisioning::generic::GPCF;
 use crate::uuid::UUID;
 use core::fmt::{Display, Error, Formatter};
 
@@ -10,7 +11,27 @@ pub enum Opcode {
     LinkAck = 0x01,
     LinkClose = 0x02,
 }
-
+impl Opcode {
+    pub fn with_gpcf(self, gpcf: GPCF) -> u8 {
+        gpcf.pack_with(self.into())
+    }
+    pub fn from_with_gpcf(value: u8) -> (Option<Opcode>, GPCF) {
+        (
+            match value >> 2 {
+                0x00 => Some(Opcode::LinkOpen),
+                0x01 => Some(Opcode::LinkAck),
+                0x02 => Some(Opcode::LinkClose),
+                _ => None,
+            },
+            GPCF::from_masked_u2(value),
+        )
+    }
+}
+impl From<Opcode> for u8 {
+    fn from(opcode: Opcode) -> Self {
+        opcode as u8
+    }
+}
 #[derive(Clone, Copy, Eq, Hash, Ord, PartialOrd, PartialEq, Debug)]
 pub struct LinkOpen(pub UUID);
 
@@ -21,6 +42,9 @@ impl LinkOpen {
     pub fn uuid(&self) -> &UUID {
         &self.0
     }
+    pub const fn byte_len() -> usize {
+        16
+    }
 }
 impl Display for LinkOpen {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
@@ -29,6 +53,11 @@ impl Display for LinkOpen {
 }
 #[derive(Clone, Copy, Eq, Hash, Ord, PartialOrd, PartialEq, Debug)]
 pub struct LinkAck();
+impl LinkAck {
+    pub const fn byte_len() -> usize {
+        0
+    }
+}
 impl Display for LinkAck {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         f.write_str("LinkAck")
@@ -56,13 +85,17 @@ impl LinkClose {
     pub fn new(reason: CloseReason) -> LinkClose {
         Self(reason)
     }
+    pub const fn byte_len() -> usize {
+        1
+    }
 }
 impl Display for LinkClose {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         write!(f, "LinkClose{}", self.0)
     }
 }
-#[derive(Clone, Copy, Eq, PartialEq, Debug, Hash)]
+pub enum BearerControlError {}
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Hash, Ord, PartialOrd)]
 pub enum PDU {
     LinkOpen(LinkOpen),
     LinkAck(LinkAck),

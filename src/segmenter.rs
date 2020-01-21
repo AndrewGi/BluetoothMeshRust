@@ -219,9 +219,9 @@ impl<'a, Storage: AsRef<[u8]>> Iterator for NetworkPDUIterator<'a, Storage> {
     }
 }
 pub struct EncryptedNetworkPDUIterator<'a, PDUIter: Iterator<Item = net::PDU>> {
-    pdus: PDUIter,
-    iv_index: IVIndex,
-    net_keys: &'a NetworkKeys,
+    pub pdus: PDUIter,
+    pub iv_index: IVIndex,
+    pub net_keys: &'a NetworkKeys,
 }
 impl<'a, PDUIter: Iterator<Item = net::PDU>> EncryptedNetworkPDUIterator<'a, PDUIter> {
     pub fn new(pdus: PDUIter, iv_index: IVIndex, net_keys: &'a NetworkKeys) -> Self {
