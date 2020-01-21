@@ -3,7 +3,8 @@ use crate::interface::{InputInterfaces, InterfaceSink, OutputInterfaces};
 
 use crate::relay::RelayPDU;
 use crate::stack::messages::{
-    EncryptedIncomingMessage, IncomingControlMessage, IncomingNetworkPDU, IncomingTransportPDU,
+    EncryptedIncomingMessage, IncomingControlMessage, IncomingMessage, IncomingNetworkPDU,
+    IncomingTransportPDU,
 };
 use crate::stack::{segments, SendError, StackInternals};
 use crate::{lower, net, replay};
@@ -12,6 +13,7 @@ use crate::control::{ControlMessageError, ControlOpcode, ControlPDU};
 use crate::lower::SegmentedPDU::Control;
 use crate::lower::SeqZero;
 use crate::upper::{EncryptedAppPayload, UpperPDUConversionError, PDU};
+use alloc::boxed::Box;
 use core::convert::{TryFrom, TryInto};
 use parking_lot::{Mutex, RwLock};
 use std::sync::mpsc;
@@ -19,6 +21,8 @@ use std::sync::mpsc;
 pub struct FullStack<'a> {
     network_pdu_sender: mpsc::Sender<IncomingEncryptedNetworkPDU>,
     network_pdu_receiver: mpsc::Receiver<IncomingEncryptedNetworkPDU>,
+    app_pdu_sender: mpsc::Sender<IncomingMessage<Box<[u8]>>>,
+    app_pdu_receiver: mpsc::Receiver<IncomingMessage<Box<[u8]>>>,
     input_interfaces: InputInterfaces<InputInterfaceSink>,
     output_interfaces: OutputInterfaces<'a>,
     segments: segments::Segments,
@@ -35,7 +39,6 @@ impl InterfaceSink for InputInterfaceSink {
     }
 }
 pub enum FullStackError {
-    NetworkPDUQueueClosed,
     SendError(SendError),
 }
 pub enum RecvError {
@@ -43,29 +46,32 @@ pub enum RecvError {
     MalformedNetworkPDU,
     MalformedControlPDU,
     OldSeq,
+    NetworkPDUQueueClosed,
     OldSeqZero,
 }
 impl<'a> FullStack<'a> {
     pub fn new(internals: StackInternals) -> Self {
-        let (tx, rx) = mpsc::channel();
+        let (tx_net, rx_net) = mpsc::channel();
+        let (tx_app, rx_app) = mpsc::channel();
         Self {
-            network_pdu_sender: tx.clone(),
-            network_pdu_receiver: rx,
-            input_interfaces: InputInterfaces::new(InputInterfaceSink(tx)),
+            network_pdu_sender: tx_net.clone(),
+            network_pdu_receiver: rx_net,
+            app_pdu_sender: tx_app,
+            app_pdu_receiver: rx_app,
+            input_interfaces: InputInterfaces::new(InputInterfaceSink(tx_net)),
             output_interfaces: Default::default(),
             internals: RwLock::new(internals),
             replay_cache: Mutex::new(replay::Cache::new()),
             segments: segments::Segments::new(),
         }
     }
-    fn handle_next_encrypted_network_pdu(&self) -> Result<(), FullStackError> {
-        self.handle_encrypted_net_pdu(self.next_encrypted_network_pdu()?);
-        Ok(())
+    fn handle_next_encrypted_network_pdu(&self) -> Result<(), RecvError> {
+        self.handle_encrypted_net_pdu(self.next_encrypted_network_pdu()?)
     }
-    fn next_encrypted_network_pdu(&self) -> Result<IncomingEncryptedNetworkPDU, FullStackError> {
+    fn next_encrypted_network_pdu(&self) -> Result<IncomingEncryptedNetworkPDU, RecvError> {
         self.network_pdu_receiver
             .recv()
-            .map_err(|_| FullStackError::NetworkPDUQueueClosed)
+            .map_err(|_| RecvError::NetworkPDUQueueClosed)
     }
     fn handle_recv_error(&self, error: RecvError, pdu: &IncomingNetworkPDU) {}
     /// Returns `true` if the `header` is old or `false` if the `header` is new and valid.
