@@ -20,7 +20,6 @@ edition = "2018"
 default = ["full_stack"]
 full_stack = ["parking_lot", "std", "slog"]
 std = []
-cli = ["full_stack"]
 
 
 [dependencies]
