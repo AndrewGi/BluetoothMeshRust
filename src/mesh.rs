@@ -443,6 +443,8 @@ impl ElementIndex {
         self.0 == 0
     }
 }
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
+pub struct ElementCount(pub u8);
 const COUNT_MAX: u8 = 0b111;
 /// 3-bit Transit Count,
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
