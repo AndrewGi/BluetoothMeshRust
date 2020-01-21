@@ -95,7 +95,7 @@ impl ControlPDU {
             ControlPDU::Heartbeat(_) => Heartbeat::OPCODE,
         }
     }
-    pub fn try_pack<Storage: AsMut<u8>>(
+    pub fn try_pack<Storage: AsMut<[u8]> + AsRef<[u8]>>(
         &self,
         payload: &mut ControlPayload<Storage>,
     ) -> Result<(), ControlMessageError> {
@@ -176,7 +176,8 @@ pub trait ControlMessage: Sized {
     fn byte_len(&self) -> usize;
     fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError>;
     fn pack(buf: &mut [u8]) -> Result<(), ControlMessageError>;
-    fn try_pack<Storage: AsMut<[u8]>>(
+    fn try_pack<Storage: AsRef<[u8]> + AsMut<[u8]>>(
+        &self,
         payload: &mut ControlPayload<Storage>,
     ) -> Result<(), ControlMessageError> {
         Self::pack(payload.payload.as_mut())?;
@@ -228,7 +229,7 @@ impl ControlMessage for Ack {
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct FriendPoll {}
 impl ControlMessage for FriendPoll {
-    const OPCODE: ControlOpcode = unimplemented!();
+    const OPCODE: ControlOpcode = ControlOpcode::FriendPoll;
 
     fn byte_len(&self) -> usize {
         unimplemented!()
@@ -245,7 +246,7 @@ impl ControlMessage for FriendPoll {
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct FriendUpdate {}
 impl ControlMessage for FriendUpdate {
-    const OPCODE: ControlOpcode = unimplemented!();
+    const OPCODE: ControlOpcode = ControlOpcode::FriendUpdate;
 
     fn byte_len(&self) -> usize {
         unimplemented!()
@@ -262,7 +263,7 @@ impl ControlMessage for FriendUpdate {
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct FriendRequest {}
 impl ControlMessage for FriendRequest {
-    const OPCODE: ControlOpcode = unimplemented!();
+    const OPCODE: ControlOpcode = ControlOpcode::FriendRequest;
 
     fn byte_len(&self) -> usize {
         unimplemented!()
@@ -279,7 +280,7 @@ impl ControlMessage for FriendRequest {
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct FriendOffer {}
 impl ControlMessage for FriendOffer {
-    const OPCODE: ControlOpcode = unimplemented!();
+    const OPCODE: ControlOpcode = ControlOpcode::FriendOffer;
 
     fn byte_len(&self) -> usize {
         unimplemented!()
@@ -296,7 +297,7 @@ impl ControlMessage for FriendOffer {
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct FriendClear {}
 impl ControlMessage for FriendClear {
-    const OPCODE: ControlOpcode = unimplemented!();
+    const OPCODE: ControlOpcode = ControlOpcode::FriendClear;
 
     fn byte_len(&self) -> usize {
         unimplemented!()
@@ -313,7 +314,7 @@ impl ControlMessage for FriendClear {
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct FriendClearConfirm {}
 impl ControlMessage for FriendClearConfirm {
-    const OPCODE: ControlOpcode = unimplemented!();
+    const OPCODE: ControlOpcode = ControlOpcode::FriendClearConfirm;
 
     fn byte_len(&self) -> usize {
         unimplemented!()
@@ -330,7 +331,7 @@ impl ControlMessage for FriendClearConfirm {
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct FriendSubscriptionListAdd {}
 impl ControlMessage for FriendSubscriptionListAdd {
-    const OPCODE: ControlOpcode = unimplemented!();
+    const OPCODE: ControlOpcode = ControlOpcode::FriendSubscriptionListAdd;
 
     fn byte_len(&self) -> usize {
         unimplemented!()
@@ -347,7 +348,7 @@ impl ControlMessage for FriendSubscriptionListAdd {
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct FriendSubscriptionListRemove {}
 impl ControlMessage for FriendSubscriptionListRemove {
-    const OPCODE: ControlOpcode = unimplemented!();
+    const OPCODE: ControlOpcode = ControlOpcode::FriendSubscriptionListRemove;
 
     fn byte_len(&self) -> usize {
         unimplemented!()
@@ -365,7 +366,7 @@ impl ControlMessage for FriendSubscriptionListRemove {
 pub struct FriendSubscriptionListConfirm {}
 
 impl ControlMessage for FriendSubscriptionListConfirm {
-    const OPCODE: ControlOpcode = unimplemented!();
+    const OPCODE: ControlOpcode = ControlOpcode::FriendSubscriptionListConfirm;
 
     fn byte_len(&self) -> usize {
         unimplemented!()
@@ -383,7 +384,7 @@ impl ControlMessage for FriendSubscriptionListConfirm {
 pub struct Heartbeat {}
 
 impl ControlMessage for Heartbeat {
-    const OPCODE: ControlOpcode = unimplemented!();
+    const OPCODE: ControlOpcode = ControlOpcode::Heartbeat;
 
     fn byte_len(&self) -> usize {
         unimplemented!()

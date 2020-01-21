@@ -52,7 +52,7 @@ pub struct EncryptedOutgoingMessage<Storage: AsRef<[u8]> + AsMut<[u8]>> {
 }
 pub struct EncryptedIncomingMessage<Storage: AsRef<[u8]> + AsMut<[u8]>> {
     pub(crate) encrypted_app_payload: EncryptedAppPayload<Storage>,
-    pub(crate) seq: core::ops::RangeTo<SequenceNumber>,
+    pub(crate) seq: SeqRange,
     pub(crate) seg_count: u8,
     pub(crate) net_key_index: NetKeyIndex,
     pub(crate) dst: Address,
