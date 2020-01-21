@@ -55,7 +55,7 @@ impl SeqRange {
 }
 impl From<SequenceNumber> for SeqRange {
     fn from(seq: SequenceNumber) -> Self {
-        Self([seq.0.value()..seq.0.value() + 1])
+        Self(seq.0.value()..seq.0.value() + 1)
     }
 }
 impl Iterator for SeqRange {

@@ -39,8 +39,11 @@ pub enum FullStackError {
     SendError(SendError),
 }
 pub enum RecvError {
+    NoMatchingNetKey,
     MalformedNetworkPDU,
     MalformedControlPDU,
+    OldSeq,
+    OldSeqZero,
 }
 impl<'a> FullStack<'a> {
     pub fn new(internals: StackInternals) -> Self {
@@ -64,6 +67,7 @@ impl<'a> FullStack<'a> {
             .recv()
             .map_err(|_| FullStackError::NetworkPDUQueueClosed)
     }
+    fn handle_recv_error(&self, error: RecvError, pdu: &IncomingNetworkPDU) {}
     /// Returns `true` if the `header` is old or `false` if the `header` is new and valid.
     /// If no information about the source of the PDU (Src and Seq), it records the header
     /// and returns `false`
@@ -107,20 +111,20 @@ impl<'a> FullStack<'a> {
             _ => Err(RecvError::MalformedNetworkPDU),
         }
     }
-    fn handle_control(&self, control_pdu: IncomingControlMessage) {}
+    fn handle_control(&self, control_pdu: IncomingControlMessage) -> Result<(), RecvError> {
+        unimplemented!()
+    }
     fn handle_encrypted_incoming_message<Storage: AsRef<[u8]> + AsMut<[u8]>>(
         &self,
         msg: EncryptedIncomingMessage<Storage>,
     ) -> Result<(), RecvError> {
+        unimplemented!()
     }
     /// Send encrypted net_pdu through all output interfaces.
-    fn send_encrypted_net_pdu(
-        &self,
-        pdu: OutgoingEncryptedNetworkPDU,
-    ) -> Result<(), FullStackError> {
+    fn send_encrypted_net_pdu(&self, pdu: OutgoingEncryptedNetworkPDU) -> Result<(), SendError> {
         self.output_interfaces
             .send_pdu(&pdu)
-            .map_err(|e| FullStackError::SendError(SendError::BearerError(e)))
+            .map_err(|e| SendError::BearerError(e))
     }
     fn relay_pdu(&self, pdu: RelayPDU) {
         let internals = self.internals.read_recursive();
@@ -141,7 +145,10 @@ impl<'a> FullStack<'a> {
             Err(_) => {}
         }
     }
-    pub fn handle_encrypted_net_pdu(&self, incoming: IncomingEncryptedNetworkPDU) {
+    pub fn handle_encrypted_net_pdu(
+        &self,
+        incoming: IncomingEncryptedNetworkPDU,
+    ) -> Result<(), RecvError> {
         let internals = self.internals.read();
         if let Some((net_key_index, iv_index, pdu)) =
             internals.decrypt_network_pdu(incoming.encrypted_pdu.as_ref())
@@ -150,7 +157,7 @@ impl<'a> FullStack<'a> {
                 self.check_replay_cache(pdu.header(), pdu.payload.seq_zero());
             if is_old_seq {
                 // We've already seen this PDU
-                return;
+                return Err(RecvError::OldSeq);
             }
             // Seq isn't old but SeqZero might be. Even if SeqZero is old, we still relay it to other nodes.
             if !incoming.dont_relay
@@ -165,7 +172,7 @@ impl<'a> FullStack<'a> {
             }
             if is_old_seq_zero {
                 // We've already handle this PDU
-                return;
+                return Err(RecvError::OldSeqZero);
             }
             self.handle_net_pdu(IncomingNetworkPDU {
                 pdu,
@@ -173,6 +180,8 @@ impl<'a> FullStack<'a> {
                 iv_index,
                 rssi: incoming.rssi,
             })
+        } else {
+            Err(RecvError::NoMatchingNetKey)
         }
     }
 }

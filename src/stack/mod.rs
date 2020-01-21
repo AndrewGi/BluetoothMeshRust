@@ -66,7 +66,7 @@ impl StackInternals {
     }
     pub fn seq_counter(&self, element_index: ElementIndex) -> &SeqCounter {
         self.seq_counters
-            .get(element_index.0.into())
+            .get(usize::from(element_index.0))
             .expect("invalid element_index")
     }
     /// Encrypts and Assigns a Sequence Numbe
@@ -88,7 +88,7 @@ impl StackInternals {
             Some(address) => address,
         };
         let aszmic = msg.should_segment();
-        let seg_count = u8::from(msg.seg_o().unwrap_or(SegO::new(0)) + 1);
+        let seg_count = u8::from(msg.seg_o().unwrap_or(SegO::new(0))) + 1;
         let (sm, net_key_index, seq) = match msg.encryption_key {
             MessageKeys::Device(net_key_index) => {
                 // Check for a valid net_key
@@ -238,7 +238,10 @@ impl StackInternals {
         None
     }
     fn is_valid_iv_index(&self, iv_index: IVIndex) -> bool {
-        self.device_state.rx_iv_index(iv_index.ivi()) == iv_index
+        self.device_state
+            .rx_iv_index(iv_index.ivi())
+            .map(|iv| iv == iv_index)
+            .unwrap_or(false)
     }
     fn encrypted_network_pdus<I: Iterator<Item = net::PDU>>(
         &self,
