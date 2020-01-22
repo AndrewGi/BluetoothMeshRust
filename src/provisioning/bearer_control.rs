@@ -91,7 +91,7 @@ impl LinkClose {
 }
 impl Display for LinkClose {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        write!(f, "LinkClose{}", self.0)
+        write!(f, "LinkClose({})", self.0)
     }
 }
 pub enum BearerControlError {}
