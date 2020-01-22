@@ -31,7 +31,7 @@ pub mod k_funcs;
 pub mod key;
 pub mod materials;
 pub mod nonce;
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash, Ord, PartialOrd)]
 pub enum MIC {
     Big(u64),
     Small(u32),

@@ -71,9 +71,9 @@ impl From<TransactionNumber> for u8 {
     }
 }
 pub struct PDU {
-    link_id: LinkID,
-    transaction_number: TransactionNumber,
-    generic_pdu: generic::PDU,
+    pub link_id: LinkID,
+    pub transaction_number: TransactionNumber,
+    pub generic_pdu: generic::PDU,
 }
 pub struct PackedPDU {}
 impl AsRef<[u8]> for PackedPDU {
