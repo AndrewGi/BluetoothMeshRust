@@ -4,7 +4,6 @@ use crate::ble::RSSI;
 use crate::mesh::TransmitInterval;
 use crate::net;
 
-
 pub enum BearerError {
     AdvertiseError,
 }
