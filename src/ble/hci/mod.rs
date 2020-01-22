@@ -1,7 +1,9 @@
 /// HCI Layer is Little Endian.
 pub mod le;
 pub mod link_control;
-
+#[cfg(unix)]
+pub mod socket;
+pub mod stream;
 use core::convert::TryFrom;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
@@ -287,11 +289,24 @@ impl From<OCF> for u16 {
 pub struct Opcode(pub OGF, pub OCF);
 
 const MAX_PARAMETERS_LEN: usize = 0xFF;
-pub struct CommandPacket<Storage: AsRef<[u8]> + AsMut<[u8]>> {
+pub struct CommandPacket<Storage: AsRef<[u8]>> {
     opcode: Opcode,
     parameters: Storage,
 }
-pub struct EventPacket<Storage: AsRef<[u8]> + AsMut<[u8]>> {
+pub struct EventPacket<Storage: AsRef<[u8]>> {
     event_opcode: EventCode,
     parameters: Storage,
+}
+pub enum HCICommandError {
+    BadLength,
+    SmallBuffer,
+    BadBytes,
+}
+pub trait Command {
+    fn opcode() -> Opcode;
+    fn byte_len(&self) -> usize;
+    fn pack_into(&self, buf: &mut [u8]) -> Result<(), HCICommandError>;
+    fn unpack_from(buf: &[u8]) -> Result<Self, HCIConversionError>
+    where
+        Self: Sized;
 }

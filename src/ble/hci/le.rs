@@ -1,5 +1,5 @@
-use crate::ble::hci::{HCIConversionError, Opcode, OCF, OGF};
-use core::convert::TryFrom;
+use crate::ble::hci::{Command, HCICommandError, HCIConversionError, Opcode, OCF, OGF};
+use core::convert::{TryFrom, TryInto};
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 #[repr(u16)]
@@ -89,3 +89,78 @@ impl From<LEControllerOpcode> for Opcode {
         Opcode(OGF::LEController, opcode.into())
     }
 }
+
+pub struct SetScanEnable {
+    pub is_enabled: bool,
+    pub filter_duplicates: bool,
+}
+impl SetScanEnable {}
+pub struct SetAdvertisingEnable {
+    pub is_enabled: bool,
+}
+const ADVERTISING_DATA_MAX_LEN: usize = 0x1F;
+pub struct SetAdvertisingData {
+    data: [u8; ADVERTISING_DATA_MAX_LEN],
+    len: u8,
+}
+
+impl Command for SetAdvertisingData {
+    fn opcode() -> Opcode {
+        LEControllerOpcode::SetAdvertisingData.into()
+    }
+
+    fn byte_len(&self) -> usize {
+        usize::from(self.len) + 1
+    }
+
+    fn pack_into(&self, buf: &mut [u8]) -> Result<(), HCICommandError> {
+        if buf.len() != self.byte_len() {
+            Err(HCICommandError::BadLength)
+        } else {
+            buf[0] = self.len;
+            let l = usize::from(self.len);
+            buf[1..1 + l].copy_from_slice(&self.data[..l]);
+            Ok(())
+        }
+    }
+
+    fn unpack_from(buf: &[u8]) -> Result<Self, HCIConversionError>
+    where
+        Self: Sized,
+    {
+        unimplemented!()
+    }
+}
+impl SetAdvertisingData {
+    pub fn new(data: &[u8]) -> SetAdvertisingData {
+        assert!(data.len() <= ADVERTISING_DATA_MAX_LEN);
+        let mut buf = [0_u8; ADVERTISING_DATA_MAX_LEN];
+        buf[..data.len()].copy_from_slice(data);
+        SetAdvertisingData {
+            data: buf,
+            len: data.len().try_into().expect("data max len 0x1F"),
+        }
+    }
+}
+pub enum ScanType {
+    Passive = 0x00,
+    Active = 0x01,
+}
+pub enum OwnAddressType {
+    Public = 0x00,
+    Random = 0x01,
+    PrivateOrPublic = 0x02,
+    PrivateOrRandom = 0x03,
+}
+pub enum ScanningFilterPolicy {
+    All = 0x00,
+    Whitelisted = 0x01,
+    DirectedAll = 0x02,
+    DirectedWhitelisted = 0x03,
+}
+/// Range 0x0004 --> 0x4000
+/// Default 0x0010 (10 ms)
+/// Time = N *  0.625 ms
+/// Time Range 2.5 ms --> 10.24 s
+pub struct ScanInterval(pub u16);
+pub struct ScanWindow(pub u16);
