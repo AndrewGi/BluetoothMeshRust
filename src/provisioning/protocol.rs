@@ -1,7 +1,6 @@
 use crate::crypto::MIC;
-use crate::foundation::publication::PublishPeriod;
 use crate::foundation::state::AttentionTimer;
-use crate::mesh::{ElementCount, ElementIndex};
+use crate::mesh::ElementCount;
 use crate::serializable::bytes::ToFromBytesEndian;
 use core::convert::{TryFrom, TryInto};
 

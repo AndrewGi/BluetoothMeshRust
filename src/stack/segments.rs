@@ -1,10 +1,9 @@
 use crate::address::{Address, UnicastAddress};
 use crate::control::ControlMessage;
-use crate::lower::{SegmentedPDU, SeqZero};
+use crate::lower::SeqZero;
 use crate::mesh::{IVIndex, NetKeyIndex};
-use crate::net::PDU;
 use crate::stack::messages::IncomingNetworkPDU;
-use crate::{control, lower, net, reassembler, segmenter, timestamp};
+use crate::{control, lower, reassembler, segmenter, timestamp};
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
 use core::convert::{TryFrom, TryInto};

@@ -8,13 +8,14 @@ use crate::foundation::state::{
     DefaultTTLState, GATTProxyState, NetworkTransmit, RelayState, SecureNetworkBeaconState,
 };
 use crate::mesh::{
-    AppKeyIndex, ElementIndex, IVIndex, IVUpdateFlag, SequenceNumber, TransmitCount,
+    AppKeyIndex, ElementCount, ElementIndex, IVIndex, IVUpdateFlag, SequenceNumber, TransmitCount,
     TransmitInterval, TransmitSteps, IVI, TTL, U24,
 };
 use crate::random::Randomizable;
 
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
+use core::convert::TryFrom;
 use core::ops::Range;
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
@@ -27,7 +28,7 @@ pub struct Models(BTreeMap<ModelIdentifier, ModelInfo>);
 
 pub struct DeviceState {
     element_address: UnicastAddress,
-    element_count: u8,
+    element_count: ElementCount,
     relay_state: RelayState,
     gatt_proxy_state: GATTProxyState,
     secure_network_beacon_state: SecureNetworkBeaconState,
@@ -97,10 +98,18 @@ impl SeqCounter {
 }
 impl DeviceState {
     /// Generates a new `DeviceState`. `SecurityMaterials` will be new random keys.
-    pub fn new(element_count: u8) -> Self {
+    /// # Panics
+    /// Panics if `element_count == 0 || (primary_address + eleent_count).is_not_unicast()`
+    pub fn new(primary_address: UnicastAddress, element_count: ElementCount) -> Self {
+        assert!(element_count.0 != 0, "zero element_count given");
+        assert!(
+            UnicastAddress::try_from(u16::from(primary_address) + u16::from(element_count.0))
+                .is_ok(),
+            "primary_address + element_count is non-unicast"
+        );
         Self {
             element_count,
-            element_address: UnicastAddress::from_mask_u16(1u16),
+            element_address: primary_address,
             relay_state: RelayState::Disabled,
             gatt_proxy_state: GATTProxyState::Disabled,
             secure_network_beacon_state: SecureNetworkBeaconState::NotBroadcasting,
@@ -123,15 +132,15 @@ impl DeviceState {
         Range {
             start: self.element_address,
             end: UnicastAddress::new(
-                u16::from(self.element_address) + u16::from(self.element_count),
+                u16::from(self.element_address) + u16::from(self.element_count.0),
             ),
         }
     }
-    pub fn element_count(&self) -> u8 {
+    pub fn element_count(&self) -> ElementCount {
         self.element_count
     }
     pub fn element_address(&self, element_index: ElementIndex) -> Option<UnicastAddress> {
-        if element_index.0 >= self.element_count {
+        if element_index.0 >= self.element_count.0 {
             None
         } else {
             Some(UnicastAddress::from_mask_u16(

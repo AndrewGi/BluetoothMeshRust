@@ -18,6 +18,9 @@
 #[macro_use]
 extern crate std;
 
+#[cfg(feature = "serde")]
+extern crate serde;
+
 extern crate alloc;
 
 pub mod ble;

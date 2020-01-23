@@ -1,11 +1,32 @@
 /// HCI Layer is Little Endian.
 pub mod le;
 pub mod link_control;
-#[cfg(unix)]
+#[cfg(all(unix, feature = "std"))]
 pub mod socket;
 pub mod stream;
 use core::convert::TryFrom;
 
+#[derive(Copy, Clone, PartialOrd, PartialEq, Ord, Eq, Debug, Hash)]
+#[repr(u8)]
+pub enum Version {
+    Bluetooth1v0b = 0,
+    Bluetooth1v1 = 1,
+    Bluetooth1v2 = 2,
+    Bluetooth2v0 = 3,
+    Bluetooth2v1 = 4,
+    Bluetooth3v0 = 5,
+    Bluetooth4v0 = 6,
+    Bluetooth4v1 = 7,
+    Bluetooth4v2 = 8,
+    Bluetooth5v0 = 9,
+    Bluetooth5v1 = 10,
+    Bluetooth5v2 = 11,
+}
+impl From<Version> for u8 {
+    fn from(v: Version) -> Self {
+        v as u8
+    }
+}
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct HCIConversionError(());
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
@@ -53,6 +74,18 @@ pub enum ErrorCode {
     QoSNotSupported = 0x27,
     InstantPassed = 0x28,
     PairingWithUnitKeyNotSupported = 0x29,
+    TransactionCollision = 0x2A,
+    QOSUnacceptableParameter = 0x2C,
+    QOSRejected = 0x2D,
+    ClassificationNotSupported = 0x2E,
+    InsufficientSecurity = 0x2F,
+    ParameterOutOfRange = 0x30,
+    RoleSwitchPending = 0x32,
+    SlotViolation = 0x34,
+    RoleSwitchFailed = 0x35,
+    EIRTooLarge = 0x36,
+    SimplePairingNotSupported = 0x37,
+    HostBusyPairing = 0x38,
 }
 impl From<ErrorCode> for u8 {
     fn from(code: ErrorCode) -> Self {
