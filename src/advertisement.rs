@@ -1,6 +1,6 @@
 use crate::bearer::{BearerError, IncomingEncryptedNetworkPDU, OutgoingEncryptedNetworkPDU};
-use crate::ble::advertisement::{AdStructure, AdStructureDataBuffer, RawAdvertisement};
-use crate::ble::gap::{Advertiser, AdvertiserError, Scanner, ScannerSink};
+use crate::ble::advertisement::{AdStructure, RawAdvertisement};
+use crate::ble::gap::{Advertiser, Scanner, ScannerSink};
 use crate::interface::{InputInterface, InterfaceSink, OutputInterface};
 use crate::{ble, net};
 

@@ -57,8 +57,8 @@ pub enum SendError {
 }
 impl StackInternals {
     pub fn new(device_state: device_state::DeviceState) -> Self {
-        let mut counters = Vec::with_capacity(device_state.element_count().into());
-        counters.resize_with(device_state.element_count().into(), SeqCounter::default);
+        let mut counters = Vec::with_capacity(device_state.element_count().0.into());
+        counters.resize_with(device_state.element_count().0.into(), SeqCounter::default);
         Self {
             device_state,
             seq_counters: counters,

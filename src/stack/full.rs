@@ -9,12 +9,11 @@ use crate::stack::messages::{
 use crate::stack::{segments, SendError, StackInternals};
 use crate::{lower, net, replay};
 
-use crate::control::{ControlMessageError, ControlOpcode, ControlPDU};
-use crate::lower::SegmentedPDU::Control;
+use crate::control::ControlPDU;
 use crate::lower::SeqZero;
-use crate::upper::{EncryptedAppPayload, UpperPDUConversionError, PDU};
+use crate::upper::EncryptedAppPayload;
 use alloc::boxed::Box;
-use core::convert::{TryFrom, TryInto};
+use core::convert::TryFrom;
 use parking_lot::{Mutex, RwLock};
 use std::sync::mpsc;
 

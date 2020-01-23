@@ -1,5 +1,4 @@
-use crate::ble::advertisement::{AdStructureError, IncomingAdvertisement, RawAdvertisement};
-use alloc::boxed::Box;
+use crate::ble::advertisement::RawAdvertisement;
 pub trait ScannerSink {
     fn consume_advertisement(&self, advertisement: &RawAdvertisement);
 }
