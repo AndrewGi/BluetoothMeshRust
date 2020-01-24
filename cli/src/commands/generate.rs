@@ -3,7 +3,7 @@ use bluetooth_mesh::mesh::ElementCount;
 use std::fs::File;
 use std::path::Path;
 use std::str::FromStr;
-use crate::CLIError;
+use crate::{CLIError, helper};
 use bluetooth_mesh::address::Address::Unicast;
 use bluetooth_mesh::device_state;
 pub fn sub_command() -> clap::App<'static, 'static> {
@@ -50,20 +50,19 @@ pub fn sub_command() -> clap::App<'static, 'static> {
 }
 pub fn generate_matches(
     parent_logger: &slog::Logger,
-    parent_matches: &clap::ArgMatches,
+    device_state_path: &str,
     gen_matches: &clap::ArgMatches,
 ) -> Result<(), CLIError> {
     match (
-        parent_matches.value_of("device_state"),
         gen_matches.value_of("element_count"),
         gen_matches.value_of("element_address"),
     ) {
-        (Some(device_state_path), Some(element_count), Some(element_address)) => {
+        (Some(element_count), Some(element_address)) => {
             let count = ElementCount(element_count.parse().expect("checked by clap"));
             let address = UnicastAddress::new(element_address.parse().expect("checked by clap"));
             generate(parent_logger, device_state_path, address, count)
         },
-        _ => Err(CLIError::Clap(clap::Error::with_description("missing 'device_state.json` path", clap::ErrorKind::ArgumentNotFound)))
+        _ => unreachable!("element count and element address should have default values")
     }
 }
 pub fn generate(
@@ -73,9 +72,9 @@ pub fn generate(
     element_count: ElementCount,
 ) -> Result<(), CLIError> {
     let logger = parent_logger.new(o!("device_state_path" => device_state_path.to_owned()));
-    let f = std::fs::File::create(Path::new(device_state_path)).map_err(|e| CLIError::IOError(device_state_path.to_owned(), e))?;
+    let f = helper::load_file(device_state_path, true, true)?;
     info!(logger, "found device_state");
     let device_state = device_state::DeviceState::new(primary_address, element_count);
-    serde_json::to_writer(f, &device_state);
+    serde_json::to_writer(f, &device_state).map_err(CLIError::SerdeJSON)?;
     Ok(())
 }
