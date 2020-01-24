@@ -19,13 +19,16 @@ use core::convert::TryFrom;
 use core::ops::Range;
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ModelInfo {
     pub publish: Option<ModelPublishInfo>,
     pub app_key: Vec<AppKeyIndex>,
 }
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Models(BTreeMap<ModelIdentifier, ModelInfo>);
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DeviceState {
     element_address: UnicastAddress,
     element_count: ElementCount,

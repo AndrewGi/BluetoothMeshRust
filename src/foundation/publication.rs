@@ -7,6 +7,7 @@ use core::time;
 
 /// 2-bit Step Resoution used for `PublishPeriod`, etc.
 #[derive(Copy, Clone, Ord, PartialOrd, Debug, Hash, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum StepResolution {
     Milliseconds100 = 0b00,
     Second1 = 0b01,
@@ -31,6 +32,7 @@ impl From<StepResolution> for u8 {
 const STEPS_MAX: u8 = 0x3F;
 /// 6-bit Steps for Periods.
 #[derive(Copy, Clone, Ord, PartialOrd, Debug, Hash, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Steps(u8);
 impl Steps {
     /// # Panics
@@ -47,6 +49,7 @@ impl From<Steps> for u8 {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PublishPeriod {
     pub resolution: StepResolution,
     pub steps: Steps,
@@ -87,6 +90,7 @@ impl From<PublishPeriod> for time::Duration {
     }
 }
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PublishRetransmit(pub TransmitInterval);
 impl From<u8> for PublishRetransmit {
     fn from(b: u8) -> Self {
@@ -99,6 +103,7 @@ impl From<PublishRetransmit> for u8 {
     }
 }
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ModelPublishInfo {
     pub address: Address,
     pub app_key_index: AppKeyIndex,

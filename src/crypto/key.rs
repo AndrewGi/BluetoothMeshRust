@@ -6,14 +6,17 @@ use crate::random::Randomizable;
 use core::convert::{TryFrom, TryInto};
 
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct NetKeyIndex(u16);
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct AppKeyIndex(u16);
 
 pub const KEY_LEN: usize = 16;
 
 /// 128-bit AES Key.
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Key([u8; KEY_LEN]);
 pub const ZERO_KEY: Key = Key([0_u8; KEY_LEN]);
 
@@ -51,6 +54,7 @@ impl AsRef<[u8]> for Key {
     }
 }
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct NetKey(Key);
 
 impl NetKey {
@@ -104,6 +108,7 @@ impl Randomizable for NetKey {
     }
 }
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct IdentityKey(Key);
 
 impl IdentityKey {
@@ -145,6 +150,7 @@ impl From<Key> for IdentityKey {
     }
 }
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct BeaconKey(Key);
 impl BeaconKey {
     #[must_use]
@@ -184,6 +190,7 @@ impl From<Key> for BeaconKey {
     }
 }
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct EncryptionKey(Key);
 
 impl EncryptionKey {
@@ -217,6 +224,7 @@ impl From<Key> for EncryptionKey {
     }
 }
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PrivacyKey(Key);
 
 impl PrivacyKey {
@@ -250,6 +258,7 @@ impl From<Key> for PrivacyKey {
     }
 }
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DevKey(Key);
 
 impl DevKey {
@@ -297,6 +306,7 @@ impl Randomizable for DevKey {
     }
 }
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct AppKey(Key);
 
 impl AppKey {

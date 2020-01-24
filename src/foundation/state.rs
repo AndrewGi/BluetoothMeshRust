@@ -3,6 +3,7 @@ use crate::mesh::TransmitInterval;
 use core::convert::TryFrom;
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
 pub enum RelayState {
     Disabled = 0x00,
@@ -37,8 +38,10 @@ impl RelayState {
     }
 }
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct RelayRetransmit(pub TransmitInterval);
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
 pub enum SecureNetworkBeaconState {
     NotBroadcasting = 0x00,
@@ -61,6 +64,7 @@ impl TryFrom<u8> for SecureNetworkBeaconState {
     }
 }
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
 pub enum GATTProxyState {
     Disabled = 0x00,
@@ -85,6 +89,7 @@ impl TryFrom<u8> for GATTProxyState {
     }
 }
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
 pub enum NodeIdentityState {
     Stopped = 0x00,
@@ -110,6 +115,7 @@ impl TryFrom<u8> for NodeIdentityState {
     }
 }
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
 pub enum FriendState {
     Disabled = 0x00,
@@ -135,6 +141,7 @@ impl TryFrom<u8> for FriendState {
     }
 }
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
 pub enum KeyRefreshPhaseState {
     Normal = 0x00,
@@ -161,6 +168,7 @@ impl TryFrom<u8> for KeyRefreshPhaseState {
 }
 /// Used to allow the element to physical get the attention of a person (flashing, beep, etc).
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct AttentionTimer(pub u8);
 impl AttentionTimer {
     pub fn new(seconds_remaining: u8) -> Self {
@@ -174,6 +182,7 @@ impl AttentionTimer {
     }
 }
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DefaultTTLState(u8);
 impl DefaultTTLState {
     pub fn new(v: u8) -> DefaultTTLState {
@@ -199,6 +208,7 @@ impl From<DefaultTTLState> for u8 {
 }
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DefaultTTLStateError(());
 impl TryFrom<u8> for DefaultTTLState {
     type Error = DefaultTTLStateError;
@@ -207,4 +217,5 @@ impl TryFrom<u8> for DefaultTTLState {
         Self::try_new(value).ok_or(DefaultTTLStateError(()))
     }
 }
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct NetworkTransmit(pub TransmitInterval);
