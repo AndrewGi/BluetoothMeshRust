@@ -131,7 +131,7 @@ pub struct NID(u8);
 
 impl Display for NID {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        write!(f, "NID({})", self.0)
+        write!(f, "{}", self.0)
     }
 }
 const NID_MASK: u8 = 127;
@@ -162,7 +162,11 @@ impl NID {
         (NID(v & 0x7F), v & 0x80 != 0)
     }
 }
-
+impl From<NID> for u8 {
+    fn from(n: NID) -> Self {
+        n.0
+    }
+}
 /// 24-bit Unsigned Integer. Commonly used for other 24-bit Unsigned types (`IVIndex`, `SequenceNumber`, Etc)
 #[derive(Default, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

@@ -4,14 +4,14 @@ use slog::Drain;
 extern crate slog;
 
 use std::convert::{TryFrom, TryInto};
-use std::str::FromStr;
 use std::error::Error;
+use std::str::FromStr;
 pub mod commands;
 pub mod helper;
 pub enum CLIError {
     IOError(String, std::io::Error),
     Clap(clap::Error),
-    SerdeJSON(serde_json::Error)
+    SerdeJSON(serde_json::Error),
 }
 fn main() {
     let app = clap::App::new("Bluetooth Mesh CLI")
@@ -56,27 +56,39 @@ fn main() {
     let get_device_state_path = || -> &str {
         match matches.value_of("device_state") {
             Some(path) => path,
-            None => clap::Error::with_description("missing 'device_state.json` path", clap::ErrorKind::ArgumentNotFound).exit()
+            None => clap::Error::with_description(
+                "missing 'device_state.json` path",
+                clap::ErrorKind::ArgumentNotFound,
+            )
+            .exit(),
         }
     };
     debug!(root, "arg_match"; "sub_command" => sub_cmd);
     if let Err(e) = (|| -> Result<(), CLIError> {
         match matches.subcommand() {
             ("", None) => error!(root, "no command given"),
-            ("generate", Some(gen_matches)) => commands::generate::generate_matches(&root, get_device_state_path(), gen_matches)?,
-            ("crypto", Some(crypto_matches)) => commands::crypto::crypto_matches(&root, get_device_state_path(), crypto_matches)?,
-            ("provisioner", Some(prov_matches)) => commands::provisioner::provisioner_matches(&root, get_device_state_path(), prov_matches)?,
+            ("generate", Some(gen_matches)) => {
+                commands::generate::generate_matches(&root, get_device_state_path(), gen_matches)?
+            }
+            ("crypto", Some(crypto_matches)) => {
+                commands::crypto::crypto_matches(&root, get_device_state_path(), crypto_matches)?
+            }
+            ("provisioner", Some(prov_matches)) => commands::provisioner::provisioner_matches(
+                &root,
+                get_device_state_path(),
+                prov_matches,
+            )?,
             _ => unreachable!("unhandled sub_command"),
         }
         debug!(root, "matches_done");
         Ok(())
     })() {
-        use std::io::Write;
-        let mut stderr = std::io::stderr();
         match e {
-            CLIError::IOError(path, error) => writeln!(&mut stderr, "io error {} with path '{}'", error.description(), path).ok(),
-            CLIError::Clap(error) => writeln!(&mut stderr, "{}", &error.message).ok(),
-            CLIError::SerdeJSON(error) => writeln!(&mut stderr, "json error {}", error).ok(),
+            CLIError::IOError(path, error) => {
+                eprintln!("io error {:?} with path '{}'", error, path)
+            }
+            CLIError::Clap(error) => eprintln!("{}", &error.message),
+            CLIError::SerdeJSON(error) => eprintln!("json error {}", error),
         };
         std::process::exit(0);
     }
