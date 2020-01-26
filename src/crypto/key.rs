@@ -4,6 +4,7 @@ use crate::crypto::{hex_16_to_array, ECDHSecret, NetworkID, ProvisioningSalt, Sa
 use crate::random;
 use crate::random::Randomizable;
 use core::convert::{TryFrom, TryInto};
+use core::fmt::{Display, Error, Formatter, LowerHex, UpperHex};
 
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -51,6 +52,23 @@ impl AsRef<[u8]> for Key {
     #[must_use]
     fn as_ref(&self) -> &[u8] {
         &self.0
+    }
+}
+
+impl UpperHex for Key {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        for &b in &self.0 {
+            write!(f, "{:0X}", b)?;
+        }
+        Ok(())
+    }
+}
+impl LowerHex for Key {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        for &b in &self.0 {
+            write!(f, "{:0x}", b)?;
+        }
+        Ok(())
     }
 }
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]

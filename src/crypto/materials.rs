@@ -5,6 +5,8 @@ use crate::crypto::key::{
 use crate::crypto::{k2, KeyRefreshPhases, NetworkID, AID};
 use crate::mesh::{AppKeyIndex, NetKeyIndex, NID};
 use alloc::collections::btree_map;
+use core::fmt::{Display, Error, Formatter};
+
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct NetworkKeys {
@@ -12,7 +14,17 @@ pub struct NetworkKeys {
     encryption: EncryptionKey,
     privacy: PrivacyKey,
 }
-
+impl Display for NetworkKeys {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        write!(
+            f,
+            "nid: {} encryption: {:X} privacy: {:X}",
+            self.nid,
+            self.encryption.key(),
+            self.privacy.key()
+        )
+    }
+}
 impl NetworkKeys {
     pub fn new(nid: NID, encryption: EncryptionKey, privacy: PrivacyKey) -> Self {
         Self {
@@ -45,6 +57,19 @@ pub struct NetworkSecurityMaterials {
     network_id: NetworkID,
     identity_key: IdentityKey,
     beacon_key: BeaconKey,
+}
+impl Display for NetworkSecurityMaterials {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        write!(
+            f,
+            "net_key: {:X} {} network_id: {} identity: {:X} beacon: {:X}",
+            self.net_key.key(),
+            &self.network_keys,
+            self.network_id,
+            self.identity_key.key(),
+            self.beacon_key.key()
+        )
+    }
 }
 impl NetworkSecurityMaterials {
     pub fn net_key(&self) -> &NetKey {
@@ -121,7 +146,7 @@ impl<K: Clone + Copy + Eq> KeyPhase<K> {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct NetKeyMap {
-    map: btree_map::BTreeMap<NetKeyIndex, KeyPhase<NetworkSecurityMaterials>>,
+    pub map: btree_map::BTreeMap<NetKeyIndex, KeyPhase<NetworkSecurityMaterials>>,
 }
 impl NetKeyMap {
     pub fn new() -> Self {
@@ -165,6 +190,13 @@ impl NetKeyMap {
     ) -> Option<KeyPhase<NetworkSecurityMaterials>> {
         self.map.remove(&index)
     }
+    pub fn insert(
+        &mut self,
+        index: NetKeyIndex,
+        new_key: &NetKey,
+    ) -> Option<KeyPhase<NetworkSecurityMaterials>> {
+        self.map.insert(index, KeyPhase::Normal(new_key.into()))
+    }
 }
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ApplicationSecurityMaterials {
@@ -183,7 +215,7 @@ impl ApplicationSecurityMaterials {
 }
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct AppKeyMap {
-    map: btree_map::BTreeMap<AppKeyIndex, ApplicationSecurityMaterials>,
+    pub map: btree_map::BTreeMap<AppKeyIndex, ApplicationSecurityMaterials>,
 }
 impl AppKeyMap {
     pub fn new() -> Self {
@@ -200,6 +232,17 @@ impl AppKeyMap {
     }
     pub fn remove_key(&mut self, index: AppKeyIndex) -> Option<ApplicationSecurityMaterials> {
         self.map.remove(&index)
+    }
+    pub fn insert(
+        &mut self,
+        net_key_index: NetKeyIndex,
+        app_key_index: AppKeyIndex,
+        new_key: AppKey,
+    ) -> Option<ApplicationSecurityMaterials> {
+        self.map.insert(
+            app_key_index,
+            ApplicationSecurityMaterials::new(new_key, net_key_index),
+        )
     }
 }
 

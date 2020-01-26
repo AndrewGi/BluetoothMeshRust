@@ -247,14 +247,29 @@ impl From<&key::NetKey> for NetworkID {
         NetworkID(k3(k.key()))
     }
 }
-
+impl Display for NetworkID {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        write!(f, "{}", self.0)
+    }
+}
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Copy, Clone, PartialOrd, PartialEq, Ord, Eq, Debug, Hash)]
 #[repr(u8)]
 pub enum KeyRefreshPhases {
     Normal,
     First,
     Second,
     Third,
+}
+impl Display for KeyRefreshPhases {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        f.write_str(match self {
+            KeyRefreshPhases::Normal => "normal",
+            KeyRefreshPhases::First => "first",
+            KeyRefreshPhases::Second => "second",
+            KeyRefreshPhases::Third => "third",
+        })
+    }
 }
 use crate::serializable::bytes::ToFromBytesEndian;
 use core::fmt::{Display, Error, Formatter};

@@ -166,8 +166,14 @@ impl DeviceState {
     pub fn security_materials(&self) -> &SecurityMaterials {
         &self.security_materials
     }
+    pub fn security_materials_mut(&mut self) -> &mut SecurityMaterials {
+        &mut self.security_materials
+    }
     pub fn device_key(&self) -> &DevKey {
         &self.security_materials.dev_key
+    }
+    pub fn device_key_mut(&mut self) -> &mut DevKey {
+        &mut self.security_materials.dev_key
     }
     pub fn default_ttl(&self) -> TTL {
         TTL::new(self.default_ttl.into())
