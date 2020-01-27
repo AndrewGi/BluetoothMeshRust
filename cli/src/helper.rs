@@ -2,6 +2,8 @@ use crate::CLIError;
 use bluetooth_mesh::device_state;
 use std::convert::TryFrom;
 use std::fmt::{Error, Formatter};
+use std::str::FromStr;
+use std::num::ParseIntError;
 
 pub struct HexSlice<'a>(pub &'a [u8]);
 impl<'a> std::fmt::UpperHex for HexSlice<'a> {
@@ -39,6 +41,18 @@ pub fn is_128_bit_hex_str_validator(input: String) -> Result<(), String> {
         Err(format!("'{}' is not a 128-bit hex string", &input))
     }
 }
+pub fn is_u24_validator(input: String) -> Result<(), String> {
+    match u32::from_str(&input).ok().and_then(|v| bluetooth_mesh::mesh::U24::try_from(v).ok()) {
+        Some(_) => Ok(()),
+        None => Err(format!("'{}' is not a 24-unsigned integer", &input))
+    }
+}
+pub fn is_u32_validator(input: String) -> Result<(), String> {
+    match u32::from_str(&input) {
+        Ok(_) => Ok(()),
+        Err(_) => Err(format!("'{}' is not a 32-unsigned integer", &input))
+    }
+}
 pub fn hex_str_to_bytes<T: Default + AsMut<[u8]>>(s: &str) -> Option<T> {
     let mut out = T::default();
     if s.len() != out.as_mut().len() * 2 || out.as_mut().len() == 0 {
@@ -54,10 +68,14 @@ pub fn hex_str_to_bytes<T: Default + AsMut<[u8]>>(s: &str) -> Option<T> {
         Some(out)
     }
 }
+pub fn is_bool_validator(input: String) -> Result<(), String> {
+    bool::from_str(&input).ok().map(|_|()).ok_or(format!("'{}' is not a valid bool", &input))
+}
 pub fn load_file(path: &str, writeable: bool, create: bool) -> Result<std::fs::File, CLIError> {
     std::fs::OpenOptions::new()
         .read(true)
         .write(writeable)
+        .truncate(true)
         .create(create)
         .open(path)
         .map_err(|e| CLIError::IOError(path.to_owned(), e))

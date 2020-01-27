@@ -4,7 +4,7 @@ use crate::crypto::{hex_16_to_array, ECDHSecret, NetworkID, ProvisioningSalt, Sa
 use crate::random;
 use crate::random::Randomizable;
 use core::convert::{TryFrom, TryInto};
-use core::fmt::{Display, Error, Formatter, LowerHex, UpperHex};
+use core::fmt::{Error, Formatter, LowerHex, UpperHex};
 
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

@@ -4,7 +4,7 @@ use crate::{helper, CLIError};
 use bluetooth_mesh::crypto::key::{AppKey, NetKey};
 use bluetooth_mesh::crypto::materials::{KeyPair, KeyPhase, NetworkSecurityMaterials};
 use bluetooth_mesh::device_state;
-use bluetooth_mesh::mesh::{AppKeyIndex, KeyIndex, NetKeyIndex};
+use bluetooth_mesh::mesh::{AppKeyIndex, KeyIndex, NetKeyIndex, IVIndex, IVUpdateFlag};
 use std::convert::TryFrom;
 use std::fmt::Write;
 use std::str::FromStr;
@@ -27,21 +27,18 @@ pub fn sub_command() -> clap::App<'static, 'static> {
         .about("Read/Write crypto information from/to a device_state file")
         .subcommand(
             clap::SubCommand::with_name("devkey")
-                .about("show local device key")
-                .subcommand(
-                    clap::SubCommand::with_name("set")
-                        .about("set the local device key")
+                .about("show/set local device key")
                         .arg(
                             clap::Arg::with_name("key_hex")
-                                .help("128-bit big endian key hex")
+                                .help("set new 128-bit big endian key hex")
                                 .required(true)
-                                .value_name("KEY_HEX")
+                                .value_name("NEW_KEY_HEX")
                                 .validator(helper::is_128_bit_hex_str_validator),
                         ),
-                ),
         )
         .subcommand(
             clap::SubCommand::with_name("netkeys")
+                .about("manage local netkeys")
                 .subcommand(
                     clap::SubCommand::with_name("list").arg(
                         clap::Arg::with_name("nid")
@@ -79,6 +76,7 @@ pub fn sub_command() -> clap::App<'static, 'static> {
         )
         .subcommand(
             clap::SubCommand::with_name("appkeys")
+                .about("manage local appkeys")
                 .subcommand(
                     clap::SubCommand::with_name("list").arg(
                         clap::Arg::with_name("aid")
@@ -119,7 +117,20 @@ pub fn sub_command() -> clap::App<'static, 'static> {
                                 .value_name("KEY_HEX")
                                 .validator(helper::is_128_bit_hex_str_validator),
                         ),
-                ),
+                )
+        )
+        .subcommand(clap::SubCommand::with_name("iv")
+            .about("set/get IV index and IV update flag")
+            .arg(clap::Arg::with_name("iv_index")
+                .takes_value(true)
+                .value_name("NEW_IV_INDEX")
+                .validator(helper::is_u32_validator)
+            )
+            .arg(clap::Arg::with_name("iv_flag")
+                .takes_value(true)
+                .value_name("IV_UPDATE_FLAG")
+                .validator(helper::is_bool_validator)
+            )
         )
 }
 pub fn crypto_matches(
@@ -138,9 +149,8 @@ pub fn crypto_matches(
         ("devkey", Some(devkey_matches)) => {
             // print devkey
             let mut device_state = get_device_state()?;
-            match devkey_matches.subcommand() {
-                ("set", Some(set_matches)) => {
-                    let new_key = set_matches.value_of("key_hex").expect("required by clap");
+            match devkey_matches.value_of("key_hex") {
+                Some(new_key) => {
                     info!(logger, "set_devkey"; "new_key" => new_key.to_owned());
                     let new_key_buf =
                         helper::hex_str_to_bytes::<[u8; 16]>(new_key).expect("validated by clap");
@@ -149,7 +159,7 @@ pub fn crypto_matches(
                     helper::write_device_state(device_state_path, &device_state)?;
                     debug!(logger, "wrote_devkey");
                 }
-                (_, _) => (),
+                None => (),
             }
             println!("device key: {:X}", device_state.device_key().key());
         }
@@ -340,6 +350,24 @@ pub fn crypto_matches(
                 ("", None) => error!(logger, "no_appkeys_subcommand"),
                 _ => unreachable!("unhandled appkeys subcommand"),
             }
+        }
+        ("iv", Some(iv_matches)) => {
+            let mut device_state = get_device_state()?;
+            let mut should_write = false;
+            if let Some(new_iv) = iv_matches.value_of("iv_index") {
+                let new_iv = IVIndex(new_iv.parse().expect("validated by clap"));
+                *device_state.iv_index_mut() = new_iv;
+                should_write = true
+            }
+            if let Some(new_iv_flag) = iv_matches.value_of("iv_flag") {
+                let new_iv_flag = IVUpdateFlag(new_iv_flag.parse().expect("validated by clap"));
+                *device_state.iv_update_flag_mut() = new_iv_flag;
+                should_write = true;
+            }
+            if should_write {
+                write_device_state(device_state_path, &device_state)?;
+            }
+            println!("iv_index: {} update_flag: {}", device_state.iv_index().0, device_state.iv_update_flag().0);
         }
         ("", None) => error!(logger, "no_subcommand"),
         _ => unreachable!("unhandled crypto subcommand"),

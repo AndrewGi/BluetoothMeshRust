@@ -163,6 +163,15 @@ impl DeviceState {
     pub fn iv_index(&self) -> IVIndex {
         self.iv_index
     }
+    pub fn iv_index_mut(&mut self) -> &mut IVIndex {
+        &mut self.iv_index
+    }
+    pub fn iv_update_flag(&self) -> IVUpdateFlag {
+        self.iv_update_flag
+    }
+    pub fn iv_update_flag_mut(&mut self) -> &mut IVUpdateFlag {
+        &mut self.iv_update_flag
+    }
     pub fn security_materials(&self) -> &SecurityMaterials {
         &self.security_materials
     }
