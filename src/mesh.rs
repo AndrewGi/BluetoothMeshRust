@@ -200,6 +200,19 @@ impl U24 {
         U24(U24_MAX)
     }
 }
+#[derive(Copy, Clone, PartialOrd, PartialEq, Ord, Eq, Hash, Debug)]
+pub struct U24ConversionError(());
+impl TryFrom<u32> for U24 {
+    type Error = U24ConversionError;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        if value > U24_MAX {
+            Err(U24ConversionError(()))
+        } else {
+            Ok(U24(value))
+        }
+    }
+}
 impl ToFromBytesEndian for U24 {
     type AsBytesType = [u8; 3];
 
