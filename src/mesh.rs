@@ -573,6 +573,20 @@ impl From<u8> for TransmitInterval {
         )
     }
 }
+
+pub fn bytes_str_to_buf<T: Default + AsMut<[u8]>>(s: &str) -> Option<T> {
+    let mut out = T::default();
+    let buf = out.as_mut();
+    if buf.len() == 0 || buf.len() * 2 != s.len() {
+        return None;
+    }
+    for (i, c) in s.chars().enumerate() {
+        let v = u8::try_from(c.to_digit(16)?).expect("only returns [0..=15]");
+        buf[i / 2] |= v << u8::try_from(((i + 1) % 2) * 4).expect("only returns 0 or 4");
+    }
+    Some(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

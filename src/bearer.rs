@@ -23,7 +23,7 @@ pub struct OutgoingEncryptedNetworkPDU {
     pub pdu: net::OwnedEncryptedPDU,
 }
 pub struct IncomingBeacon {
-    pub beacon: beacon::Beacon,
+    pub beacon: beacon::BeaconPDU,
     pub rssi: Option<RSSI>,
 }
 pub trait NetworkSink {
@@ -45,7 +45,7 @@ pub trait BeaconSink {
     fn consume_beacon(&self, beacon: &IncomingBeacon);
 }
 pub trait BeaconBearer<'sink> {
-    fn send_beacon(&self, beacon: &beacon::Beacon) -> Result<(), BearerError>;
+    fn send_beacon(&self, beacon: &beacon::BeaconPDU) -> Result<(), BearerError>;
     fn take_beacon_sink(&'sink mut self, sink: &'sink dyn BeaconSink);
 }
 pub trait AdvertisementBearer<'sinks>:

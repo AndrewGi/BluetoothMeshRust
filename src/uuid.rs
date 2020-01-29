@@ -5,6 +5,8 @@
 #[allow(unused_imports)]
 use alloc::string::ToString;
 
+use crate::mesh;
+use core::convert::TryFrom;
 use core::fmt::{Display, Error, Formatter};
 
 type UUIDBytes = [u8; 16];
@@ -55,6 +57,11 @@ impl UUID {
         u64::from_le_bytes([
             self.0[10], self.0[11], self.0[12], self.0[13], self.0[14], self.0[15], 0, 0,
         ])
+    }
+    /// Converts a 32-character hex string (`70cf7c9732a345b691494810d2e9cbf4`) to `UUIDBytes`.
+    #[must_use]
+    pub fn uuid_bytes_from_str(s: &str) -> Option<UUIDBytes> {
+        Some(mesh::bytes_str_to_buf(s)?)
     }
 }
 impl AsRef<[u8]> for UUID {
