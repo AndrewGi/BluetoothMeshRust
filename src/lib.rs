@@ -59,3 +59,6 @@ pub mod models;
 pub mod provisioning;
 
 pub mod properties;
+
+#[cfg(test)]
+pub mod samples;
