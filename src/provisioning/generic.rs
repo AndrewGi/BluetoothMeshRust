@@ -132,7 +132,7 @@ impl TransactionStartPDU {
         }
     }
     /// Calculates fcs and total length on the `data`. Uses `max_mtu` to calculate `seg_n`.
-    /// The returned PDU !DOES NOT! have any data attachted to it. Data is contained in the
+    /// The returned PDU !DOES NOT! have any data attached to it. Data is contained in the
     /// `Payload` field of `PDU`.
     pub fn from_data(data: &[u8], max_mtu: MTU) -> TransactionStartPDU {
         let data_len = u16::try_from(data.len()).expect("data.len() must fit in a u16");
