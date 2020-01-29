@@ -54,15 +54,17 @@ pub enum SendError {
     BearerError(BearerError),
 }
 impl StackInternals {
+    /// Wraps a `device_state::DeviceState` and lets you perform encrypt and decryption with it.
     pub fn new(device_state: device_state::DeviceState) -> Self {
         Self { device_state }
     }
+    /// Returns a reference to the Atomic `SeqCounter` pertaining to the given element.
     /// # Panics
     /// Panics if `element_index >= element_count`.
     pub fn seq_counter(&self, element_index: ElementIndex) -> &SeqCounter {
         self.device_state.seq_counter(element_index)
     }
-    /// Encrypts and Assigns a Sequence Numbe
+    /// Encrypts and Assigns a Sequence Numbers to `EncryptedOutgoingMessage`
     pub fn app_encrypt<Storage: AsRef<[u8]> + AsMut<[u8]>>(
         &self,
         msg: OutgoingMessage<Storage>,
@@ -184,6 +186,9 @@ impl StackInternals {
             ttl,
         })
     }
+    /// Check if the given `unicast_address` is owned by this node. Ex: If this node has 5 elements
+    /// and its primary unicast address is `0x0002`, then it owns the range `[0x0002..0x0007]`.
+    /// If `unicast_address` is not in that range, this returns `None`.
     pub fn owns_unicast_address(&self, unicast_address: UnicastAddress) -> Option<ElementIndex> {
         let range = self.device_state.unicast_range();
         if range.contains(&unicast_address) {
@@ -195,9 +200,12 @@ impl StackInternals {
             None
         }
     }
+    /// Returns the default `TTL`.
     pub fn default_ttl(&self) -> TTL {
         self.device_state.default_ttl()
     }
+    /// Returns the `ApplicationSecurityMaterials` pertaining to the given `app_key_index`. If no
+    /// key exists under the given `AppKeyIndex`, `None` will be returned
     pub fn get_app_key(&self, app_key_index: AppKeyIndex) -> Option<&ApplicationSecurityMaterials> {
         self.device_state
             .security_materials()
@@ -207,9 +215,13 @@ impl StackInternals {
     pub fn net_keys(&self) -> &NetKeyMap {
         &self.device_state.security_materials().net_key_map
     }
+    /// Returns a mutable reference to `device_state::DeviceState`. If you take a mutable reference,
+    /// you essential lock out the rest of the stack from using `device_state::DeviceState` to
+    /// encrypt and decrypt messages.
     pub fn device_state_mut(&mut self) -> &mut DeviceState {
         &mut self.device_state
     }
+    /// Returns an immutable reference to `device_state::DeviceState`.
     pub fn device_state(&self) -> &DeviceState {
         &self.device_state
     }
