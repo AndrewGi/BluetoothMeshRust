@@ -110,7 +110,7 @@ pub trait ProtocolPDU {
     fn opcode(&self) -> Opcode {
         Self::OPCODE
     }
-    fn byte_len() -> usize;
+    const BYTE_LEN: usize;
     fn pack(&self, buf: &mut [u8]) -> Result<(), ProtocolPDUError>;
     fn unpack(buf: &[u8]) -> Result<Self, ProtocolPDUError>
     where
@@ -153,12 +153,10 @@ pub struct Invite(pub AttentionTimer);
 impl ProtocolPDU for Invite {
     const OPCODE: Opcode = Opcode::Invite;
 
-    fn byte_len() -> usize {
-        1
-    }
+    const BYTE_LEN: usize = 1;
 
     fn pack(&self, buf: &mut [u8]) -> Result<(), ProtocolPDUError> {
-        if buf.len() != Self::byte_len() {
+        if buf.len() != Self::BYTE_LEN {
             Err(ProtocolPDUError::BadLength)
         } else {
             buf[0] = (self.0).0;
@@ -170,7 +168,7 @@ impl ProtocolPDU for Invite {
     where
         Self: Sized,
     {
-        if buf.len() != Self::byte_len() {
+        if buf.len() != Self::BYTE_LEN {
             Err(ProtocolPDUError::BadLength)
         } else {
             Ok(Invite(AttentionTimer::new(buf[0])))
@@ -411,12 +409,10 @@ pub struct Capabilities {
 impl ProtocolPDU for Capabilities {
     const OPCODE: Opcode = Opcode::Capabilities;
 
-    fn byte_len() -> usize {
-        11
-    }
+    const BYTE_LEN: usize = 11;
 
     fn pack(&self, buf: &mut [u8]) -> Result<(), ProtocolPDUError> {
-        if buf.len() != Self::byte_len() {
+        if buf.len() != Self::BYTE_LEN {
             Err(ProtocolPDUError::BadLength)
         } else if self.output_oob_action.is_zero() && self.output_oob_size.is_some()
             || self.input_oob_action.is_zero() && self.input_oob_size.is_some()
@@ -439,7 +435,7 @@ impl ProtocolPDU for Capabilities {
     where
         Self: Sized,
     {
-        if buf.len() != Self::byte_len() {
+        if buf.len() != Self::BYTE_LEN {
             Err(ProtocolPDUError::BadLength)
         } else {
             let num_elements = ElementCount(buf[0]);
@@ -493,12 +489,10 @@ pub struct EncryptedProvisioningData {
 impl ProtocolPDU for EncryptedProvisioningData {
     const OPCODE: Opcode = Opcode::Data;
 
-    fn byte_len() -> usize {
-        ENCRYPTED_PROVISIONING_DATA_LEN + MIC::big_size()
-    }
+    const BYTE_LEN: usize = ENCRYPTED_PROVISIONING_DATA_LEN + MIC::big_size();
 
     fn pack(&self, buf: &mut [u8]) -> Result<(), ProtocolPDUError> {
-        if buf.len() != Self::byte_len() {
+        if buf.len() != Self::BYTE_LEN {
             Err(ProtocolPDUError::BadLength)
         } else {
             debug_assert!(self.mic.is_big());
@@ -513,7 +507,7 @@ impl ProtocolPDU for EncryptedProvisioningData {
     where
         Self: Sized,
     {
-        if buf.len() != Self::byte_len() {
+        if buf.len() != Self::BYTE_LEN {
             Err(ProtocolPDUError::BadLength)
         } else {
             let mut out = [0_u8; ENCRYPTED_PROVISIONING_DATA_LEN];
@@ -533,12 +527,10 @@ pub struct Start {
 impl ProtocolPDU for Start {
     const OPCODE: Opcode = Opcode::Start;
 
-    fn byte_len() -> usize {
-        5
-    }
+    const BYTE_LEN: usize = 5;
 
     fn pack(&self, buf: &mut [u8]) -> Result<(), ProtocolPDUError> {
-        if buf.len() != Self::byte_len() {
+        if buf.len() != Self::BYTE_LEN {
             Err(ProtocolPDUError::BadLength)
         } else {
             buf[0] = self.algorithm.into();
@@ -573,7 +565,7 @@ impl ProtocolPDU for Start {
     where
         Self: Sized,
     {
-        if buf.len() != Self::byte_len() {
+        if buf.len() != Self::BYTE_LEN {
             Err(ProtocolPDUError::BadLength)
         } else {
             let algorithm = AlgorithmsFlags::try_from(buf[0])?;
@@ -647,12 +639,10 @@ pub struct Complete();
 impl ProtocolPDU for Complete {
     const OPCODE: Opcode = Opcode::Complete;
 
-    fn byte_len() -> usize {
-        0
-    }
+    const BYTE_LEN: usize = 0;
 
     fn pack(&self, buf: &mut [u8]) -> Result<(), ProtocolPDUError> {
-        if buf.len() != Self::byte_len() {
+        if buf.len() != Self::BYTE_LEN {
             Err(ProtocolPDUError::BadLength)
         } else {
             Ok(())
@@ -663,7 +653,7 @@ impl ProtocolPDU for Complete {
     where
         Self: Sized,
     {
-        if buf.len() != Self::byte_len() {
+        if buf.len() != Self::BYTE_LEN {
             Err(ProtocolPDUError::BadLength)
         } else {
             Ok(Complete())
@@ -675,12 +665,10 @@ pub struct Failed(pub ErrorCode);
 impl ProtocolPDU for Failed {
     const OPCODE: Opcode = Opcode::Failed;
 
-    fn byte_len() -> usize {
-        1
-    }
+    const BYTE_LEN: usize = 1;
 
     fn pack(&self, buf: &mut [u8]) -> Result<(), ProtocolPDUError> {
-        if buf.len() != Self::byte_len() {
+        if buf.len() != Self::BYTE_LEN {
             Err(ProtocolPDUError::BadLength)
         } else {
             buf[0] = self.0.into();
@@ -692,7 +680,7 @@ impl ProtocolPDU for Failed {
     where
         Self: Sized,
     {
-        if buf.len() != Self::byte_len() {
+        if buf.len() != Self::BYTE_LEN {
             Err(ProtocolPDUError::BadLength)
         } else {
             Ok(Failed(buf[0].try_into()?))
@@ -704,12 +692,10 @@ pub struct InputComplete();
 impl ProtocolPDU for InputComplete {
     const OPCODE: Opcode = Opcode::InputComplete;
 
-    fn byte_len() -> usize {
-        0
-    }
+    const BYTE_LEN: usize = 0;
 
     fn pack(&self, buf: &mut [u8]) -> Result<(), ProtocolPDUError> {
-        if buf.len() != Self::byte_len() {
+        if buf.len() != Self::BYTE_LEN {
             Err(ProtocolPDUError::BadLength)
         } else {
             Ok(())
@@ -720,7 +706,7 @@ impl ProtocolPDU for InputComplete {
     where
         Self: Sized,
     {
-        if buf.len() != Self::byte_len() {
+        if buf.len() != Self::BYTE_LEN {
             Err(ProtocolPDUError::BadLength)
         } else {
             Ok(InputComplete())
@@ -736,12 +722,10 @@ pub struct PublicKey {
 impl ProtocolPDU for PublicKey {
     const OPCODE: Opcode = Opcode::PublicKey;
 
-    fn byte_len() -> usize {
-        KEY_COMPONENT_LEN * 2
-    }
+    const BYTE_LEN: usize = KEY_COMPONENT_LEN * 2;
 
     fn pack(&self, buf: &mut [u8]) -> Result<(), ProtocolPDUError> {
-        if buf.len() != Self::byte_len() {
+        if buf.len() != Self::BYTE_LEN {
             Err(ProtocolPDUError::BadLength)
         } else {
             buf[..KEY_COMPONENT_LEN].copy_from_slice(&self.x[..]);
@@ -754,7 +738,7 @@ impl ProtocolPDU for PublicKey {
     where
         Self: Sized,
     {
-        if buf.len() != Self::byte_len() {
+        if buf.len() != Self::BYTE_LEN {
             Err(ProtocolPDUError::BadLength)
         } else {
             let mut out = PublicKey::default();
@@ -771,12 +755,10 @@ pub struct Confirmation(pub [u8; CONFIRMATION_LEN]);
 impl ProtocolPDU for Confirmation {
     const OPCODE: Opcode = Opcode::Confirm;
 
-    fn byte_len() -> usize {
-        CONFIRMATION_LEN
-    }
+    const BYTE_LEN: usize = CONFIRMATION_LEN;
 
     fn pack(&self, buf: &mut [u8]) -> Result<(), ProtocolPDUError> {
-        if buf.len() != Self::byte_len() {
+        if buf.len() != Self::BYTE_LEN {
             Err(ProtocolPDUError::BadLength)
         } else {
             buf.copy_from_slice(&self.0[..]);
@@ -788,7 +770,7 @@ impl ProtocolPDU for Confirmation {
     where
         Self: Sized,
     {
-        if buf.len() != Self::byte_len() {
+        if buf.len() != Self::BYTE_LEN {
             Err(ProtocolPDUError::BadLength)
         } else {
             let mut out = Confirmation::default();
@@ -803,12 +785,10 @@ pub struct Random(pub [u8; RANDOM_LEN]);
 impl ProtocolPDU for Random {
     const OPCODE: Opcode = Opcode::Random;
 
-    fn byte_len() -> usize {
-        RANDOM_LEN
-    }
+    const BYTE_LEN: usize = RANDOM_LEN;
 
     fn pack(&self, buf: &mut [u8]) -> Result<(), ProtocolPDUError> {
-        if buf.len() != Self::byte_len() {
+        if buf.len() != Self::BYTE_LEN {
             Err(ProtocolPDUError::BadLength)
         } else {
             buf.copy_from_slice(&self.0[..]);
@@ -820,7 +800,7 @@ impl ProtocolPDU for Random {
     where
         Self: Sized,
     {
-        if buf.len() != Self::byte_len() {
+        if buf.len() != Self::BYTE_LEN {
             Err(ProtocolPDUError::BadLength)
         } else {
             let mut out = Random::default();

@@ -5,42 +5,24 @@ use crate::crypto::aes::{AESCipher, Error, MicSize};
 use crate::crypto::key::{AppKey, DevKey, Key};
 use crate::crypto::nonce::{AppNonce, DeviceNonce, Nonce};
 use crate::crypto::{AID, AKF, MIC};
-use crate::lower;
 use crate::lower::{SegN, SegO, SegmentedAccessPDU, SegmentedControlPDU, UnsegmentedAccessPDU};
+use crate::{control, lower};
 use alloc::boxed::Box;
 use core::convert::TryFrom;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct UpperPDUConversionError(());
-pub struct PDU<Storage: AsRef<[u8]>> {
-    pub payload: Storage,
-    pub mic: Option<MIC>,
-    pub aid: Option<AID>,
-    pub opcode: Option<ControlOpcode>,
+pub enum PDU<Storage: AsRef<[u8]>> {
+    Control(control::ControlPayload<Storage>),
+    Access(EncryptedAppPayload<Storage>),
 }
 impl<Storage: AsRef<[u8]>> PDU<Storage> {
-    pub fn new(
-        payload: Storage,
-        mic: Option<MIC>,
-        aid: Option<AID>,
-        opcode: Option<ControlOpcode>,
-    ) -> Self {
-        Self {
-            payload,
-            mic,
-            aid,
-            opcode,
-        }
-    }
     pub fn max_seg_len(&self) -> usize {
         if self.is_control() {
             SegmentedControlPDU::max_seg_len()
         } else {
             SegmentedAccessPDU::max_seg_len()
         }
-    }
-    pub fn szmic(&self) -> bool {
-        self.mic.map(|mic| mic.is_big()).unwrap_or(false)
     }
     pub fn seg_o(&self) -> SegO {
         assert!(
@@ -67,38 +49,41 @@ impl<Storage: AsRef<[u8]>> PDU<Storage> {
         assert!(seg_i <= u8::from(self.seg_o()));
         let seg_i = usize::from(seg_i);
         let max_seg = self.max_seg_len();
-        &self.payload.as_ref()[seg_i * max_seg..(seg_i + 1) * max_seg]
+        &self.payload()[seg_i * max_seg..(seg_i + 1) * max_seg]
     }
     pub fn is_control(&self) -> bool {
-        self.mic.is_none()
+        match self {
+            PDU::Control(_) => true,
+            PDU::Access(_) => false,
+        }
+    }
+    pub fn payload(&self) -> &[u8] {
+        match self {
+            PDU::Control(c) => c.payload.as_ref(),
+            PDU::Access(a) => a.data.as_ref(),
+        }
     }
     pub fn is_access(&self) -> bool {
-        self.mic.is_some()
+        !self.is_control()
     }
     pub fn payload_len(&self) -> usize {
-        self.payload.as_ref().len()
+        self.payload().len()
+    }
+    pub fn mic(&self) -> Option<MIC> {
+        match self {
+            PDU::Control(_) => None,
+            PDU::Access(a) => Some(a.mic),
+        }
     }
     pub fn total_len(&self) -> usize {
-        self.payload_len() + self.mic.map(|mic| mic.byte_size()).unwrap_or(0)
-    }
-}
-impl<Storage: AsRef<[u8]> + AsMut<[u8]>> TryFrom<PDU<Storage>> for EncryptedAppPayload<Storage> {
-    type Error = (UpperPDUConversionError, PDU<Storage>);
-
-    fn try_from(value: PDU<Storage>) -> Result<Self, Self::Error> {
-        match value.mic {
-            Some(mic) => Ok(EncryptedAppPayload::new(value.payload, mic, value.aid)),
-            None => Err((UpperPDUConversionError(()), value)),
-        }
+        self.payload_len() + self.mic().map(|mic| mic.byte_size()).unwrap_or(0)
     }
 }
 impl<Storage: Clone + AsRef<[u8]>> Clone for PDU<Storage> {
     fn clone(&self) -> Self {
-        Self {
-            payload: self.payload.clone(),
-            mic: self.mic,
-            aid: self.aid,
-            opcode: self.opcode,
+        match self {
+            PDU::Control(c) => PDU::Control((*c).clone()),
+            PDU::Access(a) => PDU::Access((*a).clone()),
         }
     }
 }
@@ -186,13 +171,13 @@ pub fn calculate_seg_o(data_len: usize, pdu_size: usize) -> SegO {
     let n = if n * pdu_size * n != l { n + 1 } else { n };
     SegO::new(u8::try_from(n).expect("data_len longer than ENCRYPTED_APP_PAYLOAD_MAX_LEN"))
 }
-pub struct EncryptedAppPayload<Storage: AsRef<[u8]> + AsMut<[u8]>> {
+pub struct EncryptedAppPayload<Storage: AsRef<[u8]>> {
     data: Storage,
     mic: MIC,
     aid: Option<AID>,
 }
 const ENCRYPTED_APP_PAYLOAD_MAX_LEN: usize = 380;
-impl<Storage: AsRef<[u8]> + AsMut<[u8]>> EncryptedAppPayload<Storage> {
+impl<Storage: AsRef<[u8]>> EncryptedAppPayload<Storage> {
     #[must_use]
     pub fn new(data: Storage, mic: MIC, aid: Option<AID>) -> Self {
         assert!(
@@ -218,7 +203,10 @@ impl<Storage: AsRef<[u8]> + AsMut<[u8]>> EncryptedAppPayload<Storage> {
         self.mic
     }
     #[must_use]
-    pub fn decrypt(self, sm: SecurityMaterials) -> Result<AppPayload<Storage>, Error> {
+    pub fn decrypt(self, sm: SecurityMaterials) -> Result<AppPayload<Storage>, Error>
+    where
+        Storage: AsMut<[u8]>,
+    {
         let mut data = self.data;
         sm.decrypt(data.as_mut(), self.mic)?;
         Ok(AppPayload::new(data))
@@ -254,6 +242,15 @@ impl<Storage: AsRef<[u8]> + AsMut<[u8]>> EncryptedAppPayload<Storage> {
         }
     }
     */
+}
+impl<Storage: AsRef<[u8]> + Clone> Clone for EncryptedAppPayload<Storage> {
+    fn clone(&self) -> Self {
+        EncryptedAppPayload {
+            data: self.data.clone(),
+            mic: self.mic,
+            aid: self.aid,
+        }
+    }
 }
 // This should optimized into a stack allocation,
 impl From<&UnsegmentedAccessPDU> for EncryptedAppPayload<Box<[u8]>> {

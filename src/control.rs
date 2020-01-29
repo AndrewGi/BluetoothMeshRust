@@ -2,6 +2,8 @@
 
 use crate::lower::{BlockAck, SeqZero, UnsegmentedControlPDU, SEQ_ZERO_MAX};
 use crate::serializable::bytes::ToFromBytesEndian;
+use crate::upper;
+use crate::upper::PDU;
 use alloc::vec::Vec;
 use core::convert::{TryFrom, TryInto};
 
@@ -48,6 +50,14 @@ pub struct ControlPayload<Storage: AsRef<[u8]>> {
     pub opcode: ControlOpcode,
     pub payload: Storage,
 }
+impl<Storage: AsRef<[u8]> + Clone> Clone for ControlPayload<Storage> {
+    fn clone(&self) -> Self {
+        ControlPayload {
+            opcode: self.opcode,
+            payload: self.payload.clone(),
+        }
+    }
+}
 pub enum ControlPDU {
     Ack(Ack),
     FriendPoll(FriendPoll),
@@ -63,7 +73,7 @@ pub enum ControlPDU {
 }
 impl ControlPDU {
     pub fn try_unpack(opcode: ControlOpcode, payload: &[u8]) -> Result<Self, ControlMessageError> {
-        ControlPayload { opcode, payload }.try_into()
+        (&ControlPayload { opcode, payload }).try_into()
     }
     pub fn len(&self) -> usize {
         match self {
@@ -123,10 +133,10 @@ impl ControlPDU {
         Ok(out)
     }
 }
-impl<Storage: AsRef<[u8]>> TryFrom<ControlPayload<Storage>> for ControlPDU {
+impl<Storage: AsRef<[u8]>> TryFrom<&ControlPayload<Storage>> for ControlPDU {
     type Error = ControlMessageError;
 
-    fn try_from(value: ControlPayload<Storage>) -> Result<Self, Self::Error> {
+    fn try_from(value: &ControlPayload<Storage>) -> Result<Self, Self::Error> {
         let buf = value.payload.as_ref();
         Ok(match value.opcode {
             ControlOpcode::Ack => ControlPDU::Ack(Ack::unpack(buf)?),
@@ -157,11 +167,11 @@ impl TryFrom<&UnsegmentedControlPDU> for ControlPDU {
     type Error = ControlMessageError;
 
     fn try_from(value: &UnsegmentedControlPDU) -> Result<Self, Self::Error> {
-        ControlPayload {
+        (&ControlPayload {
             opcode: value.opcode(),
             payload: value.data(),
-        }
-        .try_into()
+        })
+            .try_into()
     }
 }
 pub enum ControlMessageError {

@@ -20,7 +20,6 @@ use crate::segmenter::EncryptedNetworkPDUIterator;
 use crate::stack::messages::{EncryptedOutgoingMessage, MessageKeys, OutgoingMessage};
 use crate::upper;
 use crate::{device_state, net};
-use alloc::vec::Vec;
 use core::convert::TryFrom;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
@@ -44,7 +43,6 @@ pub struct NetworkHeader {
 /// The scheduling and input/output queues are handled by `FullStack`.
 pub struct StackInternals {
     device_state: device_state::DeviceState,
-    seq_counters: Vec<SeqCounter>,
 }
 pub enum SendError {
     InvalidAppKeyIndex,
@@ -57,17 +55,12 @@ pub enum SendError {
 }
 impl StackInternals {
     pub fn new(device_state: device_state::DeviceState) -> Self {
-        let mut counters = Vec::with_capacity(device_state.element_count().0.into());
-        counters.resize_with(device_state.element_count().0.into(), SeqCounter::default);
-        Self {
-            device_state,
-            seq_counters: counters,
-        }
+        Self { device_state }
     }
+    /// # Panics
+    /// Panics if `element_index >= element_count`.
     pub fn seq_counter(&self, element_index: ElementIndex) -> &SeqCounter {
-        self.seq_counters
-            .get(usize::from(element_index.0))
-            .expect("invalid element_index")
+        self.device_state.seq_counter(element_index)
     }
     /// Encrypts and Assigns a Sequence Numbe
     pub fn app_encrypt<Storage: AsRef<[u8]> + AsMut<[u8]>>(

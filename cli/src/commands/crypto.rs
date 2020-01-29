@@ -4,7 +4,9 @@ use crate::{helper, CLIError};
 use bluetooth_mesh::crypto::key::{AppKey, NetKey};
 use bluetooth_mesh::crypto::materials::{KeyPair, KeyPhase, NetworkSecurityMaterials};
 use bluetooth_mesh::device_state;
-use bluetooth_mesh::mesh::{AppKeyIndex, KeyIndex, NetKeyIndex, IVIndex, IVUpdateFlag};
+use bluetooth_mesh::mesh::{
+    AppKeyIndex, ElementIndex, IVIndex, IVUpdateFlag, KeyIndex, NetKeyIndex, SequenceNumber,
+};
 use std::convert::TryFrom;
 use std::fmt::Write;
 use std::str::FromStr;
@@ -28,13 +30,13 @@ pub fn sub_command() -> clap::App<'static, 'static> {
         .subcommand(
             clap::SubCommand::with_name("devkey")
                 .about("show/set local device key")
-                        .arg(
-                            clap::Arg::with_name("key_hex")
-                                .help("set new 128-bit big endian key hex")
-                                .required(true)
-                                .value_name("NEW_KEY_HEX")
-                                .validator(helper::is_128_bit_hex_str_validator),
-                        ),
+                .arg(
+                    clap::Arg::with_name("key_hex")
+                        .help("set new 128-bit big endian key hex")
+                        .required(true)
+                        .value_name("NEW_KEY_HEX")
+                        .validator(helper::is_128_bit_hex_str_validator),
+                ),
         )
         .subcommand(
             clap::SubCommand::with_name("netkeys")
@@ -117,20 +119,40 @@ pub fn sub_command() -> clap::App<'static, 'static> {
                                 .value_name("KEY_HEX")
                                 .validator(helper::is_128_bit_hex_str_validator),
                         ),
-                )
+                ),
         )
-        .subcommand(clap::SubCommand::with_name("iv")
-            .about("set/get IV index and IV update flag")
-            .arg(clap::Arg::with_name("iv_index")
-                .takes_value(true)
-                .value_name("NEW_IV_INDEX")
-                .validator(helper::is_u32_validator)
-            )
-            .arg(clap::Arg::with_name("iv_flag")
-                .takes_value(true)
-                .value_name("IV_UPDATE_FLAG")
-                .validator(helper::is_bool_validator)
-            )
+        .subcommand(
+            clap::SubCommand::with_name("iv")
+                .about("set/get IV index and IV update flag")
+                .arg(
+                    clap::Arg::with_name("iv_index")
+                        .takes_value(true)
+                        .value_name("NEW_IV_INDEX")
+                        .validator(helper::is_u32_validator),
+                )
+                .arg(
+                    clap::Arg::with_name("iv_flag")
+                        .takes_value(true)
+                        .value_name("IV_UPDATE_FLAG")
+                        .validator(helper::is_bool_validator),
+                ),
+        )
+        .subcommand(
+            clap::SubCommand::with_name("seq")
+                .about("set/get Sequence number")
+                .arg(
+                    clap::Arg::with_name("element_index")
+                        .takes_value(true)
+                        .value_name("ELEMENT_INDEX")
+                        .validator(helper::is_u8_validator),
+                )
+                .arg(
+                    clap::Arg::with_name("new_seq")
+                        .takes_value(true)
+                        .value_name("NEW_SEQ")
+                        .validator(helper::is_u24_validator)
+                        .requires("element_index"),
+                ),
         )
 }
 pub fn crypto_matches(
@@ -330,7 +352,7 @@ pub fn crypto_matches(
                     {
                         return Err(CLIError::Clap(clap::Error::with_description(
                             format!(
-                                "error: app key already exists under index `{}`",
+                                "app key already exists under index `{}`",
                                 u16::from(app_index.0)
                             )
                             .as_str(),
@@ -367,7 +389,46 @@ pub fn crypto_matches(
             if should_write {
                 write_device_state(device_state_path, &device_state)?;
             }
-            println!("iv_index: {} update_flag: {}", device_state.iv_index().0, device_state.iv_update_flag().0);
+            println!(
+                "iv_index: {} update_flag: {}",
+                device_state.iv_index().0,
+                device_state.iv_update_flag().0
+            );
+        }
+        ("seq", Some(seq_matches)) => {
+            let mut device_state = get_device_state()?;
+            if let Some(element_index) = seq_matches.value_of("element_index") {
+                let element_index = ElementIndex(element_index.parse().expect("validated by clap"));
+                if element_index.0 >= device_state.element_count().0 {
+                    return Err(CLIError::Clap(clap::Error::with_description(
+                        &format!(
+                            "invalid element index `{} >= {}`",
+                            element_index.0,
+                            device_state.element_count().0
+                        ),
+                        clap::ErrorKind::InvalidValue,
+                    )));
+                }
+                if let Some(new_seq) = seq_matches.value_of("new_seq") {
+                    let new_seq = SequenceNumber(new_seq.parse().expect("validated by clap"));
+                    device_state.seq_counter_mut(element_index).set_seq(new_seq);
+                    write_device_state(device_state_path, &device_state)?;
+                }
+                println!(
+                    "element_index: {} seq: {}",
+                    element_index.0,
+                    device_state.seq_counter(element_index).check().0
+                )
+            } else {
+                let count = device_state.element_count();
+                for i in 0..=count.0 {
+                    println!(
+                        "element_index: {} seq: {}",
+                        i,
+                        device_state.seq_counter(ElementIndex(i)).check().0
+                    )
+                }
+            }
         }
         ("", None) => error!(logger, "no_subcommand"),
         _ => unreachable!("unhandled crypto subcommand"),

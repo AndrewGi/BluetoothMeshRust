@@ -1,5 +1,6 @@
 //! PB-ADV Provisioning bearer for Bluetooth Mesh
 use super::generic;
+use alloc::boxed::Box;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub struct LinkID(u32);
@@ -18,7 +19,7 @@ const PROVISIONEE_END: u8 = 0xFF;
 const PROVISIONER_START: u8 = 0;
 const PROVISIONER_END: u8 = 0x7F;
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
-pub struct TransactionNumber(u8);
+pub struct TransactionNumber(pub u8);
 impl TransactionNumber {
     pub fn new(trans_num: u8) -> TransactionNumber {
         TransactionNumber(trans_num)
@@ -73,7 +74,7 @@ impl From<TransactionNumber> for u8 {
 pub struct PDU {
     pub link_id: LinkID,
     pub transaction_number: TransactionNumber,
-    pub generic_pdu: generic::PDU,
+    pub generic_pdu: generic::PDU<Box<[u8]>>,
 }
 pub struct PackedPDU {}
 impl AsRef<[u8]> for PackedPDU {

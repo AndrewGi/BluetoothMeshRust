@@ -54,7 +54,7 @@ impl<'a, Storage: AsRef<[u8]>> SegmentIterator<'a, Storage> {
         let flag = self
             .segmenter
             .upper_pdu
-            .mic
+            .mic()
             .map(|mic| mic.is_big())
             .unwrap_or(false);
         SegmentHeader::new(
@@ -79,27 +79,23 @@ impl<'a, Storage: AsRef<[u8]>> Iterator for SegmentIterator<'a, Storage> {
             let seg_n_out = SegN::new(self.seg_n);
             let segment_data = self.segmenter.upper_pdu.seg_n_data(seg_n_out);
             let header = self.segment_header();
-            match self.segmenter.upper_pdu.opcode {
-                Some(opcode) => {
+            match &self.segmenter.upper_pdu {
+                upper::PDU::Control(control) => {
                     // ControlPDU
-                    let out = lower::SegmentedControlPDU::new(opcode, header, segment_data);
+                    let out = lower::SegmentedControlPDU::new(control.opcode, header, segment_data);
                     self.seg_n += 1;
                     Some(lower::SegmentedPDU::Control(out))
                 }
-                None => {
+                upper::PDU::Access(access) => {
                     if segment_data.len() != SegmentedAccessPDU::max_seg_len() {
-                        let mic = self
-                            .segmenter
-                            .upper_pdu
-                            .mic
-                            .expect("all access PDUs have MIC");
+                        let mic = access.mic();
                         let seg_len = segment_data.len();
                         let mut buf = [0_u8; SegmentedAccessPDU::max_seg_len() + MIC::big_size()];
                         buf[..seg_len].copy_from_slice(segment_data);
                         mic.be_pack_into(&mut buf[seg_len..seg_len + mic.byte_size()]);
                         let out = lower::SegmentedAccessPDU::new(
-                            self.segmenter.upper_pdu.aid,
-                            self.segmenter.upper_pdu.szmic().into(),
+                            access.aid(),
+                            mic.is_big().into(),
                             self.segmenter.seq_zero,
                             self.segmenter.seg_o,
                             seg_n_out,
@@ -112,8 +108,8 @@ impl<'a, Storage: AsRef<[u8]>> Iterator for SegmentIterator<'a, Storage> {
                         Some(lower::SegmentedPDU::Access(out))
                     } else {
                         let out = lower::SegmentedAccessPDU::new(
-                            self.segmenter.upper_pdu.aid,
-                            self.segmenter.upper_pdu.szmic().into(),
+                            access.aid(),
+                            access.mic().is_big().into(),
                             self.segmenter.seq_zero,
                             self.segmenter.seg_o,
                             seg_n_out,

@@ -9,10 +9,11 @@ use crate::stack::messages::{
 use crate::stack::{segments, SendError, StackInternals};
 use crate::{lower, net, replay};
 
-use crate::control::ControlPDU;
+use crate::control;
 use crate::lower::SeqZero;
-use crate::upper::EncryptedAppPayload;
+use crate::upper::{EncryptedAppPayload, PDU};
 use alloc::boxed::Box;
+use core::borrow::BorrowMut;
 use core::convert::TryFrom;
 use parking_lot::{Mutex, RwLock};
 use std::sync::mpsc;
@@ -22,8 +23,8 @@ pub struct FullStack<'a> {
     network_pdu_receiver: mpsc::Receiver<IncomingEncryptedNetworkPDU>,
     app_pdu_sender: mpsc::Sender<IncomingMessage<Box<[u8]>>>,
     app_pdu_receiver: mpsc::Receiver<IncomingMessage<Box<[u8]>>>,
-    input_interfaces: InputInterfaces<InputInterfaceSink>,
-    output_interfaces: OutputInterfaces<'a>,
+    input_interfaces: Mutex<InputInterfaces<InputInterfaceSink>>,
+    output_interfaces: Mutex<OutputInterfaces<'a>>,
     segments: segments::Segments,
     replay_cache: Mutex<replay::Cache>,
     internals: RwLock<StackInternals>,
@@ -39,6 +40,7 @@ impl InterfaceSink for InputInterfaceSink {
 }
 pub enum FullStackError {
     SendError(SendError),
+    RecvError(RecvError),
 }
 pub enum RecvError {
     NoMatchingNetKey,
@@ -49,7 +51,11 @@ pub enum RecvError {
     OldSeqZero,
 }
 impl<'a> FullStack<'a> {
-    pub fn new(internals: StackInternals) -> Self {
+    /// Create a new `FullStack` based on `StackInternals` and `replay::Cache`.
+    /// `StackInternals` holds the `device_state::State` which should be save persistently for the
+    /// entire time a node is in a Mesh Network. If you lose the `StackInternals`, the node will
+    /// have to be reprovisioned as a new nodes and the old allocated Unicast Addresses are lost.
+    pub fn new(internals: StackInternals, replay_cache: replay::Cache) -> Self {
         let (tx_net, rx_net) = mpsc::channel();
         let (tx_app, rx_app) = mpsc::channel();
         Self {
@@ -57,12 +63,22 @@ impl<'a> FullStack<'a> {
             network_pdu_receiver: rx_net,
             app_pdu_sender: tx_app,
             app_pdu_receiver: rx_app,
-            input_interfaces: InputInterfaces::new(InputInterfaceSink(tx_net)),
-            output_interfaces: Default::default(),
+            input_interfaces: Mutex::new(InputInterfaces::new(InputInterfaceSink(tx_net))),
+            output_interfaces: Mutex::new(OutputInterfaces::default()),
             internals: RwLock::new(internals),
-            replay_cache: Mutex::new(replay::Cache::new()),
+            replay_cache: Mutex::new(replay_cache),
             segments: segments::Segments::new(),
         }
+    }
+    pub fn output_interfaces(&self, use_interfaces: impl FnOnce(&mut OutputInterfaces)) {
+        use_interfaces(&mut self.output_interfaces.lock());
+    }
+
+    pub fn input_interfaces(
+        &self,
+        use_interfaces: impl FnOnce(&mut InputInterfaces<InputInterfaceSink>),
+    ) {
+        use_interfaces(&mut self.input_interfaces.lock());
     }
     fn handle_next_encrypted_network_pdu(&self) -> Result<(), RecvError> {
         self.handle_encrypted_net_pdu(self.next_encrypted_network_pdu()?)
@@ -101,7 +117,7 @@ impl<'a> FullStack<'a> {
             lower::PDU::UnsegmentedControl(unseg_control) => {
                 self.handle_control(IncomingControlMessage {
                     control_pdu: {
-                        match ControlPDU::try_from(unseg_control) {
+                        match control::ControlPDU::try_from(unseg_control) {
                             Ok(pdu) => pdu,
                             Err(_) => return Err(RecvError::MalformedControlPDU), // Badly formatted Control PDU
                         }
@@ -128,6 +144,7 @@ impl<'a> FullStack<'a> {
     /// Send encrypted net_pdu through all output interfaces.
     fn send_encrypted_net_pdu(&self, pdu: OutgoingEncryptedNetworkPDU) -> Result<(), SendError> {
         self.output_interfaces
+            .lock()
             .send_pdu(&pdu)
             .map_err(|e| SendError::BearerError(e))
     }
@@ -144,10 +161,27 @@ impl<'a> FullStack<'a> {
     fn handle_upper_pdu<Storage: AsRef<[u8]> + AsMut<[u8]>>(
         &self,
         pdu: IncomingTransportPDU<Storage>,
-    ) {
-        match EncryptedAppPayload::try_from(pdu.upper_pdu) {
-            Ok(app_pdu) => {}
-            Err(_) => {}
+    ) -> Result<(), RecvError> {
+        match pdu.upper_pdu {
+            PDU::Control(control_pdu) => self.handle_control(IncomingControlMessage {
+                control_pdu: control::ControlPDU::try_from(&control_pdu)
+                    .map_err(|_| RecvError::MalformedControlPDU)?,
+                src: pdu.src,
+                rssi: pdu.rssi,
+                ttl: pdu.ttl,
+            }),
+            PDU::Access(access_pdu) => {
+                self.handle_encrypted_incoming_message(EncryptedIncomingMessage {
+                    encrypted_app_payload: access_pdu,
+                    seq: pdu.seq,
+                    seg_count: pdu.seg_count,
+                    net_key_index: pdu.net_key_index,
+                    dst: pdu.dst,
+                    src: pdu.src,
+                    ttl: pdu.ttl,
+                    rssi: pdu.rssi,
+                })
+            }
         }
     }
     pub fn handle_encrypted_net_pdu(

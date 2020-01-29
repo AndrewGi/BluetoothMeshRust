@@ -1,10 +1,12 @@
 //! Common Bluetooth Mesh Objects/Structures.
 use crate::serializable::bytes::ToFromBytesEndian;
-use core::convert::TryFrom;
+use core::convert::{TryFrom, TryInto};
 use core::fmt::{Display, Error, Formatter};
+use core::str::FromStr;
 use core::time;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct IVI(pub bool);
 impl From<IVI> for bool {
     #[must_use]
@@ -200,6 +202,20 @@ impl U24 {
         U24(U24_MAX)
     }
 }
+impl core::ops::Add for U24 {
+    type Output = U24;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        U24::new_masked(self.0 + rhs.0)
+    }
+}
+impl core::ops::Sub for U24 {
+    type Output = U24;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        U24::new_masked(self.0 - rhs.0)
+    }
+}
 #[derive(Copy, Clone, PartialOrd, PartialEq, Ord, Eq, Hash, Debug)]
 pub struct U24ConversionError(());
 impl TryFrom<u32> for U24 {
@@ -211,6 +227,19 @@ impl TryFrom<u32> for U24 {
         } else {
             Ok(U24(value))
         }
+    }
+}
+impl From<u16> for U24 {
+    fn from(v: u16) -> Self {
+        U24(v.into())
+    }
+}
+impl FromStr for U24 {
+    type Err = U24ConversionError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let v = u32::from_str(s).map_err(|_| U24ConversionError(()))?;
+        v.try_into()
     }
 }
 impl ToFromBytesEndian for U24 {
@@ -475,7 +504,7 @@ impl ElementIndex {
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ElementCount(pub u8);
-const COUNT_MAX: u8 = 0b111;
+const TRANSMIT_COUNT_MAX: u8 = 0b111;
 /// 3-bit Transit Count,
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -485,7 +514,7 @@ impl TransmitCount {
     /// # Panics
     /// Panics if `count > COUNT_MAX`,
     pub fn new(count: u8) -> Self {
-        assert!(count <= COUNT_MAX);
+        assert!(count <= TRANSMIT_COUNT_MAX);
         Self(count)
     }
 }
@@ -539,7 +568,7 @@ impl From<TransmitInterval> for u8 {
 impl From<u8> for TransmitInterval {
     fn from(b: u8) -> Self {
         Self::new(
-            TransmitCount::new(b & COUNT_MAX),
+            TransmitCount::new(b & TRANSMIT_COUNT_MAX),
             TransmitSteps::new(b >> 3),
         )
     }
