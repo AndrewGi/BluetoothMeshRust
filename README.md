@@ -2,7 +2,10 @@
 
 [Docs](https://docs.rs/bluetooth_mesh/)
 
-[Crates.io](https://crates.io/crates/bluetooth_mesh)
+[Crates.io](https://crates.io/crates/bluetooth_mesh)  
+
+
+See [Mesh CLI](/cli) for an application example.  
 
 !! Very WIP and not finished !!
 
@@ -43,16 +46,16 @@ TODO:
       - [x] Control
         - [ ] Heartbeat
         - [ ] Friend
-          - [ ] Poll
-          - [ ] Update
-          - [ ] Request
-          - [ ] Offer
-          - [ ] Clear
-          - [ ] Clear Confirm
-          - [ ] Subscription List
-            - [ ] Add
-            - [ ] Remove
-            - [ ] Confirm
+          - [x] Poll
+          - [x] Update
+          - [x] Request
+          - [x] Offer
+          - [x] Clear
+          - [x] Clear Confirm
+          - [x] Subscription List
+            - [x] Add
+            - [x] Remove
+            - [x] Confirm
     - [ ] Lower
       - [x] Segment
       - [x] Reassembly
@@ -82,7 +85,7 @@ TODO:
     - [ ] PB-GATT
     - [x] PB_ADV
       - [x] Links
-    - [ ] Generic
+    - [x] Generic
     - [ ] Key Exchange
     - [ ] Segmentation
     - [ ] Reassembly
