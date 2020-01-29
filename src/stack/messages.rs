@@ -52,7 +52,7 @@ pub struct EncryptedOutgoingMessage<Storage: AsRef<[u8]> + AsMut<[u8]>> {
 }
 pub struct EncryptedIncomingMessage<Storage: AsRef<[u8]> + AsMut<[u8]>> {
     pub(crate) encrypted_app_payload: EncryptedAppPayload<Storage>,
-    pub(crate) seq: SeqRange,
+    pub(crate) seq: SequenceNumber,
     pub(crate) seg_count: u8,
     pub(crate) net_key_index: NetKeyIndex,
     pub(crate) dst: Address,
@@ -72,7 +72,7 @@ pub struct IncomingMessage<Storage: AsRef<[u8]> + AsMut<[u8]>> {
     pub dst: Address,
     pub net_key_index: NetKeyIndex,
     pub app_key_index: Option<AppKeyIndex>,
-    pub ttl: TTL,
+    pub ttl: Option<TTL>,
     pub rssi: Option<RSSI>,
 }
 pub struct IncomingNetworkPDU {
@@ -83,8 +83,11 @@ pub struct IncomingNetworkPDU {
 }
 pub struct IncomingTransportPDU<Storage: AsRef<[u8]> + AsMut<[u8]>> {
     pub upper_pdu: upper::PDU<Storage>,
+    pub seg_count: u8,
     pub seq: SequenceNumber,
-    pub ttl: TTL,
+    pub net_key_index: NetKeyIndex,
+    pub ttl: Option<TTL>,
+    pub rssi: Option<RSSI>,
     pub src: UnicastAddress,
     pub dst: Address,
 }

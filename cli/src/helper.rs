@@ -2,8 +2,8 @@ use crate::CLIError;
 use bluetooth_mesh::device_state;
 use std::convert::TryFrom;
 use std::fmt::{Error, Formatter};
-use std::str::FromStr;
 use std::num::ParseIntError;
+use std::str::FromStr;
 
 pub struct HexSlice<'a>(pub &'a [u8]);
 impl<'a> std::fmt::UpperHex for HexSlice<'a> {
@@ -41,16 +41,25 @@ pub fn is_128_bit_hex_str_validator(input: String) -> Result<(), String> {
         Err(format!("'{}' is not a 128-bit hex string", &input))
     }
 }
+pub fn is_u8_validator(input: String) -> Result<(), String> {
+    match u8::from_str(&input) {
+        Ok(_) => Ok(()),
+        Err(_) => Err(format!("'{}' is not a 8-bit unsigned integer", &input)),
+    }
+}
 pub fn is_u24_validator(input: String) -> Result<(), String> {
-    match u32::from_str(&input).ok().and_then(|v| bluetooth_mesh::mesh::U24::try_from(v).ok()) {
+    match u32::from_str(&input)
+        .ok()
+        .and_then(|v| bluetooth_mesh::mesh::U24::try_from(v).ok())
+    {
         Some(_) => Ok(()),
-        None => Err(format!("'{}' is not a 24-unsigned integer", &input))
+        None => Err(format!("'{}' is not a 24-bit unsigned integer", &input)),
     }
 }
 pub fn is_u32_validator(input: String) -> Result<(), String> {
     match u32::from_str(&input) {
         Ok(_) => Ok(()),
-        Err(_) => Err(format!("'{}' is not a 32-unsigned integer", &input))
+        Err(_) => Err(format!("'{}' is not a 32-bit unsigned integer", &input)),
     }
 }
 pub fn hex_str_to_bytes<T: Default + AsMut<[u8]>>(s: &str) -> Option<T> {
@@ -69,13 +78,16 @@ pub fn hex_str_to_bytes<T: Default + AsMut<[u8]>>(s: &str) -> Option<T> {
     }
 }
 pub fn is_bool_validator(input: String) -> Result<(), String> {
-    bool::from_str(&input).ok().map(|_|()).ok_or(format!("'{}' is not a valid bool", &input))
+    bool::from_str(&input)
+        .ok()
+        .map(|_| ())
+        .ok_or(format!("'{}' is not a valid bool", &input))
 }
 pub fn load_file(path: &str, writeable: bool, create: bool) -> Result<std::fs::File, CLIError> {
     std::fs::OpenOptions::new()
         .read(true)
         .write(writeable)
-        .truncate(true)
+        .truncate(writeable)
         .create(create)
         .open(path)
         .map_err(|e| CLIError::IOError(path.to_owned(), e))
@@ -87,5 +99,6 @@ pub fn write_device_state(
     path: &str,
     device_state: &device_state::DeviceState,
 ) -> Result<(), CLIError> {
-    serde_json::to_writer(load_file(path, true, true)?, device_state).map_err(CLIError::SerdeJSON)
+    serde_json::to_writer_pretty(load_file(path, true, true)?, device_state)
+        .map_err(CLIError::SerdeJSON)
 }

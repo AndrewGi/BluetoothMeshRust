@@ -17,6 +17,7 @@ use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use core::convert::TryFrom;
 use core::ops::Range;
+use core::sync::atomic::Ordering;
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -36,6 +37,7 @@ pub struct DeviceState {
     gatt_proxy_state: GATTProxyState,
     secure_network_beacon_state: SecureNetworkBeaconState,
 
+    seq_counters: Vec<SeqCounter>,
     models: Models,
 
     default_ttl: DefaultTTLState,
@@ -78,8 +80,12 @@ impl Iterator for SeqRange {
 /// Atomic SeqCounter so no PDUs get the same SeqNumber. Sequence Numbers are a finite resource
 /// (only 24-bits) that only get reset every IVIndex update. Also segmented PDUs require sequential
 #[derive(Default, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SeqCounter(core::sync::atomic::AtomicU32);
 impl SeqCounter {
+    pub fn new(start_seq: SequenceNumber) -> Self {
+        Self(core::sync::atomic::AtomicU32::new(start_seq.0.value()))
+    }
     /// Allocates a or some SequenceNumbers and increments the internal counter by amount. Allocating
     /// `amount` Sequence Numbers is useful for Segmented Transport PDUs.
     /// Returns `None` if `SequenceNumber` is at its max.
@@ -98,6 +104,19 @@ impl SeqCounter {
             Some(SeqRange(next..next + amount))
         }
     }
+    pub fn set_seq(&mut self, new_seq: SequenceNumber) {
+        *self.0.get_mut() = new_seq.0.value()
+    }
+    pub fn check(&self) -> SequenceNumber {
+        SequenceNumber(U24::new(self.0.load(Ordering::SeqCst)))
+    }
+}
+impl Clone for SeqCounter {
+    fn clone(&self) -> Self {
+        SeqCounter(core::sync::atomic::AtomicU32::new(
+            self.0.load(Ordering::SeqCst),
+        ))
+    }
 }
 impl DeviceState {
     /// Generates a new `DeviceState`. `SecurityMaterials` will be new random keys.
@@ -113,6 +132,9 @@ impl DeviceState {
         Self {
             element_count,
             element_address: primary_address,
+            seq_counters: core::iter::repeat(SeqCounter::default())
+                .take(element_count.0.into())
+                .collect(),
             relay_state: RelayState::Disabled,
             gatt_proxy_state: GATTProxyState::Disabled,
             secure_network_beacon_state: SecureNetworkBeaconState::NotBroadcasting,
@@ -177,6 +199,21 @@ impl DeviceState {
     }
     pub fn security_materials_mut(&mut self) -> &mut SecurityMaterials {
         &mut self.security_materials
+    }
+    /// # Panics
+    /// Panics if `element_index >= element_count`.
+    pub fn seq_counter(&self, element_index: ElementIndex) -> &SeqCounter {
+        self.seq_counters
+            .get(usize::from(element_index.0))
+            .expect("element_index out of bounds")
+    }
+
+    /// # Panics
+    /// Panics if `element_index >= element_count`.
+    pub fn seq_counter_mut(&mut self, element_index: ElementIndex) -> &mut SeqCounter {
+        self.seq_counters
+            .get_mut(usize::from(element_index.0))
+            .expect("element_index out of bounds")
     }
     pub fn device_key(&self) -> &DevKey {
         &self.security_materials.dev_key

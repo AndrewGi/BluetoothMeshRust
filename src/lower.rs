@@ -26,6 +26,7 @@ impl From<bool> for SZMIC {
 pub const SEQ_ZERO_MAX: u16 = (1u16 << 13) - 1;
 ///13 Bits SeqZero. Derived from `SeqAuth`
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SeqZero(u16);
 impl SeqZero {
     /// Create a new 13 bit `SeqZero`.
