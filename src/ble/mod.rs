@@ -4,7 +4,7 @@ pub mod advertisement;
 pub mod gap;
 pub mod hci;
 pub mod manager;
-
+pub mod uri;
 /// Stores Received Signal Strength Indicated as milli-dBm.
 /// So -100 dBm is = `RSSI(-100_000)`
 /// 0 dBm = `RSSI(0)`
