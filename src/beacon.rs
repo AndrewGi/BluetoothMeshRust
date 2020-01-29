@@ -1,5 +1,6 @@
 //! Bluetooth Mesh Beacon Layer. Currently only supports `SecureNetworkBeacon`s and
 //! `UnprovisionedDeviceBeacon`s.
+use crate::crypto::s1;
 use crate::serializable::bytes::ToFromBytesEndian;
 use crate::uuid::UUID;
 use core::convert::TryInto;
@@ -55,6 +56,14 @@ impl OOBInformation {
 }
 #[derive(Copy, Clone, PartialOrd, PartialEq, Ord, Eq, Debug, Hash)]
 pub struct URIHash(pub u32);
+impl URIHash {
+    pub fn hash_data(data: &[u8]) -> URIHash {
+        URIHash(
+            u32::from_bytes_be(&s1(data).as_ref()[..=3])
+                .expect("s1 returns 13 bytes and we only need 4"),
+        )
+    }
+}
 #[derive(Copy, Clone, PartialOrd, PartialEq, Ord, Eq, Debug, Hash)]
 pub struct UnprovisionedDeviceBeacon {
     pub uuid: UUID,
@@ -146,7 +155,7 @@ impl AsRef<[u8]> for PackedBeacon {
 
 #[cfg(test)]
 mod test {
-    use crate::beacon::{Beacon, OOBFlags, OOBInformation, UnprovisionedDeviceBeacon};
+    use crate::beacon::{Beacon, OOBFlags, OOBInformation, URIHash, UnprovisionedDeviceBeacon};
     use crate::mesh;
     use crate::uuid::UUID;
 
@@ -174,9 +183,12 @@ mod test {
     }
     #[test]
     pub fn test_unprovisioned_with_uri() {
-        let uri = "https://www.example.com/mesh/products/light-switch-v3";
+        // 0x17 is uri::URIName::https.
+        let uri = "\x17//www.example.com/mesh/products/light-switch-v3";
         let oob = OOBInformation::default()
             .set(OOBFlags::Number)
             .set(OOBFlags::InsideManual);
+        let uri_hash = URIHash::hash_data(uri.as_bytes());
+        assert_eq!(u32::from_be_bytes([0xD9, 0x74, 0x78, 0xB3]), uri_hash.0);
     }
 }
