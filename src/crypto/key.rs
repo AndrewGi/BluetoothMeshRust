@@ -1,10 +1,11 @@
 //! Crypto Keys uses for Mesh Security.
 use crate::crypto::k_funcs::{k1, s1};
 use crate::crypto::{hex_16_to_array, ECDHSecret, NetworkID, ProvisioningSalt, Salt, AID, AKF};
-use crate::random;
 use crate::random::Randomizable;
+use crate::{mesh, random};
 use core::convert::{TryFrom, TryInto};
 use core::fmt::{Error, Formatter, LowerHex, UpperHex};
+use core::str::FromStr;
 
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -69,6 +70,15 @@ impl LowerHex for Key {
             write!(f, "{:0x}", b)?;
         }
         Ok(())
+    }
+}
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
+pub struct KeyError(());
+impl FromStr for Key {
+    type Err = KeyError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Key(mesh::bytes_str_to_buf(s).ok_or(KeyError(()))?))
     }
 }
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
