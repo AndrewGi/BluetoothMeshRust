@@ -29,6 +29,10 @@ pub struct ModelInfo {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Models(BTreeMap<ModelIdentifier, ModelInfo>);
 
+/// Contains all the persistant Bluetooth Mesh device data. This struct needs to be serialized/saved
+/// somehow when the program shuts down or you will lose all your crypto keys. Normal operations
+/// should use just immutable functions (include increases Seqs) but config clients and others will
+/// use mutable references to configure the node.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DeviceState {
     element_address: UnicastAddress,
