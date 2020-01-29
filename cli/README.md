@@ -6,6 +6,6 @@ See `cargo run -- --help` for more help/info.
 
 ## Sub Commands
 - `crypto` Read/Write/Generate crypto keys
-- `provisioner` Act as a provisioner in a Mesh Network (requires bearer)
+- `provisioner` Act as a provisioner in a Mesh Network (requires bearer) (not finished)
 - `generate` Generate new `device_state.json` file
 - Many more to come
