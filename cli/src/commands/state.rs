@@ -1,13 +1,14 @@
+use crate::{helper, CLIError};
+use bluetooth_mesh::address::Address::Unicast;
 use bluetooth_mesh::address::{Address, UnicastAddress};
+use bluetooth_mesh::device_state;
 use bluetooth_mesh::mesh::ElementCount;
 use std::fs::File;
 use std::path::Path;
 use std::str::FromStr;
-use crate::{CLIError, helper};
-use bluetooth_mesh::address::Address::Unicast;
-use bluetooth_mesh::device_state;
+
 pub fn sub_command() -> clap::App<'static, 'static> {
-    clap::SubCommand::with_name("generate")
+    clap::SubCommand::with_name("new")
         .about("Generate a device state with desired parameters")
         .arg(
             clap::Arg::with_name("element_count")
@@ -47,6 +48,12 @@ pub fn sub_command() -> clap::App<'static, 'static> {
                     }
                 }),
         )
+        .arg(
+            clap::Arg::with_name("default_ttl")
+                .short("t")
+                .value_name("DEFAULT_TTL")
+                .validator(),
+        )
 }
 pub fn generate_matches(
     parent_logger: &slog::Logger,
@@ -61,8 +68,8 @@ pub fn generate_matches(
             let count = ElementCount(element_count.parse().expect("checked by clap"));
             let address = UnicastAddress::new(element_address.parse().expect("checked by clap"));
             generate(parent_logger, device_state_path, address, count)
-        },
-        _ => unreachable!("element count and element address should have default values")
+        }
+        _ => unreachable!("element count and element address should have default values"),
     }
 }
 pub fn generate(

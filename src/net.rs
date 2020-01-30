@@ -281,6 +281,8 @@ impl fmt::Display for Header {
     }
 }
 const ENCRYPTED_PDU_MAX_SIZE: usize = TRANSPORT_PDU_MAX_LEN + PDU_HEADER_LEN + 4;
+/// Owned Encrypted PDU. Stores the PDU as bytes in an internal array.
+/// See [`bluetooth_mesh::net::EncryptedPDU`] for general network PDU functions
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub struct OwnedEncryptedPDU {
     pdu_buffer: [u8; ENCRYPTED_PDU_MAX_SIZE],
@@ -368,6 +370,8 @@ impl<'a> EncryptedPDU<'a> {
     pub fn ivi(&self) -> IVI {
         IVI(self.data[0] & 0x80 != 0)
     }
+    /// Attempts to decrypt the given network PDU. `IVIndex` much have a matching `ivi`.
+    /// `NetworkKeys` should be the network keys used to encrypt the messages based on the `NID`.
     #[must_use]
     pub fn try_decrypt(
         &self,
@@ -402,6 +406,7 @@ impl<'a> EncryptedPDU<'a> {
             .ok_or(NetworkDataError::BadTransportPDU)?;
         Ok(PDU::new(&header, &payload))
     }
+    /// Returns the `ObfuscatedHeader`.
     #[must_use]
     pub fn header(&self) -> ObfuscatedHeader {
         ObfuscatedHeader(
@@ -410,6 +415,8 @@ impl<'a> EncryptedPDU<'a> {
                 .expect("obfuscated header should always exist"),
         )
     }
+    /// Returns the `MIC` based on the `CTL` bit. If `CTL == 1`, `MIC::byte_len() == 8` else if
+    /// `CTL == 0`, `MIC::byte_len() == 4`.
     pub fn mic(&self, ctl: CTL) -> MIC {
         let mic_size = if bool::from(ctl) { 8 } else { 4 };
         MIC::try_from_bytes_be(&self.data[self.data.len() - mic_size..])
@@ -423,6 +430,7 @@ impl<'a> EncryptedPDU<'a> {
             mic,
         )
     }
+    /// Converts the reference EncryptedPDU into a owned byte array.
     fn to_owned(&self) -> OwnedEncryptedPDU {
         let mut out = OwnedEncryptedPDU::new_zeroed(self.data.len());
         out.as_mut().copy_from_slice(self.data());

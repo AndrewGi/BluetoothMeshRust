@@ -29,6 +29,15 @@ pub struct ModelInfo {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Models(BTreeMap<ModelIdentifier, ModelInfo>);
 
+#[derive(Default, Debug)]
+pub struct ConfigStates {
+    pub relay_state: RelayState,
+    pub gatt_proxy_state: GATTProxyState,
+    pub secure_network_beacon_state: SecureNetworkBeaconState,
+    pub default_ttl: DefaultTTLState,
+    pub network_transmit: NetworkTransmit,
+}
+
 /// Contains all the persistant Bluetooth Mesh device data. This struct needs to be serialized/saved
 /// somehow when the program shuts down or you will lose all your crypto keys. Normal operations
 /// should use just immutable functions (include increases Seqs) but config clients and others will
@@ -37,18 +46,12 @@ pub struct Models(BTreeMap<ModelIdentifier, ModelInfo>);
 pub struct DeviceState {
     element_address: UnicastAddress,
     element_count: ElementCount,
-    relay_state: RelayState,
-    gatt_proxy_state: GATTProxyState,
-    secure_network_beacon_state: SecureNetworkBeaconState,
 
     seq_counters: Vec<SeqCounter>,
     models: Models,
 
-    default_ttl: DefaultTTLState,
-    network_transmit: NetworkTransmit,
+    config_states: ConfigStates,
 
-    iv_update_flag: IVUpdateFlag,
-    iv_index: IVIndex,
     security_materials: SecurityMaterials,
 }
 pub struct SeqRange(pub core::ops::Range<u32>);
@@ -139,18 +142,12 @@ impl DeviceState {
             seq_counters: core::iter::repeat(SeqCounter::default())
                 .take(element_count.0.into())
                 .collect(),
-            relay_state: RelayState::Disabled,
-            gatt_proxy_state: GATTProxyState::Disabled,
-            secure_network_beacon_state: SecureNetworkBeaconState::NotBroadcasting,
+            config_states: ConfigStates::default(),
             models: Models::default(),
-            default_ttl: DefaultTTLState::new(0x4),
-            network_transmit: NetworkTransmit(TransmitInterval {
-                count: TransmitCount::new(0x3),
-                steps: TransmitSteps::new(3),
-            }),
-            iv_update_flag: IVUpdateFlag(false),
-            iv_index: IVIndex(0),
+
             security_materials: SecurityMaterials {
+                iv_update_flag: IVUpdateFlag(false),
+                iv_index: IVIndex(0),
                 dev_key: DevKey::random_secure(),
                 net_key_map: NetKeyMap::new(),
                 app_key_map: AppKeyMap::new(),
@@ -179,24 +176,26 @@ impl DeviceState {
     }
     /// IVIndex used for transmitting.
     pub fn tx_iv_index(&self) -> IVIndex {
-        self.iv_index
+        self.security_materials.iv_index
     }
     /// IVIndex used for receiving. Will return `None` if no matching `IVIndex` can be found.
     /// See [`IVIndex::matching_flags`] for more.
     pub fn rx_iv_index(&self, ivi: IVI) -> Option<IVIndex> {
-        self.iv_index.matching_flags(ivi, self.iv_update_flag)
+        self.security_materials
+            .iv_index
+            .matching_flags(ivi, self.security_materials.iv_update_flag)
     }
     pub fn iv_index(&self) -> IVIndex {
-        self.iv_index
+        self.security_materials.iv_index
     }
     pub fn iv_index_mut(&mut self) -> &mut IVIndex {
-        &mut self.iv_index
+        &mut self.security_materials.iv_index
     }
     pub fn iv_update_flag(&self) -> IVUpdateFlag {
-        self.iv_update_flag
+        self.security_materials.iv_update_flag
     }
     pub fn iv_update_flag_mut(&mut self) -> &mut IVUpdateFlag {
-        &mut self.iv_update_flag
+        &mut self.security_materials.iv_update_flag
     }
     pub fn security_materials(&self) -> &SecurityMaterials {
         &self.security_materials
@@ -219,6 +218,12 @@ impl DeviceState {
             .get_mut(usize::from(element_index.0))
             .expect("element_index out of bounds")
     }
+    pub fn config_states(&self) -> &ConfigStates {
+        &self.config_states
+    }
+    pub fn config_states_mut(&mut self) -> &mut ConfigStates {
+        &mut self.config_states
+    }
     pub fn device_key(&self) -> &DevKey {
         &self.security_materials.dev_key
     }
@@ -226,9 +231,9 @@ impl DeviceState {
         &mut self.security_materials.dev_key
     }
     pub fn default_ttl(&self) -> TTL {
-        TTL::new(self.default_ttl.into())
+        TTL::new(self.config_states.default_ttl.into())
     }
     pub fn relay_state(&self) -> RelayState {
-        self.relay_state
+        self.config_states.relay_state
     }
 }

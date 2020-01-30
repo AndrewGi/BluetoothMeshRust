@@ -20,7 +20,7 @@ fn sample_dev_key() -> DevKey {
 
 fn message22() {
     //let opcode = Opcode::Vendor(VendorOpcode::new(0x15), CompanyID(0x00a));
-    let mut parameters = [0xd5_u8, 0x0a, 0x00, 0x48, 0x65, 0x6c, 0x6c, 0x6f];
+    let parameters = [0xd5_u8, 0x0a, 0x00, 0x48, 0x65, 0x6c, 0x6c, 0x6f];
     let payload = upper::AppPayload::new(parameters);
     let app_key = sample_app_key();
     let dst = VirtualAddress::new(&UUID(
