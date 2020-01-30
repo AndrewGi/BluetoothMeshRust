@@ -124,7 +124,7 @@ impl Command for SetAdvertisingData {
         }
     }
 
-    fn unpack_from(buf: &[u8]) -> Result<Self, HCIConversionError>
+    fn unpack_from(buf: &[u8]) -> Result<Self, HCICommandError>
     where
         Self: Sized,
     {

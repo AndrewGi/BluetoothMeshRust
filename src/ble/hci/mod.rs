@@ -4,8 +4,8 @@ pub mod link_control;
 #[cfg(all(unix, feature = "std"))]
 pub mod socket;
 pub mod stream;
-use core::convert::TryFrom;
-
+use crate::serializable::bytes::ToFromBytesEndian;
+use core::convert::{TryFrom, TryInto};
 #[derive(Copy, Clone, PartialOrd, PartialEq, Ord, Eq, Debug, Hash)]
 #[repr(u8)]
 pub enum Version {
@@ -215,6 +215,11 @@ impl From<EventCode> for u8 {
         code as u8
     }
 }
+impl From<EventCode> for u32 {
+    fn from(code: EventCode) -> Self {
+        code as u32
+    }
+}
 impl TryFrom<u8> for EventCode {
     type Error = HCIConversionError;
 
@@ -289,28 +294,58 @@ impl TryFrom<u8> for EventCode {
     }
 }
 
-/// 6 bit OGF
+/// 6 bit OGF. (OpCode Ground Field)
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 #[repr(u8)]
 pub enum OGF {
     NOP = 0x00,
     LinkControl = 0x01,
     LinkPolicy = 0x02,
-    HCIControlBandband = 0x03,
+    HCIControlBaseband = 0x03,
     InformationalParameters = 0x04,
     StatusParameters = 0x05,
     Testing = 0x06,
     LEController = 0x08,
     VendorSpecific = 0x3F,
 }
+impl From<OGF> for u8 {
+    fn from(ogf: OGF) -> Self {
+        ogf as u8
+    }
+}
+impl TryFrom<u8> for OGF {
+    type Error = HCIConversionError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0x00 => Ok(OGF::NOP),
+            0x01 => Ok(OGF::LinkControl),
+            0x02 => Ok(OGF::LinkPolicy),
+            0x03 => Ok(OGF::HCIControlBaseband),
+            0x04 => Ok(OGF::InformationalParameters),
+            0x05 => Ok(OGF::StatusParameters),
+            0x06 => Ok(OGF::Testing),
+            0x08 => Ok(OGF::LEController),
+            0x3F => Ok(OGF::VendorSpecific),
+            _ => Err(HCIConversionError(())),
+        }
+    }
+}
 pub const OCF_MAX: u16 = (1 << 10) - 1;
-/// 10 bit OCF
+/// 10 bit OCF (OpCode Command Field)
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub struct OCF(u16);
 impl OCF {
+    /// Creates a new 10-bit OCF
+    /// # Panics
+    /// Panics if `ocf > OCF_MAX` (if `ocf` isn't 10-bit)
     pub fn new(ocf: u16) -> Self {
         assert!(ocf <= OCF_MAX, "ocf bigger than 10 bits");
         Self(ocf)
+    }
+    /// Creates a new 10-bit OCF by masking a u16
+    pub fn new_masked(ocf: u16) -> Self {
+        Self(ocf & OCF_MAX)
     }
 }
 impl From<OCF> for u16 {
@@ -318,9 +353,45 @@ impl From<OCF> for u16 {
         ocf.0
     }
 }
+const OPCODE_LEN: usize = 2;
+/// HCI Opcode. Contains a OGF (OpCode Ground Field) and OCF (OpCode Command Field).
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub struct Opcode(pub OGF, pub OCF);
+impl Opcode {
+    pub fn pack(&self, buf: &mut [u8]) -> Result<(), HCICommandError> {
+        if buf.len() != OPCODE_LEN {
+            Err(HCICommandError::BadLength)
+        } else {
+            buf[..2].copy_from_slice(&u16::from(*self).to_bytes_le());
+            Ok(())
+        }
+    }
+    pub fn unpack(buf: &[u8]) -> Result<Opcode, HCICommandError> {
+        if buf.len() != OPCODE_LEN {
+            Err(HCICommandError::BadLength)
+        } else {
+            Ok(u16::from_bytes_le(&buf)
+                .expect("length checked above")
+                .try_into()
+                .ok()
+                .ok_or(HCICommandError::BadBytes)?)
+        }
+    }
+}
+impl From<Opcode> for u16 {
+    fn from(opcode: Opcode) -> Self {
+        (opcode.1).0 & (u16::from(u8::from(opcode.0)) << 10)
+    }
+}
+impl TryFrom<u16> for Opcode {
+    type Error = HCIConversionError;
 
+    fn try_from(value: u16) -> Result<Self, Self::Error> {
+        let ogf = OGF::try_from(u8::try_from(value >> 10).expect("OGF is 6-bits"))?;
+        let ocf = OCF::new_masked(value);
+        Ok(Opcode(ogf, ocf))
+    }
+}
 const MAX_PARAMETERS_LEN: usize = 0xFF;
 pub struct CommandPacket<Storage: AsRef<[u8]>> {
     opcode: Opcode,
@@ -339,7 +410,18 @@ pub trait Command {
     fn opcode() -> Opcode;
     fn byte_len(&self) -> usize;
     fn pack_into(&self, buf: &mut [u8]) -> Result<(), HCICommandError>;
-    fn unpack_from(buf: &[u8]) -> Result<Self, HCIConversionError>
+    fn pack_full(&self, buf: &mut [u8]) -> Result<(), HCICommandError> {
+        if buf.len() != self.byte_len() + OPCODE_LEN + 1 {
+            Err(HCICommandError::BadLength)
+        } else {
+            self.pack_into(&mut buf[3..])?;
+            Self::opcode().pack(&mut buf[..OPCODE_LEN])?;
+            buf[2] =
+                u8::try_from(self.byte_len()).expect("commands can only have 0xFF parameter bytes");
+            Ok(())
+        }
+    }
+    fn unpack_from(buf: &[u8]) -> Result<Self, HCICommandError>
     where
         Self: Sized;
 }
