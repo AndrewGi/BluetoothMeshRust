@@ -10,13 +10,17 @@ impl From<net::EncryptedPDU<'_>> for ble::advertisement::AdStructure {
     }
 }
 
-pub struct ScannerInterface<'a, S: Scanner<'a>> {
-    scanner: S,
-    scanner_sink: Option<ScannerInputSink<'a>>,
+pub struct ScannerInterface<InterSink: InterfaceSink, Scan: Scanner<ScannerInputSink<InterSink>>> {
+    scanner: Scan,
+    _marker: core::marker::PhantomData<InterSink>,
 }
-#[derive(Clone, Copy)]
-pub struct ScannerInputSink<'a>(&'a (dyn InterfaceSink + 'a));
-impl<'a> ScannerSink for ScannerInputSink<'a> {
+pub struct ScannerInputSink<InterSink: InterfaceSink>(InterSink);
+impl<InterSink: InterfaceSink + Clone> Clone for ScannerInputSink<InterSink> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+impl<InterSink: InterfaceSink> ScannerSink for ScannerInputSink<InterSink> {
     fn consume_advertisement(&self, advertisement: &RawAdvertisement) {
         match advertisement.iter().next() {
             Some(AdStructure::MeshPDU(buf)) => {
@@ -33,14 +37,7 @@ impl<'a> ScannerSink for ScannerInputSink<'a> {
         }
     }
 }
-impl<'a, S: Scanner<'a>> From<S> for ScannerInterface<'a, S> {
-    fn from(scanner: S) -> Self {
-        Self {
-            scanner,
-            scanner_sink: None,
-        }
-    }
-}
+
 impl<A: Advertiser> OutputInterface for A {
     fn send_pdu(&self, pdu: &OutgoingEncryptedNetworkPDU) -> Result<(), BearerError> {
         for _ in 0..u8::from(pdu.transmit_parameters.count) {
@@ -50,9 +47,10 @@ impl<A: Advertiser> OutputInterface for A {
         Ok(())
     }
 }
-impl<'a, S: Scanner<'a>> InputInterface<'a> for ScannerInterface<'a, S> {
-    fn take_sink(&'a mut self, sink: &'a dyn InterfaceSink) {
-        self.scanner_sink = Some(ScannerInputSink(sink));
-        self.scanner.take_sink(self.scanner_sink.as_ref().unwrap())
+impl<InterSink: InterfaceSink, Scan: Scanner<ScannerInputSink<InterSink>>> InputInterface<InterSink>
+    for ScannerInterface<InterSink, Scan>
+{
+    fn take_sink(&mut self, sink: InterSink) {
+        self.scanner.take_sink(ScannerInputSink(sink))
     }
 }

@@ -1,7 +1,13 @@
+use crate::ble::hci::stream::{PacketType, StreamError, StreamSink};
+use crate::ble::hci::{stream, Command, CommandPacket, EventCode};
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::sync::atomic::{AtomicBool, Ordering};
 use std::os::unix::{
     io::{FromRawFd, RawFd},
     net::UnixStream,
 };
+
 #[repr(i32)]
 enum BTProtocol {
     L2CAP = 0,
@@ -52,6 +58,7 @@ pub enum HCISocketError {
     PermissionDenied,
     DeviceNotFound,
     NotConnected,
+    IO(std::io::Error),
     Other(i32),
 }
 impl HCISocket {
@@ -75,8 +82,52 @@ impl HCISocket {
                 std::mem::size_of::<SockaddrHCI>() as u32,
             )
         })?;
-        Ok(HCISocket {
-            socket: unsafe { UnixStream::from_raw_fd(adapter_fd) },
-        })
+        let is_running = Arc::new(AtomicBool::new(true));
+        let socket = unsafe { UnixStream::from_raw_fd(adapter_fd) };
+        let out = HCISocket {
+            socket: socket.try_clone()?,
+        };
+        out.set_filter();
+        Ok(out)
+    }
+}
+impl HCISocket {
+    pub fn set_filter(&self) -> Result<(), HCISocketError> {
+        const HCI_FILTER: i32 = 2;
+        const SOL_HCI: i32 = 0;
+        let type_mask =
+            (1u32 << u32::from(PacketType::Command)) | (1u32 << u32::from(PacketType::Event));
+        let event_mask1 = (1u32 << u32::from(EventCode::CommandComplete))
+            | (1u32 << u32::from(EventCode::CommandStatus));
+
+        let mut filter = [0_u8; 14];
+        filter[0..4].copy_from_slice(&type_mask.to_bytes_le());
+        filter[4..8].copy_from_slice(&event_mask1.to_bytes_le());
+
+        handle_libc_error(unsafe {
+            libc::setsockopt(
+                self.socket.as_raw_fd(),
+                SOL_HCI,
+                HCI_FILTER,
+                filter.as_mut_ptr() as *mut _ as *mut libc::c_void,
+                filter.len() as u32,
+            )
+        })?;
+        Ok(())
+    }
+}
+use std::io::Error;
+impl std::io::Write for HCISocket {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
+        self.socket.write(buf)
+    }
+
+    fn flush(&mut self) -> Result<(), Error> {
+        self.socket.flush()
+    }
+}
+impl std::io::Read for HCISocket {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
+        self.socket.read(buf)
     }
 }
