@@ -13,7 +13,6 @@ use crate::control;
 use crate::lower::SeqZero;
 use crate::upper::{EncryptedAppPayload, PDU};
 use alloc::boxed::Box;
-use core::borrow::BorrowMut;
 use core::convert::TryFrom;
 use parking_lot::{Mutex, RwLock};
 use std::sync::mpsc;
@@ -42,6 +41,7 @@ pub enum FullStackError {
     SendError(SendError),
     RecvError(RecvError),
 }
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub enum RecvError {
     NoMatchingNetKey,
     MalformedNetworkPDU,
@@ -88,7 +88,10 @@ impl<'a> FullStack<'a> {
             .recv()
             .map_err(|_| RecvError::NetworkPDUQueueClosed)
     }
-    fn handle_recv_error(&self, error: RecvError, pdu: &IncomingNetworkPDU) {}
+    fn handle_recv_error(&self, error: RecvError, pdu: &IncomingNetworkPDU) {
+        #[cfg(debug_assertions)]
+        eprintln!("recv_error: `{:?}` pdu: `{:?}`", error, pdu);
+    }
     /// Returns `true` if the `header` is old or `false` if the `header` is new and valid.
     /// If no information about the source of the PDU (Src and Seq), it records the header
     /// and returns `false`

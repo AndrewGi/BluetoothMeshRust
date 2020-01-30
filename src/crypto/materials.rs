@@ -3,7 +3,7 @@ use crate::crypto::key::{
     AppKey, BeaconKey, DevKey, EncryptionKey, IdentityKey, NetKey, PrivacyKey,
 };
 use crate::crypto::{k2, KeyRefreshPhases, NetworkID, AID};
-use crate::mesh::{AppKeyIndex, NetKeyIndex, NID};
+use crate::mesh::{AppKeyIndex, IVIndex, IVUpdateFlag, NetKeyIndex, NID};
 use alloc::collections::btree_map;
 use core::fmt::{Display, Error, Formatter};
 
@@ -248,6 +248,8 @@ impl AppKeyMap {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SecurityMaterials {
+    pub iv_update_flag: IVUpdateFlag,
+    pub iv_index: IVIndex,
     pub dev_key: DevKey,
     pub net_key_map: NetKeyMap,
     pub app_key_map: AppKeyMap,

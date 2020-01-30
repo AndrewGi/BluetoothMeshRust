@@ -41,6 +41,9 @@ pub fn is_128_bit_hex_str_validator(input: String) -> Result<(), String> {
         Err(format!("'{}' is not a 128-bit hex string", &input))
     }
 }
+pub fn is_ttl(input: String) -> Result<(), String> {
+    TTL::try_from(u8::try_from(&input))
+}
 pub fn is_u8_validator(input: String) -> Result<(), String> {
     match u8::from_str(&input) {
         Ok(_) => Ok(()),

@@ -121,6 +121,7 @@ impl From<TTL> for u8 {
         ttl.0
     }
 }
+
 impl Display for TTL {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         write!(f, "TTL({})", self.0)

@@ -79,20 +79,70 @@ impl Opcode {
     pub const fn max_byte_len() -> usize {
         3
     }
-    pub fn unpack_from(bytes: &[u8]) -> Option<Self> {
+    pub fn unpack_from(bytes: &[u8]) -> Result<Self, OpcodeConversationError> {
         if bytes.is_empty() || bytes.len() > Self::max_byte_len() {
-            None
+            Err(OpcodeConversationError(()))
         } else if bytes[0] == 0x7F {
             // This opcode is RFU
-            None
+            Err(OpcodeConversationError(()))
         } else if bytes[0] & 0x80 == 0 {
-            Some(SigOpcode::SingleOctet(bytes[0]).into())
-        } else if bytes.len() > 1 && bytes[0] & 0xC0 == 0xC0 {
+            Ok(Opcode::SIG(SigOpcode::SingleOctet(bytes[0]).into()))
+        } else if bytes[0] & 0xC0 == 0xC0 {
+            if bytes.len() < 3 {
+                return Err(OpcodeConversationError(()));
+            }
             let vendor_opcode = VendorOpcode::new(bytes[0] & !0xC0);
             let company_id = CompanyID(u16::from_le_bytes([bytes[1], bytes[2]]));
-            Some(Opcode::Vendor(vendor_opcode, company_id))
+            Ok(Opcode::Vendor(vendor_opcode, company_id))
+        } else if bytes[0] & 0x80 == 1 {
+            if bytes.len() < 2 {
+                return Err(OpcodeConversationError(()));
+            }
+            Ok(Opcode::SIG(SigOpcode::DoubleOctet(u16::from_le_bytes([
+                bytes[0], bytes[1],
+            ]))))
         } else {
-            None
+            Err(OpcodeConversationError(()))
+        }
+    }
+    pub fn pack_into(&self, buffer: &mut [u8]) -> Result<(), OpcodeConversationError> {
+        match *self {
+            Opcode::SIG(s) => match s {
+                SigOpcode::SingleOctet(s) => {
+                    if buffer.len() < 1 {
+                        return Err(OpcodeConversationError(()));
+                    }
+                    if s & 0x80 == 0 && s != 0x7F {
+                        buffer[0] = s;
+                        Ok(())
+                    } else {
+                        Err(OpcodeConversationError(()))
+                    }
+                }
+                SigOpcode::DoubleOctet(d) => {
+                    if buffer.len() < 2 {
+                        return Err(OpcodeConversationError(()));
+                    }
+                    if d & 0xC000 == 0x8000 {
+                        buffer[..2].copy_from_slice(&d.to_le_bytes()[..]);
+                        Ok(())
+                    } else {
+                        Err(OpcodeConversationError(()))
+                    }
+                }
+            },
+            Opcode::Vendor(opcode, company_id) => {
+                if buffer.len() < 3 {
+                    return Err(OpcodeConversationError(()));
+                }
+                // Invalid 6-bit opcode
+                if opcode.0 > !0xC0 {
+                    return Err(OpcodeConversationError(()));
+                }
+                buffer[0] = opcode.0 | 0xC0;
+                buffer[1..3].copy_from_slice(&company_id.to_bytes_le()[..]);
+                Ok(())
+            }
         }
     }
 }

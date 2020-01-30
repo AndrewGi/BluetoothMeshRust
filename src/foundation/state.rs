@@ -1,5 +1,5 @@
 use crate::foundation::FoundationStateError;
-use crate::mesh::TransmitInterval;
+use crate::mesh::{TransmitCount, TransmitInterval, TransmitSteps};
 use core::convert::TryFrom;
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
@@ -63,6 +63,11 @@ impl TryFrom<u8> for SecureNetworkBeaconState {
         }
     }
 }
+impl Default for SecureNetworkBeaconState {
+    fn default() -> Self {
+        SecureNetworkBeaconState::NotBroadcasting
+    }
+}
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
@@ -86,6 +91,11 @@ impl TryFrom<u8> for GATTProxyState {
             0x02 => Ok(GATTProxyState::NotSupported),
             _ => Err(FoundationStateError(())),
         }
+    }
+}
+impl Default for GATTProxyState {
+    fn default() -> GATTProxyState {
+        GATTProxyState::Disabled
     }
 }
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
@@ -206,7 +216,11 @@ impl From<DefaultTTLState> for u8 {
         ttl.0
     }
 }
-
+impl Default for DefaultTTLState {
+    fn default() -> Self {
+        DefaultTTLState(5)
+    }
+}
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DefaultTTLStateError(());
@@ -217,5 +231,14 @@ impl TryFrom<u8> for DefaultTTLState {
         Self::try_new(value).ok_or(DefaultTTLStateError(()))
     }
 }
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct NetworkTransmit(pub TransmitInterval);
+impl Default for NetworkTransmit {
+    fn default() -> Self {
+        NetworkTransmit(TransmitInterval {
+            count: TransmitCount::new(0x3),
+            steps: TransmitSteps::new(3),
+        })
+    }
+}

@@ -75,6 +75,7 @@ pub struct IncomingMessage<Storage: AsRef<[u8]> + AsMut<[u8]>> {
     pub ttl: Option<TTL>,
     pub rssi: Option<RSSI>,
 }
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct IncomingNetworkPDU {
     pub pdu: net::PDU,
     pub net_key_index: NetKeyIndex,
