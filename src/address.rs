@@ -138,40 +138,41 @@ impl UnicastAddress {
         UnicastAddress(v & UNICAST_MASK)
     }
 }
-
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
+pub struct AddressError(());
 impl TryFrom<u16> for UnicastAddress {
-    type Error = ();
+    type Error = AddressError;
 
     fn try_from(v: u16) -> Result<UnicastAddress, Self::Error> {
         if v == 0 {
-            Err(())
+            Err(AddressError(()))
         } else if v & UNICAST_BIT == 0 {
             Ok(UnicastAddress(v))
         } else {
-            Err(())
+            Err(AddressError(()))
         }
     }
 }
 
 impl TryFrom<u16> for GroupAddress {
-    type Error = ();
+    type Error = AddressError;
 
     fn try_from(v: u16) -> Result<GroupAddress, Self::Error> {
         if v & 0xC000 == 0xC000 {
             Ok(GroupAddress(v))
         } else {
-            Err(())
+            Err(AddressError(()))
         }
     }
 }
 
 impl TryFrom<u16> for VirtualAddressHash {
-    type Error = ();
+    type Error = AddressError;
     fn try_from(v: u16) -> Result<VirtualAddressHash, Self::Error> {
         if v & 0xC000 == 0x8000 {
             Ok(VirtualAddressHash(v))
         } else {
-            Err(())
+            Err(AddressError(()))
         }
     }
 }
