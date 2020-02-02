@@ -1,9 +1,8 @@
 //! Bluetooth Mesh Control Layer.
 
+use crate::bytes::ToFromBytesEndian;
+use crate::friend;
 use crate::lower::{BlockAck, SeqZero, UnsegmentedControlPDU, SEQ_ZERO_MAX};
-use crate::serializable::bytes::ToFromBytesEndian;
-use crate::upper;
-use crate::upper::PDU;
 use alloc::vec::Vec;
 use core::convert::{TryFrom, TryInto};
 
@@ -237,7 +236,7 @@ impl ControlMessage for Ack {
     }
 }
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
-pub struct FriendPoll {}
+pub struct FriendPoll(friend::FriendPoll);
 impl ControlMessage for FriendPoll {
     const OPCODE: ControlOpcode = ControlOpcode::FriendPoll;
 

@@ -95,8 +95,8 @@ impl Segments {
             .send(event)
             .expect("segmenter feed failed")
     }
-    pub fn handle_ack(&mut self, ack: IncomingPDU<control::Ack>) {}
-    pub fn handle_segment(&mut self, segment: IncomingPDU<lower::SegmentedPDU>) {}
+    pub fn handle_ack(&mut self, _ack: IncomingPDU<control::Ack>) {}
+    pub fn handle_segment(&mut self, _segment: IncomingPDU<lower::SegmentedPDU>) {}
     pub fn handle_event(&mut self, event: SegmentEvent) {
         match event {
             SegmentEvent::IncomingSegment(seg) => self.handle_segment(seg),

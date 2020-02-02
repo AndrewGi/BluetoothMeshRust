@@ -2,6 +2,10 @@
 name = "bluetooth_mesh"
 description = """
 !! VERY WIP AND NOT STABLE !!
+
+Offers Bluetooth Mesh Primitives (PDUs, Encryption/Decryption, Messages, etc). A stack in still in process of being built
+but one should be able to build their own stack based on the provided primitives.
+
 Bluetooth Mesh stack implemented in Rust. In progress port/rewrite of Ero Bluetooth Mesh. Following the Bluetooth Mesh Spec Core v1.0. Designed to work with any BLE radio but currently targeting linux for testing. The complete stack still needs more glue between the layers but all the parts should be fully functional. If any mistake are found, please contact me!
 
 #![no_std] excepts for dependence on std::Instant for time but a different source can be provided. While not provided, on ARM; a crystal oscilator can be the time source.
@@ -12,19 +16,20 @@ The only heap allocations made durning processing a message is allocating memory
 """
 license = "GPL-3.0-only"
 repository = "https://github.com/AndrewGi/BluetoothMeshRust"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Andrew Gilbrough <andrew@gilbrough.com>"]
 edition = "2018"
+readme = "README.md"
 
 [features]
-default = ["full_stack"]
-full_stack = ["parking_lot", "std", "slog", "bluez"]
+default = ["async_stack"]
+full_stack = ["parking_lot", "std", "slog"]
+async_stack = ["full_stack", "tower"]
 std = []
-bluez = ["nix", "libc"]
 
 [dependencies]
+btle = {path = "btle"}
 rand = "0.7"
-slotmap = "0.4.0"
 aes = "0.3.2"
 aead = "0.2.0"
 crypto-mac = "0.7.0"
@@ -34,5 +39,4 @@ subtle = "2.2.2"
 serde = {version = "1.0.104", default-features = false, features = ["derive"], optional = true }
 parking_lot = {version = "0.10.0", optional = true}
 slog = {version = "2.5.2", optional = true}
-nix = {version = "0.16.1", optional = true}
-libc = {version = "0.2.66", optional = true}
+tower = {version = "0.3.1", optional = true}

@@ -1,4 +1,7 @@
+/// FaultID. According to Bluetooth Mesh Spec v1.0. Odd values are usually Warnings while even
+/// values are Errors.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum FaultID {
     NoFault,
     BatteryLowWarning,
@@ -178,6 +181,7 @@ impl From<u8> for FaultID {
 #[cfg(test)]
 mod tests {
     use super::FaultID;
+    /// Tests to make sure that the `From` trait is matching the `Into` trait.
     #[test]
     pub fn test_fault_id() {
         for i in 0..=0xFFu8 {

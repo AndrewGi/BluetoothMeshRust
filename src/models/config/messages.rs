@@ -317,11 +317,11 @@ pub mod relay {
 pub mod model_publication {
     use crate::access::{ModelIdentifier, Opcode};
     use crate::address::{Address, UnicastAddress, ADDRESS_LEN};
+    use crate::bytes::ToFromBytesEndian;
     use crate::foundation::publication::ModelPublishInfo;
     use crate::foundation::StatusCode;
     use crate::models::config::ConfigOpcode;
     use crate::models::{MessagePackError, PackableMessage};
-    use crate::serializable::bytes::ToFromBytesEndian;
     use core::convert::TryInto;
 
     #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]

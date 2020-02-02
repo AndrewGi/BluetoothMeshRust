@@ -8,8 +8,7 @@ use crate::foundation::state::{
     DefaultTTLState, GATTProxyState, NetworkTransmit, RelayState, SecureNetworkBeaconState,
 };
 use crate::mesh::{
-    AppKeyIndex, ElementCount, ElementIndex, IVIndex, IVUpdateFlag, SequenceNumber, TransmitCount,
-    TransmitInterval, TransmitSteps, IVI, TTL, U24,
+    AppKeyIndex, ElementCount, ElementIndex, IVIndex, IVUpdateFlag, SequenceNumber, IVI, TTL, U24,
 };
 use crate::random::Randomizable;
 

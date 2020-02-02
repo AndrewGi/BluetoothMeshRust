@@ -16,7 +16,7 @@ use aes::Aes128;
 use block_modes::block_padding::ZeroPadding;
 use block_modes::BlockMode;
 
-use crate::serializable::bytes::ToFromBytesEndian;
+use crate::bytes::ToFromBytesEndian;
 use aead::Aead;
 use core::convert::TryInto;
 use core::slice;

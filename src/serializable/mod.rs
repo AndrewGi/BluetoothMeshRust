@@ -1,4 +1,4 @@
-pub mod bytes;
+use crate::bytes;
 
 pub trait ByteSerializable: Sized {
     ///
