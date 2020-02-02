@@ -1,8 +1,8 @@
 //use crate::access::ModelIdentifier;
 use crate::access::{ModelIdentifier, SigModelID, VendorModelID};
 
+use crate::bytes::ToFromBytesEndian;
 use crate::mesh::ModelID;
-use crate::serializable::bytes::ToFromBytesEndian;
 
 use alloc::vec::Vec;
 use core::convert::TryInto;

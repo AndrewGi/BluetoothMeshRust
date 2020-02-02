@@ -1,7 +1,7 @@
+use crate::bytes::ToFromBytesEndian;
 use crate::crypto::MIC;
 use crate::foundation::state::AttentionTimer;
 use crate::mesh::ElementCount;
-use crate::serializable::bytes::ToFromBytesEndian;
 use core::convert::{TryFrom, TryInto};
 
 #[derive(Copy, Clone, PartialOrd, PartialEq, Ord, Eq, Debug, Hash)]

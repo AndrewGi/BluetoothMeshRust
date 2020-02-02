@@ -11,7 +11,7 @@ use crate::{lower, net, replay};
 
 use crate::control;
 use crate::lower::SeqZero;
-use crate::upper::{EncryptedAppPayload, PDU};
+use crate::upper::PDU;
 use alloc::boxed::Box;
 use core::convert::TryFrom;
 use parking_lot::{Mutex, RwLock};
@@ -135,12 +135,12 @@ impl<'a> FullStack<'a> {
             _ => Err(RecvError::MalformedNetworkPDU),
         }
     }
-    fn handle_control(&self, control_pdu: IncomingControlMessage) -> Result<(), RecvError> {
+    fn handle_control(&self, _control_pdu: IncomingControlMessage) -> Result<(), RecvError> {
         unimplemented!()
     }
     fn handle_encrypted_incoming_message<Storage: AsRef<[u8]> + AsMut<[u8]>>(
         &self,
-        msg: EncryptedIncomingMessage<Storage>,
+        _msg: EncryptedIncomingMessage<Storage>,
     ) -> Result<(), RecvError> {
         unimplemented!()
     }

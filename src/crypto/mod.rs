@@ -271,6 +271,6 @@ impl Display for KeyRefreshPhases {
         })
     }
 }
-use crate::serializable::bytes::ToFromBytesEndian;
+use crate::bytes::ToFromBytesEndian;
 use core::fmt::{Display, Error, Formatter};
 pub use k_funcs::{k1, k2, k3, k4, s1};

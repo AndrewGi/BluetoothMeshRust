@@ -1,7 +1,7 @@
 //! Bluetooth Mesh Beacon Layer. Currently only supports `SecureNetworkBeacon`s and
 //! `UnprovisionedDeviceBeacon`s.
+use crate::bytes::ToFromBytesEndian;
 use crate::crypto::s1;
-use crate::serializable::bytes::ToFromBytesEndian;
 use crate::uuid::UUID;
 use core::convert::TryInto;
 

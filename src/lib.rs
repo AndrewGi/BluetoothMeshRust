@@ -22,9 +22,8 @@ extern crate std;
 extern crate serde;
 
 extern crate alloc;
-
-pub mod ble;
-
+extern crate btle;
+pub use btle::bytes;
 pub mod random;
 pub mod scheduler;
 pub mod serializable;
@@ -62,3 +61,6 @@ pub mod properties;
 
 #[cfg(test)]
 pub mod samples;
+
+#[cfg(feature = "async_stack")]
+pub mod async_stack;

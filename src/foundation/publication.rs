@@ -1,6 +1,6 @@
 use crate::address::{Address, VirtualAddress};
+use crate::bytes::ToFromBytesEndian;
 use crate::mesh::{AppKeyIndex, KeyIndex, TransmitInterval, TTL};
-use crate::serializable::bytes::ToFromBytesEndian;
 use crate::uuid::UUID;
 use core::convert::TryInto;
 use core::time;
