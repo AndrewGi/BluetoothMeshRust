@@ -1,7 +1,7 @@
 //! Access Layer between Models and the rest of the stack (Transport, Network, etc). The most
 //! surface layer of the stack.
+use crate::bytes::ToFromBytesEndian;
 use crate::mesh::{CompanyID, ModelID};
-use crate::serializable::bytes::ToFromBytesEndian;
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

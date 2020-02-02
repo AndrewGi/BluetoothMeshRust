@@ -6,7 +6,6 @@
 use alloc::string::ToString;
 
 use crate::mesh;
-use core::convert::TryFrom;
 use core::fmt::{Display, Error, Formatter};
 
 type UUIDBytes = [u8; 16];

@@ -1,7 +1,7 @@
 //! Appliation layer.
 
 use crate::address::{Address, UnicastAddress};
-use crate::ble::RSSI;
+use crate::btle::RSSI;
 use crate::crypto::aes::MicSize;
 use crate::device_state::SeqRange;
 use crate::lower::SegO;
