@@ -4,7 +4,6 @@ use crate::timestamp::TimestampTrait;
 use alloc::collections::BinaryHeap;
 use core::cmp::Ordering;
 use core::time::Duration;
-use slotmap::DenseSlotMap;
 
 #[derive(Debug)]
 pub struct TimeQueueEntry<T, Timestamp: TimestampTrait> {
@@ -168,6 +167,7 @@ impl<T, Timestamp: TimestampTrait> TimeQueue<T, Timestamp> {
         }
     }
 }
+/*
 #[derive(Copy, Clone, Default, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 #[repr(transparent)]
 pub struct TimeQueueSlotKey(slotmap::KeyData);
@@ -265,3 +265,4 @@ impl<T, Timestamp: TimestampTrait> SlottedTimeQueue<T, Timestamp> {
         Some(self.push(new_timestamp, item))
     }
 }
+*/

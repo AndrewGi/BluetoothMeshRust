@@ -5,10 +5,10 @@
 //! | --------- | ------------------------- | ------------------------- |
 //! | Access    | [SegmentedAccessPDU]      | [UnsegmentedAccessPDU]    |
 //! | Control   | [SegmentedControlPDU]     | [UnsegmentedControlPDU]   |
+use crate::bytes::ToFromBytesEndian;
 use crate::control::ControlOpcode;
 use crate::crypto::{AID, AKF, MIC};
 use crate::mesh::{SequenceNumber, CTL, U24};
-use crate::serializable::bytes::ToFromBytesEndian;
 use core::convert::{TryFrom, TryInto};
 
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]

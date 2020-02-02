@@ -2,6 +2,7 @@
 //! Network Layer is BIG Endian
 
 use crate::address::{Address, UnicastAddress, ADDRESS_LEN};
+use crate::bytes::ToFromBytesEndian;
 use crate::crypto::aes::{AESCipher, MicSize};
 use crate::crypto::key::PrivacyKey;
 use crate::crypto::materials::NetworkKeys;
@@ -9,7 +10,6 @@ use crate::crypto::nonce::{NetworkNonce, NetworkNonceParts};
 use crate::crypto::MIC;
 use crate::lower;
 use crate::mesh::{IVIndex, SequenceNumber, CTL, IVI, NID, TTL};
-use crate::serializable::bytes::ToFromBytesEndian;
 use core::convert::TryInto;
 use core::fmt;
 
@@ -282,7 +282,7 @@ impl fmt::Display for Header {
 }
 const ENCRYPTED_PDU_MAX_SIZE: usize = TRANSPORT_PDU_MAX_LEN + PDU_HEADER_LEN + 4;
 /// Owned Encrypted PDU. Stores the PDU as bytes in an internal array.
-/// See [`bluetooth_mesh::net::EncryptedPDU`] for general network PDU functions
+/// See [`EncryptedPDU`] for general network PDU functions
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub struct OwnedEncryptedPDU {
     pdu_buffer: [u8; ENCRYPTED_PDU_MAX_SIZE],
@@ -290,15 +290,15 @@ pub struct OwnedEncryptedPDU {
 }
 impl OwnedEncryptedPDU {
     pub fn new(bytes: &[u8]) -> Option<OwnedEncryptedPDU> {
-        if bytes.len() < ENCRYPTED_DATA_MIN_LEN || bytes.len() > ENCRYPTED_DATA_MAX_LEN {
-            None
-        } else {
+        if bytes.len() <= ENCRYPTED_DATA_MAX_LEN && bytes.len() >= ENCRYPTED_DATA_MIN_LEN {
             let mut buf = [0_u8; ENCRYPTED_PDU_MAX_SIZE];
             buf[..bytes.len()].copy_from_slice(bytes);
             Some(Self {
                 pdu_buffer: buf,
                 length: bytes.len(),
             })
+        } else {
+            None
         }
     }
     /// # Panics

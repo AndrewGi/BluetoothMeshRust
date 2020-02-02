@@ -1,5 +1,5 @@
 //! Common Bluetooth Mesh Objects/Structures.
-use crate::serializable::bytes::ToFromBytesEndian;
+use crate::bytes::ToFromBytesEndian;
 use core::convert::{TryFrom, TryInto};
 use core::fmt::{Display, Error, Formatter};
 use core::str::FromStr;

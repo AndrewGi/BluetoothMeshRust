@@ -12,9 +12,9 @@
 //! Endian depends on layer!!
 //! Little: Access/Foundation
 //! Big: Everything else
+use crate::bytes::ToFromBytesEndian;
 use crate::crypto::aes::AESCipher;
 use crate::crypto::k_funcs::VTAD;
-use crate::serializable::bytes::ToFromBytesEndian;
 use crate::uuid::UUID;
 use core::convert::{TryFrom, TryInto};
 

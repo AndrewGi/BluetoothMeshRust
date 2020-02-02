@@ -1,12 +1,12 @@
 use crate::bearer::{BearerError, IncomingEncryptedNetworkPDU, OutgoingEncryptedNetworkPDU};
-use crate::ble::advertisement::{AdStructure, RawAdvertisement};
-use crate::ble::gap::{Advertiser, Scanner, ScannerSink};
+use crate::btle::advertisement::{AdStructure, RawAdvertisement};
+use crate::btle::gap::{Advertiser, Scanner, ScannerSink};
 use crate::interface::{InputInterface, InterfaceSink, OutputInterface};
-use crate::{ble, net};
+use crate::net;
 
-impl From<net::EncryptedPDU<'_>> for ble::advertisement::AdStructure {
+impl From<net::EncryptedPDU<'_>> for btle::advertisement::AdStructure {
     fn from(pdu: net::EncryptedPDU<'_>) -> Self {
-        AdStructure::MeshPDU(ble::advertisement::AdStructureDataBuffer::new(pdu.data()))
+        AdStructure::MeshPDU(btle::advertisement::AdStructureDataBuffer::new(pdu.data()))
     }
 }
 

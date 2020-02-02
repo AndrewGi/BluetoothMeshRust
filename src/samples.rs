@@ -1,11 +1,10 @@
-use crate::access::{Opcode, VendorOpcode};
 use crate::address::{Address, UnicastAddress, VirtualAddress};
 use crate::crypto::key::{AppKey, DevKey, Key, NetKey};
 use crate::crypto::nonce::AppNonceParts;
 use crate::crypto::{aes::MicSize, MIC};
-use crate::mesh::{CompanyID, IVIndex, SequenceNumber, U24};
+use crate::mesh::{IVIndex, SequenceNumber, U24};
+use crate::upper;
 use crate::uuid::UUID;
-use crate::{control, upper};
 use core::str::FromStr;
 
 fn sample_app_key() -> AppKey {

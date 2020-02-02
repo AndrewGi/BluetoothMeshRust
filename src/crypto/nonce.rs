@@ -1,7 +1,7 @@
 //! Bluetooth Mesh nonces. Based on Mesh Core Spec v1.0.
 use crate::address::{Address, UnicastAddress};
+use crate::bytes::ToFromBytesEndian;
 use crate::mesh::{IVIndex, SequenceNumber, CTL, TTL};
-use crate::serializable::bytes::ToFromBytesEndian;
 
 const NONCE_LEN: usize = 13;
 const ZERO_NONCE_BYTES: [u8; NONCE_LEN] = [0_u8; NONCE_LEN];

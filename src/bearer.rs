@@ -1,6 +1,6 @@
 //! Bluetooth Mesh Bearers.
 
-use crate::ble::RSSI;
+use crate::btle::RSSI;
 use crate::mesh::TransmitInterval;
 use crate::provisioning::pb_adv;
 use crate::{beacon, net};

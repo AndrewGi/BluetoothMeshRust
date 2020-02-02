@@ -40,7 +40,7 @@ pub struct Links {
     links: BTreeSet<Link>,
 }
 impl Links {
-    pub fn handle_pb_adv_pdu(&mut self, pdu: &pb_adv::PDU) {
+    pub fn handle_pb_adv_pdu(&mut self, _pdu: &pb_adv::PDU) {
         unimplemented!()
     }
 }

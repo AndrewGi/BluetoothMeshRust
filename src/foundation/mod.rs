@@ -1,8 +1,8 @@
 //! Foundation Layer. Handles Publication, Config, etc.
 
+use crate::bytes::ToFromBytesEndian;
 use crate::foundation::element::ElementsComposition;
-use crate::mesh::{CompanyID};
-use crate::serializable::bytes::ToFromBytesEndian;
+use crate::mesh::CompanyID;
 use crate::upper::AppPayload;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
