@@ -40,7 +40,9 @@ type InternalTimestamp = std_timestamp::StdTimestamp;
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct Timestamp(InternalTimestamp);
 
-pub trait TimestampTrait: Sized + Add<Duration, Output = Self> + Clone + Copy + Ord + Eq {
+pub trait TimestampTrait:
+    Sized + Add<Duration, Output = Self> + Clone + Copy + Ord + Eq + Hash
+{
     fn now() -> Self;
     fn with_delay(delay: core::time::Duration) -> Self {
         Self::now() + delay
