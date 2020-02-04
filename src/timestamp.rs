@@ -73,3 +73,27 @@ impl TimestampTrait for DummyTimestamp {
         unimplemented!("dummy timestamp")
     }
 }
+impl Add<core::time::Duration> for Timestamp {
+    type Output = Self;
+
+    fn add(self, rhs: Duration) -> Self::Output {
+        Self(self.0 + rhs)
+    }
+}
+impl TimestampTrait for Timestamp {
+    fn now() -> Self {
+        Timestamp(InternalTimestamp::now())
+    }
+
+    fn with_delay(delay: Duration) -> Self {
+        Timestamp(InternalTimestamp::with_delay(delay))
+    }
+
+    fn until(&self, later: Self) -> Option<Duration> {
+        self.0.until(later.0)
+    }
+
+    fn since(&self, earlier: Self) -> Option<Duration> {
+        self.0.since(earlier.0)
+    }
+}

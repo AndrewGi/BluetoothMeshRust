@@ -7,13 +7,6 @@ use core::convert::{TryFrom, TryInto};
 use core::fmt::{Error, Formatter, LowerHex, UpperHex};
 use core::str::FromStr;
 
-#[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct NetKeyIndex(u16);
-#[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct AppKeyIndex(u16);
-
 pub const KEY_LEN: usize = 16;
 
 /// 128-bit AES Key.
