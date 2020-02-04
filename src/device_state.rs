@@ -29,6 +29,7 @@ pub struct ModelInfo {
 pub struct Models(BTreeMap<ModelIdentifier, ModelInfo>);
 
 #[derive(Default, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ConfigStates {
     pub relay_state: RelayState,
     pub gatt_proxy_state: GATTProxyState,

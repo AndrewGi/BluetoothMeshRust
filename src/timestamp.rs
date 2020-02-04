@@ -40,9 +40,7 @@ type InternalTimestamp = std_timestamp::StdTimestamp;
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct Timestamp(InternalTimestamp);
 
-pub trait TimestampTrait:
-    Sized + Add<Duration, Output = Self> + Clone + Copy + Ord + Eq + Hash
-{
+pub trait TimestampTrait: Sized + Add<Duration, Output = Self> + Clone + Copy + Ord + Eq {
     fn now() -> Self;
     fn with_delay(delay: core::time::Duration) -> Self {
         Self::now() + delay
@@ -73,5 +71,29 @@ impl TimestampTrait for DummyTimestamp {
 
     fn since(&self, _earlier: Self) -> Option<Duration> {
         unimplemented!("dummy timestamp")
+    }
+}
+impl Add<core::time::Duration> for Timestamp {
+    type Output = Self;
+
+    fn add(self, rhs: Duration) -> Self::Output {
+        Self(self.0 + rhs)
+    }
+}
+impl TimestampTrait for Timestamp {
+    fn now() -> Self {
+        Timestamp(InternalTimestamp::now())
+    }
+
+    fn with_delay(delay: Duration) -> Self {
+        Timestamp(InternalTimestamp::with_delay(delay))
+    }
+
+    fn until(&self, later: Self) -> Option<Duration> {
+        self.0.until(later.0)
+    }
+
+    fn since(&self, earlier: Self) -> Option<Duration> {
+        self.0.since(earlier.0)
     }
 }
