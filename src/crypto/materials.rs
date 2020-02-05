@@ -244,6 +244,23 @@ impl AppKeyMap {
             ApplicationSecurityMaterials::new(new_key, net_key_index),
         )
     }
+    /// Returns all `ApplicationSecurityMaterials` matching `aid_to_match`. Because `AID` is a 6-bit value,
+    /// one `AID` can match multiple different application keys. For this reason, this functions returns an
+    /// iterator that yields each matching application security materials. Only attempting to decrypt
+    /// the Application Payload (and it failing/succeeding) will tell you if the `AID` and
+    /// `ApplicationSecurityMaterials` match.
+    pub fn matching_aid(
+        &self,
+        aid_to_match: AID,
+    ) -> impl Iterator<Item = (AppKeyIndex, &'_ ApplicationSecurityMaterials)> {
+        self.map.iter().filter_map(move |(&index, materials)| {
+            if materials.aid == aid_to_match {
+                Some((index, materials))
+            } else {
+                None
+            }
+        })
+    }
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

@@ -6,13 +6,18 @@ use crate::stack::messages::{
     EncryptedIncomingMessage, IncomingControlMessage, IncomingMessage, IncomingNetworkPDU,
     IncomingTransportPDU,
 };
-use crate::stack::{segments, SendError, StackInternals};
-use crate::{lower, net, replay};
+use crate::stack::{segments, SendError, Stack, StackInternals};
+use crate::{access, lower, net, replay};
 
+use crate::address::{Address, UnicastAddress, VirtualAddress};
 use crate::control;
 use crate::lower::SeqZero;
-use crate::upper::PDU;
+use crate::mesh::{AppKeyIndex, ElementCount, ElementIndex, IVIndex, IVUpdateFlag};
+use crate::upper::{
+    AppPayload, EncryptedAppPayload, SecurityMaterials, SecurityMaterialsIterator, PDU,
+};
 use alloc::boxed::Box;
+use core::borrow::Borrow;
 use core::convert::TryFrom;
 use parking_lot::{Mutex, RwLock};
 use std::sync::mpsc;
@@ -44,6 +49,7 @@ pub enum FullStackError {
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub enum RecvError {
     NoMatchingNetKey,
+    InvalidDestination,
     MalformedNetworkPDU,
     MalformedControlPDU,
     OldSeq,
@@ -140,9 +146,43 @@ impl<'a> FullStack<'a> {
     }
     fn handle_encrypted_incoming_message<Storage: AsRef<[u8]> + AsMut<[u8]>>(
         &self,
-        _msg: EncryptedIncomingMessage<Storage>,
+        msg: EncryptedIncomingMessage<Storage>,
     ) -> Result<(), RecvError> {
-        unimplemented!()
+        let internals = self.internals.read();
+        match msg.encrypted_app_payload.aid() {
+            Some(aid) => {
+                // Application Key
+                match msg.dst {
+                    Address::Virtual(VirtualAddress(h, _)) | Address::VirtualHash(h) => {
+                        SecurityMaterialsIterator::new_virtual()
+                    }
+                    Address::Unassigned => Err(RecvError::InvalidDestination),
+                    Address::Group(_) | Address::Unicast(_) => {
+                        //Regular Address
+                        for app_sm in internals
+                            .device_state
+                            .security_materials()
+                            .app_key_map
+                            .matching_aid(aid)
+                        {}
+                    }
+                }
+            }
+            None => {
+                match msg.dst {
+                    Address::Unicast(unicast) => {
+                        if internals.owns_unicast_address(unicast) {
+                            ()
+                        } else {
+                            Err(RecvError::InvalidDestination)
+                        }
+                    }
+                    _ => Err(RecvError::InvalidDestination),
+                }
+                // Device Key
+            }
+        }
+        None
     }
     /// Send encrypted net_pdu through all output interfaces.
     fn send_encrypted_net_pdu(&self, pdu: OutgoingEncryptedNetworkPDU) -> Result<(), SendError> {
@@ -187,6 +227,9 @@ impl<'a> FullStack<'a> {
             }
         }
     }
+    pub fn internals_with<R>(&self, func: impl FnOnce(&StackInternals) -> R) -> R {
+        func(&self.internals.read())
+    }
     pub fn handle_encrypted_net_pdu(
         &self,
         incoming: IncomingEncryptedNetworkPDU,
@@ -225,5 +268,33 @@ impl<'a> FullStack<'a> {
         } else {
             Err(RecvError::NoMatchingNetKey)
         }
+    }
+}
+
+impl Stack for FullStack {
+    fn iv_index(&self) -> (IVIndex, IVUpdateFlag) {
+        let internals = self.internals.read();
+        (
+            internals.device_state.iv_index(),
+            internals.device_state.iv_update_flag(),
+        )
+    }
+    fn primary_address(&self) -> UnicastAddress {
+        self.element_address(ElementIndex(0))
+            .expect("primary address should always exist")
+    }
+
+    fn element_count(&self) -> ElementCount {
+        self.internals.read().device_state.element_count()
+    }
+
+    fn send_message<Storage: AsRef<[u8]> + AsMut<[u8]>>(
+        &self,
+        source_element: ElementIndex,
+        app_index: AppKeyIndex,
+        dst: Address,
+        payload: AppPayload<Storage>,
+    ) -> Result<(), SendError> {
+        unimplemented!()
     }
 }

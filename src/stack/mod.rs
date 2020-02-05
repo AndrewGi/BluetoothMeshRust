@@ -11,14 +11,20 @@ pub mod segments;
 use crate::address::{Address, UnicastAddress};
 use crate::bearer::BearerError;
 
+use crate::access::Opcode;
 use crate::crypto::materials::{ApplicationSecurityMaterials, NetKeyMap};
 use crate::crypto::nonce::{AppNonceParts, DeviceNonceParts};
 use crate::device_state::{DeviceState, SeqCounter};
 use crate::lower::SegO;
-use crate::mesh::{AppKeyIndex, ElementIndex, IVIndex, NetKeyIndex, TTL};
+use crate::mesh::{
+    AppKeyIndex, ElementCount, ElementIndex, IVIndex, IVUpdateFlag, NetKeyIndex, TTL,
+};
 use crate::segmenter::EncryptedNetworkPDUIterator;
+use crate::stack::element::ElementRef;
+use crate::stack::full::FullStack;
 use crate::stack::messages::{EncryptedOutgoingMessage, MessageKeys, OutgoingMessage};
-use crate::upper;
+use crate::upper::EncryptedAppPayload;
+use crate::{access, upper};
 use crate::{device_state, net};
 use core::convert::TryFrom;
 
@@ -268,4 +274,20 @@ impl StackInternals {
             net_keys: net_sm.network_keys(),
         })
     }
+}
+
+pub trait Stack: Sized {
+    fn iv_index(&self) -> (IVIndex, IVUpdateFlag);
+    fn primary_address(&self) -> UnicastAddress;
+    fn element_ref(&self, element_index: ElementIndex) -> ElementRef<Self, &Self> {
+        ElementRef::new(&self, element_index)
+    }
+    fn element_count(&self) -> ElementCount;
+    fn send_message<Storage: AsRef<[u8]> + AsMut<[u8]>>(
+        &self,
+        source_element: ElementIndex,
+        app_index: AppKeyIndex,
+        dst: Address,
+        payload: AppPayload<Storage>,
+    ) -> Result<(), SendError>;
 }
