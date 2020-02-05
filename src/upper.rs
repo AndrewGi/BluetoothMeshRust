@@ -2,12 +2,15 @@
 use crate::address::VirtualAddress;
 use crate::crypto::aes::{AESCipher, Error, MicSize};
 use crate::crypto::key::{AppKey, DevKey, Key};
+use crate::crypto::materials::ApplicationSecurityMaterials;
 use crate::crypto::nonce::{AppNonce, DeviceNonce, Nonce};
 use crate::crypto::{AID, AKF, MIC};
 use crate::lower::{SegN, SegO, SegmentedAccessPDU, SegmentedControlPDU, UnsegmentedAccessPDU};
+use crate::mesh::AppKeyIndex;
 use crate::{control, lower};
 use alloc::boxed::Box;
 use core::convert::TryFrom;
+use core::iter::Peekable;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct UpperPDUConversionError(());
@@ -130,6 +133,105 @@ impl SecurityMaterials<'_> {
             SecurityMaterials::App(_, _, aid) => Some(*aid),
             SecurityMaterials::Device(_, _) => None,
         }
+    }
+}
+pub struct SecurityMaterialsIterator<
+    'a,
+    AppIter: Iterator<Item = &'a ApplicationSecurityMaterials>,
+    VirtualIter: Iterator<Item = &'a VirtualAddress> + Clone,
+> {
+    nonce: AppNonce,
+    app_iter: Peekable<AppIter>,
+    virtual_iter: Option<(VirtualIter, VirtualIter)>,
+}
+impl<
+        'a,
+        AppIter: Iterator<Item = (AppKeyIndex, &'a ApplicationSecurityMaterials)>,
+        VirtualIter: Iterator<Item = &'a VirtualAddress>,
+    > SecurityMaterialsIterator<'a, AppIter, VirtualIter>
+{
+    pub fn new_app(nonce: AppNonce, app_iter: AppIter) -> Self {
+        Self {
+            nonce,
+            app_iter,
+            virtual_iter: None,
+        }
+    }
+    pub fn new_virtual(nonce: AppNonce, app_iter: AppIter, virtual_iter: VirtualIter) -> Self {
+        Self {
+            nonce,
+            app_iter,
+            virtual_iter: Some((virtual_iter.clone(), virtual_iter)),
+        }
+    }
+}
+impl<
+        'a,
+        AppIter: Iterator<Item = (AppKeyIndex, &'a ApplicationSecurityMaterials)>,
+        VirtualIter: Iterator<Item = &'a VirtualAddress> + Clone,
+    > Iterator for SecurityMaterialsIterator<'a, AppIter, VirtualIter>
+{
+    type Item = (AppKeyIndex, SecurityMaterials<'a>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.virtual_iter.as_mut() {
+            None => {
+                // Regular App Security Materials
+                let (index, sm) = self.app_iter.next()?;
+                Some((
+                    index,
+                    SecurityMaterials::App(self.nonce, &sm.app_key, sm.aid),
+                ))
+            }
+            Some((virtual_iter, start_iter)) => {
+                let &(index, sm) = self.app_iter.peek()?;
+                let virtual_address = if let Some(virtual_address) = virtual_iter.next() {
+                    virtual_address
+                } else {
+                    // Restart Virtual Iterator and advance App Key Iterator by one
+                    self.app_iter.next()?;
+                    *virtual_iter = (*start_iter).clone();
+                    virtual_iter.next()?
+                };
+                Some((
+                    index,
+                    SecurityMaterials::VirtualAddress(
+                        self.nonce,
+                        &sm.app_key,
+                        sm.aid,
+                        virtual_address,
+                    ),
+                ))
+            }
+        }
+    }
+}
+impl<
+        'a,
+        AppIter: Iterator<Item = (AppKeyIndex, &'a ApplicationSecurityMaterials)>,
+        VirtualIter: Iterator<Item = &'a VirtualAddress> + Clone,
+    > SecurityMaterialsIterator<'a, AppIter, VirtualIter>
+{
+    /// Tries to decrypt `payload` with all the `self.next()` security materials. Once one does
+    /// correctly decrypt `payload`, it'll return the respective `AppKeyIndex` and `SecurityMaterials`.
+    /// To find the virtual address, it will be inside the `SecurityMaterials`.
+    /// `Storage` is `Clone` because we need two buffers to do the decrypting. In-case the decrypting
+    /// fails, the payload must be set back to the original state by copying the bytes from a
+    /// backup buffer. `Storage.clone()` will only be called once.
+    pub fn decrypt_with<'b, Storage: AsMut<[u8]> + Clone>(
+        &mut self,
+        payload: &mut Storage,
+        mic: MIC,
+    ) -> Option<(AppKeyIndex, SecurityMaterials<'b>)> {
+        let mut backup = payload.clone();
+        for (index, sm) in self {
+            if sm.decrypt(payload.as_mut(), mic).is_ok() {
+                return Some((index, sm));
+            }
+            // Undo the incorrect decryption.
+            payload.as_mut().copy_from_slice(backup.as_mut())
+        }
+        None
     }
 }
 /// Unencrypted Application payload.

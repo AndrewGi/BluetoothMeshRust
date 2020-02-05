@@ -13,7 +13,11 @@ pub enum MessageKeys {
     Device(NetKeyIndex),
     App(AppKeyIndex),
 }
-
+pub struct OutgoingDestination {
+    pub dst: Address,
+    pub ttl: Option<TTL>,
+    pub app_key_index: AppKeyIndex,
+}
 pub struct OutgoingMessage<Storage: AsRef<[u8]> + AsMut<[u8]>> {
     pub app_payload: AppPayload<Storage>,
     pub mic_size: MicSize,

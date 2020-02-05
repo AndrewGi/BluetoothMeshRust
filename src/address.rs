@@ -301,42 +301,42 @@ impl From<&Address> for u16 {
 }
 
 impl TryFrom<&Address> for UnicastAddress {
-    type Error = ();
+    type Error = AddressError;
 
     fn try_from(value: &Address) -> Result<Self, Self::Error> {
         match value {
             Address::Unicast(u) => Ok(*u),
-            _ => Err(()),
+            _ => Err(AddressError(())),
         }
     }
 }
 impl TryFrom<&Address> for VirtualAddressHash {
-    type Error = ();
+    type Error = AddressError;
 
     fn try_from(value: &Address) -> Result<Self, Self::Error> {
         match value {
             Address::VirtualHash(h) => Ok(*h),
-            _ => Err(()),
+            _ => Err(AddressError(())),
         }
     }
 }
 impl TryFrom<&Address> for VirtualAddress {
-    type Error = ();
+    type Error = AddressError;
 
     fn try_from(value: &Address) -> Result<Self, Self::Error> {
         match value {
             Address::Virtual(v) => Ok(*v),
-            _ => Err(()),
+            _ => Err(AddressError(())),
         }
     }
 }
 impl TryFrom<&Address> for GroupAddress {
-    type Error = ();
+    type Error = AddressError;
 
     fn try_from(value: &Address) -> Result<Self, Self::Error> {
         match value {
             Address::Group(g) => Ok(*g),
-            _ => Err(()),
+            _ => Err(AddressError(())),
         }
     }
 }
