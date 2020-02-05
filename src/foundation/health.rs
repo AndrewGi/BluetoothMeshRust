@@ -119,6 +119,9 @@ impl From<FaultID> for u8 {
 }
 impl From<u8> for FaultID {
     fn from(b: u8) -> Self {
+        // Until IntellJ stops complaining that this is non-exhaustive, ignore
+        // the unreachable pattern at the end.
+        #[allow(unreachable_patterns)]
         match b {
             0x00 => FaultID::NoFault,
             0x01 => FaultID::BatteryLowWarning,
