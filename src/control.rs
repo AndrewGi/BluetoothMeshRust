@@ -244,11 +244,11 @@ impl ControlMessage for FriendPoll {
         unimplemented!()
     }
 
-    fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError> {
+    fn unpack(_buf: &[u8]) -> Result<Self, ControlMessageError> {
         unimplemented!()
     }
 
-    fn pack(buf: &mut [u8]) -> Result<(), ControlMessageError> {
+    fn pack(_buf: &mut [u8]) -> Result<(), ControlMessageError> {
         unimplemented!()
     }
 }
@@ -261,11 +261,11 @@ impl ControlMessage for FriendUpdate {
         unimplemented!()
     }
 
-    fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError> {
+    fn unpack(_buf: &[u8]) -> Result<Self, ControlMessageError> {
         unimplemented!()
     }
 
-    fn pack(buf: &mut [u8]) -> Result<(), ControlMessageError> {
+    fn pack(_buf: &mut [u8]) -> Result<(), ControlMessageError> {
         unimplemented!()
     }
 }
@@ -278,11 +278,11 @@ impl ControlMessage for FriendRequest {
         unimplemented!()
     }
 
-    fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError> {
+    fn unpack(_buf: &[u8]) -> Result<Self, ControlMessageError> {
         unimplemented!()
     }
 
-    fn pack(buf: &mut [u8]) -> Result<(), ControlMessageError> {
+    fn pack(_buf: &mut [u8]) -> Result<(), ControlMessageError> {
         unimplemented!()
     }
 }
@@ -295,11 +295,11 @@ impl ControlMessage for FriendOffer {
         unimplemented!()
     }
 
-    fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError> {
+    fn unpack(_buf: &[u8]) -> Result<Self, ControlMessageError> {
         unimplemented!()
     }
 
-    fn pack(buf: &mut [u8]) -> Result<(), ControlMessageError> {
+    fn pack(_buf: &mut [u8]) -> Result<(), ControlMessageError> {
         unimplemented!()
     }
 }
@@ -312,11 +312,11 @@ impl ControlMessage for FriendClear {
         unimplemented!()
     }
 
-    fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError> {
+    fn unpack(_buf: &[u8]) -> Result<Self, ControlMessageError> {
         unimplemented!()
     }
 
-    fn pack(buf: &mut [u8]) -> Result<(), ControlMessageError> {
+    fn pack(_buf: &mut [u8]) -> Result<(), ControlMessageError> {
         unimplemented!()
     }
 }
@@ -329,11 +329,11 @@ impl ControlMessage for FriendClearConfirm {
         unimplemented!()
     }
 
-    fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError> {
+    fn unpack(_buf: &[u8]) -> Result<Self, ControlMessageError> {
         unimplemented!()
     }
 
-    fn pack(buf: &mut [u8]) -> Result<(), ControlMessageError> {
+    fn pack(_buf: &mut [u8]) -> Result<(), ControlMessageError> {
         unimplemented!()
     }
 }
@@ -346,11 +346,11 @@ impl ControlMessage for FriendSubscriptionListAdd {
         unimplemented!()
     }
 
-    fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError> {
+    fn unpack(_buf: &[u8]) -> Result<Self, ControlMessageError> {
         unimplemented!()
     }
 
-    fn pack(buf: &mut [u8]) -> Result<(), ControlMessageError> {
+    fn pack(_buf: &mut [u8]) -> Result<(), ControlMessageError> {
         unimplemented!()
     }
 }
@@ -363,11 +363,11 @@ impl ControlMessage for FriendSubscriptionListRemove {
         unimplemented!()
     }
 
-    fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError> {
+    fn unpack(_buf: &[u8]) -> Result<Self, ControlMessageError> {
         unimplemented!()
     }
 
-    fn pack(buf: &mut [u8]) -> Result<(), ControlMessageError> {
+    fn pack(_buf: &mut [u8]) -> Result<(), ControlMessageError> {
         unimplemented!()
     }
 }
@@ -381,11 +381,11 @@ impl ControlMessage for FriendSubscriptionListConfirm {
         unimplemented!()
     }
 
-    fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError> {
+    fn unpack(_buf: &[u8]) -> Result<Self, ControlMessageError> {
         unimplemented!()
     }
 
-    fn pack(buf: &mut [u8]) -> Result<(), ControlMessageError> {
+    fn pack(_buf: &mut [u8]) -> Result<(), ControlMessageError> {
         unimplemented!()
     }
 }
@@ -399,11 +399,11 @@ impl ControlMessage for Heartbeat {
         unimplemented!()
     }
 
-    fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError> {
+    fn unpack(_buf: &[u8]) -> Result<Self, ControlMessageError> {
         unimplemented!()
     }
 
-    fn pack(buf: &mut [u8]) -> Result<(), ControlMessageError> {
+    fn pack(_buf: &mut [u8]) -> Result<(), ControlMessageError> {
         unimplemented!()
     }
 }
