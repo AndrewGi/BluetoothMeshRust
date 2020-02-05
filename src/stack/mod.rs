@@ -8,10 +8,9 @@ pub mod model;
 #[cfg(feature = "std")]
 pub mod segments;
 
-use crate::address::{Address, UnicastAddress};
+use crate::address::{Address, UnicastAddress, VirtualAddress, VirtualAddressHash};
 use crate::bearer::BearerError;
 
-use crate::access::Opcode;
 use crate::crypto::materials::{ApplicationSecurityMaterials, NetKeyMap};
 use crate::crypto::nonce::{AppNonceParts, DeviceNonceParts};
 use crate::device_state::{DeviceState, SeqCounter};
@@ -21,10 +20,13 @@ use crate::mesh::{
 };
 use crate::segmenter::EncryptedNetworkPDUIterator;
 use crate::stack::element::ElementRef;
-use crate::stack::full::FullStack;
-use crate::stack::messages::{EncryptedOutgoingMessage, MessageKeys, OutgoingMessage};
-use crate::upper::EncryptedAppPayload;
-use crate::{access, upper};
+use crate::stack::full::RecvError;
+use crate::stack::messages::{
+    EncryptedIncomingMessage, EncryptedOutgoingMessage, IncomingMessage, MessageKeys,
+    OutgoingMessage,
+};
+use crate::upper;
+use crate::upper::{AppPayload, SecurityMaterials, SecurityMaterialsIterator};
 use crate::{device_state, net};
 use core::convert::TryFrom;
 
@@ -69,6 +71,102 @@ impl StackInternals {
     /// Panics if `element_index >= element_count`.
     pub fn seq_counter(&self, element_index: ElementIndex) -> &SeqCounter {
         self.device_state.seq_counter(element_index)
+    }
+    pub fn matching_virtual_addresses(
+        &self,
+        _h: VirtualAddressHash,
+    ) -> impl Iterator<Item = &'_ VirtualAddress> + Clone {
+        Option::<&'_ VirtualAddress>::None.into_iter()
+    }
+
+    fn decrypt_app<Storage: AsRef<[u8]> + AsMut<[u8]> + Clone>(
+        &self,
+        msg: EncryptedIncomingMessage<Storage>,
+    ) -> Result<IncomingMessage<Storage>, RecvError> {
+        match msg.encrypted_app_payload.aid() {
+            Some(aid) => {
+                // Application Key
+                let matching_aid = self
+                    .device_state
+                    .security_materials()
+                    .app_key_map
+                    .matching_aid(aid);
+                let mut sm_iter = match msg.dst {
+                    Address::VirtualHash(h) => SecurityMaterialsIterator::new_virtual(
+                        msg.app_nonce(),
+                        matching_aid,
+                        self.matching_virtual_addresses(h),
+                    ),
+                    Address::Virtual(v) => {
+                        let h = v.hash();
+                        SecurityMaterialsIterator::new_virtual(
+                            msg.app_nonce(),
+                            matching_aid,
+                            self.matching_virtual_addresses(h),
+                        )
+                    }
+                    Address::Unassigned => return Err(RecvError::InvalidDestination),
+                    Address::Group(_) | Address::Unicast(_) => {
+                        //Regular Address
+                        SecurityMaterialsIterator::new_app(msg.app_nonce(), matching_aid)
+                    }
+                };
+                let mic = msg.encrypted_app_payload.mic();
+                let mut storage: Storage = msg.encrypted_app_payload.into_storage();
+                if let Some((index, sm)) = sm_iter.decrypt_with(&mut storage, mic) {
+                    let dst = sm
+                        .virtual_address()
+                        .map(Address::Virtual)
+                        .unwrap_or(msg.dst);
+                    Ok(IncomingMessage {
+                        payload: storage,
+                        src: msg.src,
+                        dst,
+                        seq: msg.seq,
+                        iv_index: msg.iv_index,
+                        net_key_index: msg.net_key_index,
+                        app_key_index: Some(index),
+                        ttl: msg.ttl,
+                        rssi: msg.rssi,
+                    })
+                } else {
+                    Err(RecvError::NoMatchingNetKey)
+                }
+            }
+            None => match msg.dst {
+                Address::Unicast(unicast) => {
+                    if let Some(element_index) = self.owns_unicast_address(unicast) {
+                        if !element_index.is_primary() {
+                            return Err(RecvError::InvalidDestination);
+                        }
+                        let nonce = msg.device_nonce();
+                        let mic = msg.encrypted_app_payload.mic();
+                        let mut storage: Storage = msg.encrypted_app_payload.into_storage();
+                        if let Ok(_) =
+                            SecurityMaterials::Device(nonce, self.device_state.device_key())
+                                .decrypt(&mut storage.as_mut()[..], mic)
+                        {
+                            Ok(IncomingMessage {
+                                payload: storage,
+                                src: msg.src,
+                                dst: Address::Unicast(unicast),
+                                seq: msg.seq,
+                                iv_index: msg.iv_index,
+                                net_key_index: msg.net_key_index,
+                                app_key_index: None,
+                                ttl: msg.ttl,
+                                rssi: msg.rssi,
+                            })
+                        } else {
+                            Err(RecvError::InvalidDeviceKey)
+                        }
+                    } else {
+                        Err(RecvError::InvalidDestination)
+                    }
+                }
+                _ => Err(RecvError::InvalidDestination),
+            },
+        }
     }
     /// Encrypts and Assigns a Sequence Numbers to `EncryptedOutgoingMessage`
     pub fn app_encrypt<Storage: AsRef<[u8]> + AsMut<[u8]>>(

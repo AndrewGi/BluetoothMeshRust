@@ -134,10 +134,17 @@ impl SecurityMaterials<'_> {
             SecurityMaterials::Device(_, _) => None,
         }
     }
+    #[must_use]
+    pub fn virtual_address(&self) -> Option<VirtualAddress> {
+        match self {
+            SecurityMaterials::VirtualAddress(_, _, _, &v) => Some(v),
+            _ => None,
+        }
+    }
 }
 pub struct SecurityMaterialsIterator<
     'a,
-    AppIter: Iterator<Item = &'a ApplicationSecurityMaterials>,
+    AppIter: Iterator<Item = (AppKeyIndex, &'a ApplicationSecurityMaterials)>,
     VirtualIter: Iterator<Item = &'a VirtualAddress> + Clone,
 > {
     nonce: AppNonce,
@@ -147,20 +154,20 @@ pub struct SecurityMaterialsIterator<
 impl<
         'a,
         AppIter: Iterator<Item = (AppKeyIndex, &'a ApplicationSecurityMaterials)>,
-        VirtualIter: Iterator<Item = &'a VirtualAddress>,
+        VirtualIter: Iterator<Item = &'a VirtualAddress> + Clone,
     > SecurityMaterialsIterator<'a, AppIter, VirtualIter>
 {
     pub fn new_app(nonce: AppNonce, app_iter: AppIter) -> Self {
         Self {
             nonce,
-            app_iter,
+            app_iter: app_iter.peekable(),
             virtual_iter: None,
         }
     }
     pub fn new_virtual(nonce: AppNonce, app_iter: AppIter, virtual_iter: VirtualIter) -> Self {
         Self {
             nonce,
-            app_iter,
+            app_iter: app_iter.peekable(),
             virtual_iter: Some((virtual_iter.clone(), virtual_iter)),
         }
     }
@@ -218,11 +225,11 @@ impl<
     /// `Storage` is `Clone` because we need two buffers to do the decrypting. In-case the decrypting
     /// fails, the payload must be set back to the original state by copying the bytes from a
     /// backup buffer. `Storage.clone()` will only be called once.
-    pub fn decrypt_with<'b, Storage: AsMut<[u8]> + Clone>(
+    pub fn decrypt_with<Storage: AsMut<[u8]> + Clone>(
         &mut self,
         payload: &mut Storage,
         mic: MIC,
-    ) -> Option<(AppKeyIndex, SecurityMaterials<'b>)> {
+    ) -> Option<(AppKeyIndex, SecurityMaterials<'a>)> {
         let mut backup = payload.clone();
         for (index, sm) in self {
             if sm.decrypt(payload.as_mut(), mic).is_ok() {
@@ -331,6 +338,9 @@ impl<Storage: AsRef<[u8]>> EncryptedAppPayload<Storage> {
         } else {
             Some(UnsegmentedAccessPDU::new(self.aid(), self.data()))
         }
+    }
+    pub fn into_storage(self) -> Storage {
+        self.data
     }
     /*
     #[must_use]
