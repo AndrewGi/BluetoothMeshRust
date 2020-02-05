@@ -7,17 +7,14 @@ use crate::stack::messages::{
     IncomingTransportPDU,
 };
 use crate::stack::{segments, SendError, Stack, StackInternals};
-use crate::{access, lower, net, replay};
+use crate::{lower, net, replay};
 
-use crate::address::{Address, UnicastAddress, VirtualAddress};
+use crate::address::{Address, UnicastAddress};
 use crate::control;
 use crate::lower::SeqZero;
 use crate::mesh::{AppKeyIndex, ElementCount, ElementIndex, IVIndex, IVUpdateFlag};
-use crate::upper::{
-    AppPayload, EncryptedAppPayload, SecurityMaterials, SecurityMaterialsIterator, PDU,
-};
+use crate::upper::{AppPayload, PDU};
 use alloc::boxed::Box;
-use core::borrow::Borrow;
 use core::convert::TryFrom;
 use parking_lot::{Mutex, RwLock};
 use std::sync::mpsc;
@@ -49,6 +46,8 @@ pub enum FullStackError {
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub enum RecvError {
     NoMatchingNetKey,
+    NoMatchingAppKey,
+    InvalidDeviceKey,
     InvalidDestination,
     MalformedNetworkPDU,
     MalformedControlPDU,
@@ -116,6 +115,7 @@ impl<'a> FullStack<'a> {
                     encrypted_app_payload: unseg_access.into(),
                     seq: incoming.pdu.header.seq.into(),
                     seg_count: 0,
+                    iv_index: incoming.iv_index,
                     net_key_index: incoming.net_key_index,
                     dst: incoming.pdu.header.dst,
                     src: incoming.pdu.header.src,
@@ -144,46 +144,6 @@ impl<'a> FullStack<'a> {
     fn handle_control(&self, _control_pdu: IncomingControlMessage) -> Result<(), RecvError> {
         unimplemented!()
     }
-    fn handle_encrypted_incoming_message<Storage: AsRef<[u8]> + AsMut<[u8]>>(
-        &self,
-        msg: EncryptedIncomingMessage<Storage>,
-    ) -> Result<(), RecvError> {
-        let internals = self.internals.read();
-        match msg.encrypted_app_payload.aid() {
-            Some(aid) => {
-                // Application Key
-                match msg.dst {
-                    Address::Virtual(VirtualAddress(h, _)) | Address::VirtualHash(h) => {
-                        SecurityMaterialsIterator::new_virtual()
-                    }
-                    Address::Unassigned => Err(RecvError::InvalidDestination),
-                    Address::Group(_) | Address::Unicast(_) => {
-                        //Regular Address
-                        for app_sm in internals
-                            .device_state
-                            .security_materials()
-                            .app_key_map
-                            .matching_aid(aid)
-                        {}
-                    }
-                }
-            }
-            None => {
-                match msg.dst {
-                    Address::Unicast(unicast) => {
-                        if internals.owns_unicast_address(unicast) {
-                            ()
-                        } else {
-                            Err(RecvError::InvalidDestination)
-                        }
-                    }
-                    _ => Err(RecvError::InvalidDestination),
-                }
-                // Device Key
-            }
-        }
-        None
-    }
     /// Send encrypted net_pdu through all output interfaces.
     fn send_encrypted_net_pdu(&self, pdu: OutgoingEncryptedNetworkPDU) -> Result<(), SendError> {
         self.output_interfaces
@@ -201,7 +161,7 @@ impl<'a> FullStack<'a> {
         }
         todo!("relay PDU")
     }
-    fn handle_upper_pdu<Storage: AsRef<[u8]> + AsMut<[u8]>>(
+    fn handle_upper_pdu<Storage: AsRef<[u8]> + AsMut<[u8]> + Clone>(
         &self,
         pdu: IncomingTransportPDU<Storage>,
     ) -> Result<(), RecvError> {
@@ -218,6 +178,7 @@ impl<'a> FullStack<'a> {
                     encrypted_app_payload: access_pdu,
                     seq: pdu.seq,
                     seg_count: pdu.seg_count,
+                    iv_index: pdu.iv_index,
                     net_key_index: pdu.net_key_index,
                     dst: pdu.dst,
                     src: pdu.src,
@@ -227,6 +188,13 @@ impl<'a> FullStack<'a> {
             }
         }
     }
+    pub fn handle_encrypted_incoming_message<Storage: AsRef<[u8]> + AsMut<[u8]> + Clone>(
+        &self,
+        _msg: EncryptedIncomingMessage<Storage>,
+    ) -> Result<(), RecvError> {
+        unimplemented!()
+    }
+
     pub fn internals_with<R>(&self, func: impl FnOnce(&StackInternals) -> R) -> R {
         func(&self.internals.read())
     }
@@ -271,7 +239,7 @@ impl<'a> FullStack<'a> {
     }
 }
 
-impl Stack for FullStack {
+impl<'a> Stack for FullStack<'_> {
     fn iv_index(&self) -> (IVIndex, IVUpdateFlag) {
         let internals = self.internals.read();
         (
@@ -280,8 +248,7 @@ impl Stack for FullStack {
         )
     }
     fn primary_address(&self) -> UnicastAddress {
-        self.element_address(ElementIndex(0))
-            .expect("primary address should always exist")
+        self.internals.read().device_state.unicast_range().start
     }
 
     fn element_count(&self) -> ElementCount {
@@ -290,10 +257,10 @@ impl Stack for FullStack {
 
     fn send_message<Storage: AsRef<[u8]> + AsMut<[u8]>>(
         &self,
-        source_element: ElementIndex,
-        app_index: AppKeyIndex,
-        dst: Address,
-        payload: AppPayload<Storage>,
+        _source_element: ElementIndex,
+        _app_index: AppKeyIndex,
+        _dst: Address,
+        _payload: AppPayload<Storage>,
     ) -> Result<(), SendError> {
         unimplemented!()
     }

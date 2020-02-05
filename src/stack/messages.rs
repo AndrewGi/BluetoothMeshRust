@@ -3,6 +3,7 @@
 use crate::address::{Address, UnicastAddress};
 use crate::btle::RSSI;
 use crate::crypto::aes::MicSize;
+use crate::crypto::nonce::{AppNonce, AppNonceParts, DeviceNonce, DeviceNonceParts};
 use crate::device_state::SeqRange;
 use crate::lower::SegO;
 use crate::mesh::{AppKeyIndex, ElementIndex, IVIndex, NetKeyIndex, SequenceNumber, TTL};
@@ -47,22 +48,52 @@ impl<Storage: AsRef<[u8]> + AsMut<[u8]>> OutgoingMessage<Storage> {
     }
 }
 pub struct EncryptedOutgoingMessage<Storage: AsRef<[u8]> + AsMut<[u8]>> {
-    pub(crate) encrypted_app_payload: EncryptedAppPayload<Storage>,
-    pub(crate) seq: SeqRange,
-    pub(crate) seg_count: SegO,
-    pub(crate) net_key_index: NetKeyIndex,
-    pub(crate) dst: Address,
-    pub(crate) ttl: TTL,
+    pub encrypted_app_payload: EncryptedAppPayload<Storage>,
+    pub seq: SeqRange,
+    pub seg_count: SegO,
+    pub net_key_index: NetKeyIndex,
+    pub dst: Address,
+    pub ttl: TTL,
 }
-pub struct EncryptedIncomingMessage<Storage: AsRef<[u8]> + AsMut<[u8]>> {
-    pub(crate) encrypted_app_payload: EncryptedAppPayload<Storage>,
-    pub(crate) seq: SequenceNumber,
-    pub(crate) seg_count: u8,
-    pub(crate) net_key_index: NetKeyIndex,
-    pub(crate) dst: Address,
-    pub(crate) src: UnicastAddress,
-    pub(crate) ttl: Option<TTL>,
-    pub(crate) rssi: Option<RSSI>,
+pub struct EncryptedIncomingMessage<Storage: AsRef<[u8]>> {
+    pub encrypted_app_payload: EncryptedAppPayload<Storage>,
+    pub seq: SequenceNumber,
+    pub seg_count: u8,
+    pub iv_index: IVIndex,
+    pub net_key_index: NetKeyIndex,
+    pub dst: Address,
+    pub src: UnicastAddress,
+    pub ttl: Option<TTL>,
+    pub rssi: Option<RSSI>,
+}
+impl<Storage: AsRef<[u8]>> EncryptedIncomingMessage<Storage> {
+    pub fn app_nonce_parts(&self) -> AppNonceParts {
+        AppNonceParts {
+            aszmic: self.szmic(),
+            seq: self.seq,
+            src: self.src,
+            dst: self.dst,
+            iv_index: self.iv_index,
+        }
+    }
+    pub fn app_nonce(&self) -> AppNonce {
+        self.app_nonce_parts().to_nonce()
+    }
+    pub fn szmic(&self) -> bool {
+        self.encrypted_app_payload.mic().is_big()
+    }
+    pub fn device_nonce_parts(&self) -> DeviceNonceParts {
+        DeviceNonceParts {
+            aszmic: self.szmic(),
+            seq: self.seq,
+            src: self.src,
+            dst: self.dst,
+            iv_index: self.iv_index,
+        }
+    }
+    pub fn device_nonce(&self) -> DeviceNonce {
+        self.device_nonce_parts().to_nonce()
+    }
 }
 pub struct IncomingControlMessage {
     pub control_pdu: control::ControlPDU,
@@ -70,10 +101,12 @@ pub struct IncomingControlMessage {
     pub rssi: Option<RSSI>,
     pub ttl: Option<TTL>,
 }
-pub struct IncomingMessage<Storage: AsRef<[u8]> + AsMut<[u8]>> {
-    pub app_payload: Storage,
+pub struct IncomingMessage<Storage: AsRef<[u8]>> {
+    pub payload: Storage,
     pub src: UnicastAddress,
     pub dst: Address,
+    pub seq: SequenceNumber,
+    pub iv_index: IVIndex,
     pub net_key_index: NetKeyIndex,
     pub app_key_index: Option<AppKeyIndex>,
     pub ttl: Option<TTL>,
@@ -88,6 +121,7 @@ pub struct IncomingNetworkPDU {
 }
 pub struct IncomingTransportPDU<Storage: AsRef<[u8]> + AsMut<[u8]>> {
     pub upper_pdu: upper::PDU<Storage>,
+    pub iv_index: IVIndex,
     pub seg_count: u8,
     pub seq: SequenceNumber,
     pub net_key_index: NetKeyIndex,

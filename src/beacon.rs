@@ -185,7 +185,7 @@ mod test {
     pub fn test_unprovisioned_with_uri() {
         // 0x17 is uri::URIName::https.
         let uri = "\x17//www.example.com/mesh/products/light-switch-v3";
-        let oob = OOBInformation::default()
+        let _oob = OOBInformation::default()
             .set(OOBFlags::Number)
             .set(OOBFlags::InsideManual);
         let uri_hash = URIHash::hash_data(uri.as_bytes());
