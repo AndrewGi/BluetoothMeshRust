@@ -1,17 +1,17 @@
-use bluetooth_mesh::mesh::ElementCount;
 use slog::Drain;
 #[macro_use]
 extern crate slog;
 
-use std::convert::{TryFrom, TryInto};
-use std::error::Error;
-use std::str::FromStr;
+use std::convert::{TryFrom};
+
 pub mod commands;
 pub mod helper;
 pub enum CLIError {
+    PermissionDenied,
     IOError(String, std::io::Error),
     Clap(clap::Error),
     SerdeJSON(serde_json::Error),
+    Other(String),
 }
 fn main() {
     let app = clap::App::new("Bluetooth Mesh CLI")
@@ -33,12 +33,13 @@ fn main() {
                 .value_name("FILE")
                 .help("Specifies device state .json file"),
         )
-        .subcommand(commands::generate::sub_command())
+        .subcommand(commands::state::sub_command())
         .subcommand(commands::provisioner::sub_command())
-        .subcommand(commands::crypto::sub_command());
+        .subcommand(commands::crypto::sub_command())
+        .subcommand(commands::ble::sub_command());
     let matches = app.get_matches();
 
-    let log_level = slog::Level::from_usize(
+    let _log_level = slog::Level::from_usize(
         1 + usize::try_from(matches.occurrences_of("verbose"))
             .expect("verbose usize overflow (how??)"),
     )
@@ -67,8 +68,8 @@ fn main() {
     if let Err(e) = (|| -> Result<(), CLIError> {
         match matches.subcommand() {
             ("", None) => error!(root, "no command given"),
-            ("generate", Some(gen_matches)) => {
-                commands::generate::generate_matches(&root, get_device_state_path(), gen_matches)?
+            ("state", Some(gen_matches)) => {
+                commands::state::state_matches(&root, get_device_state_path(), gen_matches)?
             }
             ("crypto", Some(crypto_matches)) => {
                 commands::crypto::crypto_matches(&root, get_device_state_path(), crypto_matches)?
@@ -78,6 +79,7 @@ fn main() {
                 get_device_state_path(),
                 prov_matches,
             )?,
+            ("ble", Some(ble_matches)) => commands::ble::ble_matches(&root, ble_matches)?,
             _ => unreachable!("unhandled sub_command"),
         }
         debug!(root, "matches_done");
@@ -89,6 +91,10 @@ fn main() {
             }
             CLIError::Clap(error) => eprintln!("{}", &error.message),
             CLIError::SerdeJSON(error) => eprintln!("json error {}", error),
+            CLIError::PermissionDenied => {
+                eprintln!("permission denied error! (are you running as sudo/admin)?")
+            }
+            CLIError::Other(msg) => eprintln!("error: {}", &msg),
         };
         std::process::exit(0);
     }

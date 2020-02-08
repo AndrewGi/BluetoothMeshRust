@@ -1,10 +1,7 @@
 use crate::{helper, CLIError};
-use bluetooth_mesh::address::Address::Unicast;
 use bluetooth_mesh::address::{Address, UnicastAddress};
 use bluetooth_mesh::device_state;
 use bluetooth_mesh::mesh::ElementCount;
-use std::fs::File;
-use std::path::Path;
 use std::str::FromStr;
 
 pub fn sub_command() -> clap::App<'static, 'static> {
@@ -52,10 +49,10 @@ pub fn sub_command() -> clap::App<'static, 'static> {
             clap::Arg::with_name("default_ttl")
                 .short("t")
                 .value_name("DEFAULT_TTL")
-                .validator(),
+                .validator(helper::is_ttl),
         )
 }
-pub fn generate_matches(
+pub fn state_matches(
     parent_logger: &slog::Logger,
     device_state_path: &str,
     gen_matches: &clap::ArgMatches,
