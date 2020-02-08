@@ -1,8 +1,7 @@
 use crate::CLIError;
-use bluetooth_mesh::device_state;
+use bluetooth_mesh::{device_state, mesh};
 use std::convert::TryFrom;
 use std::fmt::{Error, Formatter};
-use std::num::ParseIntError;
 use std::str::FromStr;
 
 pub struct HexSlice<'a>(pub &'a [u8]);
@@ -42,7 +41,15 @@ pub fn is_128_bit_hex_str_validator(input: String) -> Result<(), String> {
     }
 }
 pub fn is_ttl(input: String) -> Result<(), String> {
-    TTL::try_from(u8::try_from(&input))
+    let error_msg = ||
+        Err(format!("`{}` is not a valid TTL", &input));
+    match u8::from_str(&input) {
+        Ok(v) => match mesh::TTL::try_from(v) {
+            Ok(_) => Ok(()),
+            Err(_) => error_msg()
+        }
+        Err(_) => error_msg()
+    }
 }
 pub fn is_u8_validator(input: String) -> Result<(), String> {
     match u8::from_str(&input) {

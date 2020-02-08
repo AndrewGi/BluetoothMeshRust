@@ -1,9 +1,7 @@
 use crate::helper::write_device_state;
-use crate::CLIError::Clap;
 use crate::{helper, CLIError};
 use bluetooth_mesh::crypto::key::{AppKey, NetKey};
-use bluetooth_mesh::crypto::materials::{KeyPair, KeyPhase, NetworkSecurityMaterials};
-use bluetooth_mesh::device_state;
+use bluetooth_mesh::crypto::materials::{KeyPhase};
 use bluetooth_mesh::mesh::{
     AppKeyIndex, ElementIndex, IVIndex, IVUpdateFlag, KeyIndex, NetKeyIndex, SequenceNumber,
 };
@@ -430,7 +428,7 @@ pub fn crypto_matches(
                 }
             }
         }
-        ("", None) => error!(logger, "no_subcommand"),
+        ("", _) => error!(logger, "no_subcommand"),
         _ => unreachable!("unhandled crypto subcommand"),
     }
     Ok(())
