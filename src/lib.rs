@@ -61,6 +61,3 @@ pub mod properties;
 
 #[cfg(test)]
 pub mod samples;
-
-#[cfg(feature = "async_stack")]
-pub mod async_stack;
