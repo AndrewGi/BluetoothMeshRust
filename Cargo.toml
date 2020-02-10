@@ -22,13 +22,14 @@ edition = "2018"
 readme = "README.md"
 
 [features]
-default = ["async_stack"]
-full_stack = ["parking_lot", "std"]
-async_stack = ["full_stack"]
+default = ["full_stack"]
+full_stack = ["parking_lot", "std", "tokio", "futures"]
 std = []
 
 [dependencies]
 btle = {path = "btle"}
+tokio = {version = "0.2.11", optional=true}
+futures = {version = "0.3.3", optional=true}
 rand = "0.7"
 aes = "0.3.2"
 aead = "0.2.0"
