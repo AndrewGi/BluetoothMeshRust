@@ -163,10 +163,10 @@ pub struct OBO(bool);
 /// RFU.
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct SegmentHeader {
-    flag: bool,
-    seq_zero: SeqZero,
-    seg_o: SegO,
-    seg_n: SegN,
+    pub flag: bool,
+    pub seq_zero: SeqZero,
+    pub seg_o: SegO,
+    pub seg_n: SegN,
 }
 impl SegmentHeader {
     /// Creates a new segment header. `flag` is usually `OBO` or `SZMIC`.
@@ -714,6 +714,18 @@ impl SegmentedPDU {
     }
     pub fn seq_zero(&self) -> SeqZero {
         self.segment_header().seq_zero
+    }
+    pub fn seg_data(&self) -> &[u8] {
+        match self {
+            SegmentedPDU::Access(pdu) => pdu.segment_data(),
+            SegmentedPDU::Control(pdu) => pdu.segment_data(),
+        }
+    }
+    pub fn szmic(&self) -> Option<bool> {
+        match self {
+            SegmentedPDU::Access(pdu) => Some(pdu.segment_header.flag),
+            SegmentedPDU::Control(_) => None,
+        }
     }
 }
 impl From<&SegmentedPDU> for PDU {

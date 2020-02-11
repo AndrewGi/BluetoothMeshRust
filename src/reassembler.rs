@@ -3,13 +3,15 @@ use crate::crypto::aes::MicSize;
 use crate::crypto::MIC;
 use crate::lower::{BlockAck, SegN, SegO, SegmentedAccessPDU, SegmentedControlPDU};
 
+use crate::control::ControlPayload;
+use crate::upper;
 use alloc::vec::Vec;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub enum ReassembleError {
-    SegmentAlreadyInserted,
     DataTooLong,
     SegmentOutOfBounds,
+    Timeout,
 }
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
@@ -99,8 +101,13 @@ impl Context {
             header,
         }
     }
-}
-impl Context {
+    pub fn take(self) -> Result<(Box<[u8]>, ContextHeader), Context> {
+        if !self.is_ready() {
+            Err(self)
+        } else {
+            Ok((self.storage.into_boxed_slice(), self.header))
+        }
+    }
     pub fn data(&self) -> &[u8] {
         self.storage.as_ref()
     }
@@ -144,6 +151,20 @@ impl Context {
                 self.data_len = pos + data.len() - self.header.mic_size_bytes();
             }
             Ok(())
+        }
+    }
+    pub fn finish(self) -> Result<upper::PDU<Box<[u8]>>, Context> {
+        if !self.is_ready() {
+            Err(self)
+        } else {
+            let header = self.header;
+            let storage = self.storage.into_boxed_slice();
+            if header.is_control() {
+                Ok(upper::PDU::Control(ControlPayload {
+                    opcode: ControlOpcode::Ack,
+                    payload: (),
+                }))
+            }
         }
     }
 }

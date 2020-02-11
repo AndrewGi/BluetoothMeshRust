@@ -23,7 +23,7 @@ readme = "README.md"
 
 [features]
 default = ["full_stack"]
-full_stack = ["parking_lot", "std", "tokio", "futures"]
+full_stack = ["parking_lot", "std", "tokio", "tokio/sync", "tokio/rt-core", "tokio/time", "futures"]
 std = []
 
 [dependencies]
