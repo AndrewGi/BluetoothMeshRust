@@ -1,7 +1,9 @@
 use crate::address::{Address, UnicastAddress};
-use crate::control::ControlMessage;
-use crate::lower::SeqZero;
-use crate::mesh::{IVIndex, NetKeyIndex};
+use crate::control::{ControlMessage, ControlOpcode};
+use crate::crypto::AID;
+use crate::lower::{SegmentedPDU, SeqZero};
+use crate::mesh::{IVIndex, NetKeyIndex, SequenceNumber};
+use crate::reassembler::LowerHeader;
 use crate::stack::messages::{IncomingNetworkPDU, IncomingTransportPDU};
 use crate::{control, lower, reassembler, segmenter, timestamp};
 use alloc::boxed::Box;
@@ -19,9 +21,10 @@ pub struct OutgoingSegments {
     src: UnicastAddress,
     dst: Address,
 }
-
 pub struct IncomingSegments {
     context: reassembler::Context,
+    src: UnicastAddress,
+    dst: Address,
     iv_index: IVIndex,
     net_key_index: NetKeyIndex,
 }
@@ -31,11 +34,18 @@ impl IncomingSegments {
         if seg_header.seg_n != 0 {
             None
         } else {
+            let lower_header = match first_seg.pdu {
+                SegmentedPDU::Access(a) => LowerHeader::AID(a.aid()),
+                SegmentedPDU::Control(c) => LowerHeader::ControlOpcode(c.opcode()),
+            };
             IncomingSegments {
                 context: reassembler::Context::new(reassembler::ContextHeader::new(
+                    lower_header,
                     seg_header.seg_o,
-                    first_seg.pdu.szmic(),
+                    first_seg.pdu.szmic().unwrap_or(false),
                 )),
+                src: first_seg.src,
+                dst: first_seg.dst,
                 iv_index: first_seg.iv_index,
                 net_key_index: first_seg.net_key_index,
             }
@@ -54,22 +64,25 @@ impl IncomingSegments {
     pub fn is_ready(&self) -> bool {
         self.context.is_ready()
     }
+    pub fn seq(&self) -> SequenceNumber {
+        unimplemented!()
+    }
     pub fn finish(self) -> Result<IncomingTransportPDU<Box<[u8]>>, Self> {
         if !self.is_ready() {
             Err(self)
         } else {
+            let seq = self.seq();
             Ok(IncomingTransportPDU {
-                upper_pdu: ,
-                iv_index: Default::default(),
+                upper_pdu: self.context.finish().expect("context is ensured ready"),
+                iv_index: self.iv_index,
                 seg_count: 0,
-                seq: Default::default(),
-                net_key_index: NetKeyIndex(),
+                seq,
+                net_key_index: self.net_key_index,
                 ttl: None,
                 rssi: None,
-                src: (),
-                dst: Default::default()
+                src: self.src,
+                dst: self.dst,
             })
-            
         }
     }
 }
@@ -209,11 +222,10 @@ mod async_segs {
                     .insert_data(seg_header.seg_n, next.seg_data())
                     .map_err(ReassemblyError::Reassemble)?;
             }
-            let (storage, header) = segments
-                .context
-                .complete()
-                .expect("only called with segments.is_ready()");
-            if header.is_control() {}
+            match segments.finish() {
+                Ok(msg) => Ok(msg),
+                Err(_) => unreachable!("segments is ensured to be is_ready() by the loop above"),
+            }
         }
     }
 }

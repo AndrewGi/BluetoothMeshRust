@@ -1,10 +1,11 @@
 //! Transport Layer Reassembler.
 use crate::crypto::aes::MicSize;
-use crate::crypto::MIC;
-use crate::lower::{BlockAck, SegN, SegO, SegmentedAccessPDU, SegmentedControlPDU};
+use crate::crypto::{AID, MIC};
+use crate::lower::{BlockAck, SegN, SegO, SegmentHeader, SegmentedAccessPDU, SegmentedControlPDU};
 
-use crate::control::ControlPayload;
-use crate::upper;
+use crate::control::{ControlOpcode, ControlPayload};
+use crate::upper::EncryptedAppPayload;
+use crate::{lower, upper};
 use alloc::vec::Vec;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
@@ -14,31 +15,52 @@ pub enum ReassembleError {
     Timeout,
 }
 
+pub enum LowerHeader {
+    ControlOpcode(ControlOpcode),
+    AID(Option<AID>),
+}
+impl LowerHeader {
+    pub fn is_control(&self) -> bool {
+        match self {
+            LowerHeader::ControlOpcode(_) => true,
+            LowerHeader::AID(_) => false,
+        }
+    }
+    pub fn is_access(&self) -> bool {
+        !self.is_control()
+    }
+    pub fn opcode(&self) -> Option<ControlOpcode> {
+        match self {
+            LowerHeader::ControlOpcode(opcode) => Some(*opcode),
+            LowerHeader::AID(_) => None,
+        }
+    }
+    pub fn aid(&self) -> Option<AID> {
+        match self {
+            LowerHeader::ControlOpcode(_) => None,
+            LowerHeader::AID(aid) => *aid,
+        }
+    }
+}
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub struct ContextHeader {
-    szmic: Option<bool>,
+    flag: bool,
     seg_o: SegO,
     block_ack: BlockAck,
+    lower_header: LowerHeader,
 }
 impl ContextHeader {
-    pub fn new(seg_o: SegO, szmic: Option<bool>) -> Self {
+    pub fn new(lower_header: LowerHeader, seg_o: SegO, flag: bool) -> Self {
         Self {
+            lower_header,
             seg_o,
-            szmic,
+            flag,
             block_ack: Default::default(),
         }
     }
     #[must_use]
     pub fn all_acked(&self) -> bool {
         self.block_ack.all_acked(self.seg_o)
-    }
-    #[must_use]
-    pub fn is_control(&self) -> bool {
-        self.szmic.is_none()
-    }
-    #[must_use]
-    pub fn is_access(&self) -> bool {
-        self.szmic.is_some()
     }
     #[must_use]
     pub fn seg_o(&self) -> SegO {
@@ -51,6 +73,18 @@ impl ContextHeader {
     #[must_use]
     pub const fn block_ack(&self) -> BlockAck {
         self.block_ack
+    }
+    #[must_use]
+    pub fn mic_size(&self) -> Option<MicSize> {
+        if self.lower_header.is_access() {
+            if self.flag {
+                Some(MicSize::Big)
+            } else {
+                Some(MicSize::Small)
+            }
+        } else {
+            None
+        }
     }
     #[must_use]
     pub fn max_seg_len(&self) -> usize {
@@ -74,18 +108,11 @@ impl ContextHeader {
         self.max_seg_len() * self.seg_count()
     }
     #[must_use]
-    pub fn mic_size(&self) -> Option<MicSize> {
-        if self.szmic? {
-            Some(MicSize::Big)
-        } else {
-            Some(MicSize::Small)
-        }
-    }
-    #[must_use]
     pub fn mic_size_bytes(&self) -> usize {
         self.mic_size().map(MicSize::byte_size).unwrap_or(0)
     }
 }
+#[derive(Clone, Debug)]
 pub struct Context {
     storage: Vec<u8>,
     data_len: usize,
@@ -99,13 +126,6 @@ impl Context {
             storage,
             data_len: 0,
             header,
-        }
-    }
-    pub fn take(self) -> Result<(Box<[u8]>, ContextHeader), Context> {
-        if !self.is_ready() {
-            Err(self)
-        } else {
-            Ok((self.storage.into_boxed_slice(), self.header))
         }
     }
     pub fn data(&self) -> &[u8] {
@@ -125,7 +145,7 @@ impl Context {
         }
     }
     pub fn mic(&self) -> Option<MIC> {
-        if !self.is_ready() {
+        if !self.is_ready() || self.header.lower_header.is_control() {
             None
         } else {
             Some(
@@ -153,17 +173,26 @@ impl Context {
             Ok(())
         }
     }
-    pub fn finish(self) -> Result<upper::PDU<Box<[u8]>>, Context> {
+
+    pub fn finish(mut self) -> Result<upper::PDU<Box<[u8]>>, Context> {
         if !self.is_ready() {
             Err(self)
         } else {
+            let len = self.data_len;
+            self.storage.truncate(len);
+            let mic = self.mic();
             let header = self.header;
             let storage = self.storage.into_boxed_slice();
-            if header.is_control() {
-                Ok(upper::PDU::Control(ControlPayload {
-                    opcode: ControlOpcode::Ack,
-                    payload: (),
-                }))
+            match header.lower_header {
+                LowerHeader::ControlOpcode(opcode) => Ok(upper::PDU::Control(ControlPayload {
+                    opcode,
+                    payload: storage,
+                })),
+                LowerHeader::AID(aid) => Ok(upper::PDU::Access(EncryptedAppPayload {
+                    data: storage,
+                    mic: mic.expect("mic exists if PDU is ready and access"),
+                    aid,
+                })),
             }
         }
     }
