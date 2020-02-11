@@ -177,17 +177,23 @@ impl Segments {
 mod async_segs {
     use crate::address::UnicastAddress;
     use crate::lower;
+    use crate::lower::SeqZero;
     use crate::reassembler;
     use crate::stack::messages::IncomingTransportPDU;
     use crate::stack::segments::{IncomingPDU, IncomingSegments};
     use alloc::collections::BTreeMap;
+    use std::collections::btree_map::Entry;
     use tokio::sync::mpsc;
     use tokio::task::JoinHandle;
-    use tokio::time::timeout;
 
     pub struct ReassemblerContext {
         sender: mpsc::Sender<IncomingPDU<lower::SegmentedPDU>>,
-        handle: JoinHandle<Result<(), ()>>,
+    }
+    pub struct ReassemblerHandle {
+        pub src: UnicastAddress,
+        pub seq_zero: SeqZero,
+        pub sender: mpsc::Sender<IncomingPDU<lower::SegmentedPDU>>,
+        pub handle: JoinHandle<Result<IncomingTransportPDU<Box<[u8]>>, ReassemblyError>>,
     }
     pub struct Reassembler {
         incoming_channels: BTreeMap<(UnicastAddress, lower::SeqZero), ReassemblerContext>,
@@ -198,20 +204,42 @@ mod async_segs {
         ChannelClosed,
         Reassemble(reassembler::ReassembleError),
     }
+    pub const REASSEMBLER_CHANNEL_LEN: usize = 8;
     impl Reassembler {
         pub fn new() -> Self {
             Self {
                 incoming_channels: BTreeMap::new(),
             }
         }
-        async fn reassemble(
+        pub fn reassemble(
+            &mut self,
+            first_seg: IncomingPDU<lower::SegmentedPDU>,
+        ) -> Option<ReassemblerHandle> {
+            let src = (first_seg.src, first_seg.pdu.seq_zero());
+            let entry = self.incoming_channels.entry(src);
+            match entry {
+                Entry::Vacant(v) => {
+                    let (tx, rx) = mpsc::channel(REASSEMBLER_CHANNEL_LEN);
+                    let handle = tokio::spawn(Self::reassemble_segs(first_seg, rx));
+                    v.insert(ReassemblerContext { sender: tx.clone() });
+                    Some(ReassemblerHandle {
+                        src: src.0,
+                        seq_zero: src.1,
+                        sender: tx,
+                        handle,
+                    })
+                }
+                Entry::Occupied(_) => None,
+            }
+        }
+        async fn reassemble_segs(
             first_seg: IncomingPDU<lower::SegmentedPDU>,
             mut rx: mpsc::Receiver<IncomingPDU<lower::SegmentedPDU>>,
         ) -> Result<IncomingTransportPDU<Box<[u8]>>, ReassemblyError> {
             let mut segments =
                 IncomingSegments::new(first_seg).ok_or(ReassemblyError::InvalidFirstSegment)?;
             while !segments.is_ready() {
-                let next = timeout(segments.recv_timeout(), rx.recv())
+                let next = tokio::time::timeout(segments.recv_timeout(), rx.recv())
                     .await
                     .map_err(|_| ReassemblyError::Timeout)?
                     .ok_or(ReassemblyError::ChannelClosed)?;
