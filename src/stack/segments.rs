@@ -177,13 +177,14 @@ impl Segments {
 mod async_segs {
     use crate::address::UnicastAddress;
     use crate::lower;
-    use crate::lower::SeqZero;
+    use crate::lower::{SegmentedPDU, SeqZero};
     use crate::reassembler;
     use crate::stack::messages::IncomingTransportPDU;
     use crate::stack::segments::{IncomingPDU, IncomingSegments};
     use alloc::collections::BTreeMap;
     use std::collections::btree_map::Entry;
     use tokio::sync::mpsc;
+    use tokio::sync::mpsc::error::SendError;
     use tokio::task::JoinHandle;
 
     pub struct ReassemblerContext {
@@ -230,6 +231,24 @@ mod async_segs {
                     })
                 }
                 Entry::Occupied(_) => None,
+            }
+        }
+        pub async fn feed_pdu(
+            &mut self,
+            pdu: IncomingPDU<lower::SegmentedPDU>,
+        ) -> Result<Option<ReassemblerHandle>, ReassemblyError> {
+            match self
+                .incoming_channels
+                .get_mut(&(pdu.src, pdu.pdu.seq_zero()))
+            {
+                Some(context) => match context.sender.send(pdu).await {
+                    Ok(_) => Ok(None),
+                    Err(_) => Err(ReassemblyError::ChannelClosed),
+                },
+                None => Ok(Some(
+                    self.reassemble(pdu)
+                        .expect("guaranteed for the handle to not exists yet"),
+                )),
             }
         }
         async fn reassemble_segs(
