@@ -1,4 +1,5 @@
 use crate::CLIError;
+use btle::hci::stream::{HCIReader, HCIWriter};
 
 pub fn sub_command() -> clap::App<'static, 'static> {
     clap::SubCommand::with_name("dump")
@@ -33,6 +34,7 @@ pub fn dump_bluez(_: u16, _: &slog::Logger) -> Result<(), CLIError> {
 pub fn dump_bluez(adapter_id: u16, parent_logger: &slog::Logger) -> Result<(), CLIError> {
     use btle::hci::socket;
     use core::convert::TryFrom;
+    use btle::hci::le::SetScanEnable;
     let map_hci_socket_err = |err: socket::HCISocketError| match err {
         socket::HCISocketError::PermissionDenied => CLIError::PermissionDenied,
         socket::HCISocketError::IO(io) => CLIError::IOError("hci socket IO error".to_owned(), io),
@@ -56,16 +58,23 @@ pub fn dump_bluez(adapter_id: u16, parent_logger: &slog::Logger) -> Result<(), C
     let socket = manager
         .get_adapter_socket(socket::AdapterID(0))
         .map_err(map_hci_socket_err)?;
-    info!(logger, "opened socket.");
-    let mut async_socket = socket::AsyncHCISocket::try_from(socket)
-        .map_err(|e| map_hci_socket_err(socket::HCISocketError::IO(e)))?;
-    let mut stream = btle::hci::stream::HCIByteReader::new(&mut async_socket);
-    let mut runtime = tokio::runtime::Runtime::new().expect("can't make async runtime");
+    info!(logger, "opened socket");
+    let mut runtime = tokio::runtime::Builder::new().enable_all().build().expect("can't make async runtime");
+    info!(logger, "starting async loop");
     runtime.block_on(async move {
         use futures::StreamExt;
+        let mut async_socket = socket::AsyncHCISocket::try_from(socket)
+            .map_err(|e| map_hci_socket_err(socket::HCISocketError::IO(e)))?;
+        let mut stream = btle::hci::stream::ByteStream::new(&mut async_socket);
+        stream.send_command(SetScanEnable{
+            is_enabled: true,
+            filter_duplicates: false
+        }).expect("correctly formatted command").await.expect("io_error");
+        info!(logger, "sent_enable");
         loop {
-            let next = stream.next().await;
+            let next = stream.read_event().await;
+            println!("got something");
         }
-    });
-    Ok(())
+        Ok(())
+    })
 }
