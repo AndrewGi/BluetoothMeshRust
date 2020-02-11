@@ -2,11 +2,12 @@ use crate::address::{Address, UnicastAddress};
 use crate::control::ControlMessage;
 use crate::lower::SeqZero;
 use crate::mesh::{IVIndex, NetKeyIndex};
-use crate::stack::messages::IncomingNetworkPDU;
+use crate::stack::messages::{IncomingNetworkPDU, IncomingTransportPDU};
 use crate::{control, lower, reassembler, segmenter, timestamp};
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
 use core::convert::{TryFrom, TryInto};
+use core::time::Duration;
 use std::sync::mpsc;
 
 #[derive(Copy, Clone, PartialOrd, PartialEq, Ord, Eq, Hash, Debug)]
@@ -24,7 +25,54 @@ pub struct IncomingSegments {
     iv_index: IVIndex,
     net_key_index: NetKeyIndex,
 }
-
+impl IncomingSegments {
+    pub fn new(first_seg: IncomingPDU<lower::SegmentedPDU>) -> Option<Self> {
+        let seg_header = first_seg.pdu.segment_header();
+        if seg_header.seg_n != 0 {
+            None
+        } else {
+            IncomingSegments {
+                context: reassembler::Context::new(reassembler::ContextHeader::new(
+                    seg_header.seg_o,
+                    first_seg.pdu.szmic(),
+                )),
+                iv_index: first_seg.iv_index,
+                net_key_index: first_seg.net_key_index,
+            }
+        }
+    }
+    pub const fn recv_timeout(&self) -> Duration {
+        // As Per the Bluetooth Mesh Spec.
+        Duration::from_secs(10)
+    }
+    pub fn is_control(&self) -> bool {
+        !self.is_access()
+    }
+    pub fn is_access(&self) -> bool {
+        self.context.header().is_access()
+    }
+    pub fn is_ready(&self) -> bool {
+        self.context.is_ready()
+    }
+    pub fn finish(self) -> Result<IncomingTransportPDU<Box<[u8]>>, Self> {
+        if !self.is_ready() {
+            Err(self)
+        } else {
+            Ok(IncomingTransportPDU {
+                upper_pdu: ,
+                iv_index: Default::default(),
+                seg_count: 0,
+                seq: Default::default(),
+                net_key_index: NetKeyIndex(),
+                ttl: None,
+                rssi: None,
+                src: (),
+                dst: Default::default()
+            })
+            
+        }
+    }
+}
 impl TryFrom<&IncomingNetworkPDU> for IncomingPDU<lower::SegmentedPDU> {
     type Error = SegmentsConversionError;
 
@@ -110,6 +158,62 @@ impl Segments {
             incoming_events: rx,
             outgoing: Default::default(),
             incoming: Default::default(),
+        }
+    }
+}
+
+mod async_segs {
+    use crate::address::UnicastAddress;
+    use crate::lower;
+    use crate::reassembler;
+    use crate::stack::messages::IncomingTransportPDU;
+    use crate::stack::segments::{IncomingPDU, IncomingSegments, OutgoingSegments};
+    use alloc::collections::{BTreeMap, VecDeque};
+    use tokio::sync::mpsc;
+    use tokio::task::JoinHandle;
+    use tokio::time::timeout;
+
+    pub struct ReassemblerContext {
+        sender: mpsc::Sender<IncomingPDU<lower::SegmentedPDU>>,
+        handle: JoinHandle<Result<(), ()>>,
+    }
+    pub struct Reassembler {
+        incoming_channels: BTreeMap<(UnicastAddress, lower::SeqZero), ReassemblerContext>,
+    }
+    pub enum ReassemblyError {
+        Timeout,
+        InvalidFirstSegment,
+        ChannelClosed,
+        Reassemble(reassembler::ReassembleError),
+    }
+    impl Reassembler {
+        pub fn new() -> Self {
+            Self {
+                incoming_channels: BTreeMap::new(),
+            }
+        }
+        async fn reassemble(
+            first_seg: IncomingPDU<lower::SegmentedPDU>,
+            mut rx: mpsc::Receiver<IncomingPDU<lower::SegmentedPDU>>,
+        ) -> Result<IncomingTransportPDU<Box<[u8]>>, reassembler::ReassembleError> {
+            let mut segments =
+                IncomingSegments::new(first_seg).ok_or(ReassemblyError::InvalidFirstSegment)?;
+            while !segments.is_ready() {
+                let next = timeout(segments.recv_timeout(), rx.recv())
+                    .await
+                    .map_err(|_| ReassemblyError::Timeout)?
+                    .ok_or(ReassemblyError::ChannelClosed)?;
+                let seg_header = next.pdu.segment_header();
+                segments
+                    .context
+                    .insert_data(seg_header.seg_n, next.seg_data())
+                    .map_err(ReassemblyError::Reassemble)?;
+            }
+            let (storage, header) = segments
+                .context
+                .complete()
+                .expect("only called with segments.is_ready()");
+            if header.is_control() {}
         }
     }
 }
