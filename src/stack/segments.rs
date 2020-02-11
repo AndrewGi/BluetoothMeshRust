@@ -1,6 +1,5 @@
 use crate::address::{Address, UnicastAddress};
-use crate::control::{ControlMessage, ControlOpcode};
-use crate::crypto::AID;
+use crate::control::ControlMessage;
 use crate::lower::{SegmentedPDU, SeqZero};
 use crate::mesh::{IVIndex, NetKeyIndex, SequenceNumber};
 use crate::reassembler::LowerHeader;
@@ -31,14 +30,14 @@ pub struct IncomingSegments {
 impl IncomingSegments {
     pub fn new(first_seg: IncomingPDU<lower::SegmentedPDU>) -> Option<Self> {
         let seg_header = first_seg.pdu.segment_header();
-        if seg_header.seg_n != 0 {
+        if u8::from(seg_header.seg_n) != 0 {
             None
         } else {
             let lower_header = match first_seg.pdu {
                 SegmentedPDU::Access(a) => LowerHeader::AID(a.aid()),
                 SegmentedPDU::Control(c) => LowerHeader::ControlOpcode(c.opcode()),
             };
-            IncomingSegments {
+            Some(IncomingSegments {
                 context: reassembler::Context::new(reassembler::ContextHeader::new(
                     lower_header,
                     seg_header.seg_o,
@@ -48,7 +47,7 @@ impl IncomingSegments {
                 dst: first_seg.dst,
                 iv_index: first_seg.iv_index,
                 net_key_index: first_seg.net_key_index,
-            }
+            })
         }
     }
     pub const fn recv_timeout(&self) -> Duration {
@@ -59,7 +58,7 @@ impl IncomingSegments {
         !self.is_access()
     }
     pub fn is_access(&self) -> bool {
-        self.context.header().is_access()
+        self.context.header().lower_header().is_access()
     }
     pub fn is_ready(&self) -> bool {
         self.context.is_ready()
@@ -180,8 +179,8 @@ mod async_segs {
     use crate::lower;
     use crate::reassembler;
     use crate::stack::messages::IncomingTransportPDU;
-    use crate::stack::segments::{IncomingPDU, IncomingSegments, OutgoingSegments};
-    use alloc::collections::{BTreeMap, VecDeque};
+    use crate::stack::segments::{IncomingPDU, IncomingSegments};
+    use alloc::collections::BTreeMap;
     use tokio::sync::mpsc;
     use tokio::task::JoinHandle;
     use tokio::time::timeout;
@@ -208,7 +207,7 @@ mod async_segs {
         async fn reassemble(
             first_seg: IncomingPDU<lower::SegmentedPDU>,
             mut rx: mpsc::Receiver<IncomingPDU<lower::SegmentedPDU>>,
-        ) -> Result<IncomingTransportPDU<Box<[u8]>>, reassembler::ReassembleError> {
+        ) -> Result<IncomingTransportPDU<Box<[u8]>>, ReassemblyError> {
             let mut segments =
                 IncomingSegments::new(first_seg).ok_or(ReassemblyError::InvalidFirstSegment)?;
             while !segments.is_ready() {
@@ -219,7 +218,7 @@ mod async_segs {
                 let seg_header = next.pdu.segment_header();
                 segments
                     .context
-                    .insert_data(seg_header.seg_n, next.seg_data())
+                    .insert_data(seg_header.seg_n, next.pdu.seg_data())
                     .map_err(ReassemblyError::Reassemble)?;
             }
             match segments.finish() {
