@@ -280,9 +280,9 @@ pub fn calculate_seg_o(data_len: usize, pdu_size: usize) -> SegO {
     SegO::new(u8::try_from(n).expect("data_len longer than ENCRYPTED_APP_PAYLOAD_MAX_LEN"))
 }
 pub struct EncryptedAppPayload<Storage: AsRef<[u8]>> {
-    data: Storage,
-    mic: MIC,
-    aid: Option<AID>,
+    pub data: Storage,
+    pub mic: MIC,
+    pub aid: Option<AID>,
 }
 const ENCRYPTED_APP_PAYLOAD_MAX_LEN: usize = 380;
 impl<Storage: AsRef<[u8]>> EncryptedAppPayload<Storage> {

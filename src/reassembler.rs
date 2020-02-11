@@ -1,11 +1,11 @@
 //! Transport Layer Reassembler.
 use crate::crypto::aes::MicSize;
 use crate::crypto::{AID, MIC};
-use crate::lower::{BlockAck, SegN, SegO, SegmentHeader, SegmentedAccessPDU, SegmentedControlPDU};
+use crate::lower::{BlockAck, SegN, SegO, SegmentedAccessPDU, SegmentedControlPDU};
 
 use crate::control::{ControlOpcode, ControlPayload};
+use crate::upper;
 use crate::upper::EncryptedAppPayload;
-use crate::{lower, upper};
 use alloc::vec::Vec;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
@@ -15,6 +15,7 @@ pub enum ReassembleError {
     Timeout,
 }
 
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub enum LowerHeader {
     ControlOpcode(ControlOpcode),
     AID(Option<AID>),
@@ -87,8 +88,12 @@ impl ContextHeader {
         }
     }
     #[must_use]
+    pub fn lower_header(&self) -> LowerHeader {
+        self.lower_header
+    }
+    #[must_use]
     pub fn max_seg_len(&self) -> usize {
-        if self.is_control() {
+        if self.lower_header.is_control() {
             SegmentedControlPDU::max_seg_len()
         } else {
             SegmentedAccessPDU::max_seg_len()
@@ -138,11 +143,7 @@ impl Context {
         self.header
     }
     pub fn mic_size(&self) -> Option<MicSize> {
-        if self.header.szmic? {
-            Some(MicSize::Big)
-        } else {
-            Some(MicSize::Small)
-        }
+        self.header.mic_size()
     }
     pub fn mic(&self) -> Option<MIC> {
         if !self.is_ready() || self.header.lower_header.is_control() {
