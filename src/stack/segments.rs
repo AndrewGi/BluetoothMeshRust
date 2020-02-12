@@ -1,15 +1,19 @@
 use crate::address::{Address, UnicastAddress};
 use crate::control::ControlMessage;
-use crate::lower::{SegmentedPDU, SeqZero};
-use crate::mesh::{IVIndex, NetKeyIndex, SequenceNumber};
+use crate::lower::{BlockAck, SegmentedPDU, SeqAuth, SeqZero};
+use crate::mesh::{IVIndex, NetKeyIndex, SequenceNumber, TTL};
+use crate::reassembler;
 use crate::reassembler::LowerHeader;
-use crate::stack::messages::{IncomingNetworkPDU, IncomingTransportPDU};
-use crate::{control, lower, reassembler, segmenter, timestamp};
-use alloc::boxed::Box;
-use alloc::collections::{BTreeMap, VecDeque};
-use core::convert::{TryFrom, TryInto};
-use core::time::Duration;
-use std::sync::mpsc;
+use crate::stack::messages::{IncomingNetworkPDU, IncomingTransportPDU, OutgoingTransportMessage};
+use crate::{control, lower, segmenter, timestamp};
+use alloc::collections::BTreeMap;
+use std::collections::btree_map::Entry;
+use std::collections::VecDeque;
+use std::convert::{TryFrom, TryInto};
+use std::fmt::{Debug, Error, Formatter};
+use std::time::Duration;
+use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 
 #[derive(Copy, Clone, PartialOrd, PartialEq, Ord, Eq, Hash, Debug)]
 pub struct SegmentsConversionError(());
@@ -22,10 +26,11 @@ pub struct OutgoingSegments {
 }
 pub struct IncomingSegments {
     context: reassembler::Context,
+    seq_auth: SeqAuth,
     src: UnicastAddress,
     dst: Address,
-    iv_index: IVIndex,
     net_key_index: NetKeyIndex,
+    ack_ttl: Option<TTL>,
 }
 impl IncomingSegments {
     pub fn new(first_seg: IncomingPDU<lower::SegmentedPDU>) -> Option<Self> {
@@ -45,8 +50,17 @@ impl IncomingSegments {
                 )),
                 src: first_seg.src,
                 dst: first_seg.dst,
-                iv_index: first_seg.iv_index,
+                seq_auth: SeqAuth::from_seq_zero(
+                    first_seg.pdu.seq_zero(),
+                    first_seg.seq,
+                    first_seg.iv_index,
+                ),
                 net_key_index: first_seg.net_key_index,
+                ack_ttl: if u8::from(first_seg.ttl) == 0u8 {
+                    Some(TTL::new(0))
+                } else {
+                    None
+                },
             })
         }
     }
@@ -63,19 +77,20 @@ impl IncomingSegments {
     pub fn is_ready(&self) -> bool {
         self.context.is_ready()
     }
-    pub fn seq(&self) -> SequenceNumber {
-        unimplemented!()
+
+    pub fn seq_auth(&self) -> SeqAuth {
+        self.seq_auth
     }
     pub fn finish(self) -> Result<IncomingTransportPDU<Box<[u8]>>, Self> {
         if !self.is_ready() {
             Err(self)
         } else {
-            let seq = self.seq();
+            let seq_auth = self.seq_auth();
             Ok(IncomingTransportPDU {
                 upper_pdu: self.context.finish().expect("context is ensured ready"),
-                iv_index: self.iv_index,
+                iv_index: seq_auth.iv_index,
                 seg_count: 0,
-                seq,
+                seq: seq_auth.first_seq,
                 net_key_index: self.net_key_index,
                 ttl: None,
                 rssi: None,
@@ -93,10 +108,12 @@ impl TryFrom<&IncomingNetworkPDU> for IncomingPDU<lower::SegmentedPDU> {
             None => Err(SegmentsConversionError(())),
             Some(seg) => Ok(IncomingPDU {
                 pdu: seg,
+                seq: pdu.pdu.header.seq,
                 iv_index: pdu.iv_index,
                 src: pdu.pdu.header.src,
                 dst: pdu.pdu.header.dst,
                 net_key_index: pdu.net_key_index,
+                ttl: pdu.pdu.header.ttl,
             }),
         }
     }
@@ -110,6 +127,8 @@ impl TryFrom<&IncomingNetworkPDU> for IncomingPDU<control::Ack> {
                 pdu: control::Ack::try_from_pdu(control)
                     .ok()
                     .ok_or(SegmentsConversionError(()))?,
+                ttl: pdu.pdu.header.ttl,
+                seq: pdu.pdu.header.seq,
                 iv_index: pdu.iv_index,
                 src: pdu.pdu.header.src,
                 dst: pdu.pdu.header.dst,
@@ -134,144 +153,212 @@ impl TryFrom<&IncomingNetworkPDU> for SegmentEvent {
 #[derive(Copy, Clone)]
 pub struct IncomingPDU<PDU: Copy + Clone> {
     pub pdu: PDU,
+    pub seq: SequenceNumber,
     pub iv_index: IVIndex,
     pub net_key_index: NetKeyIndex,
     pub src: UnicastAddress,
     pub dst: Address,
+    pub ttl: TTL,
 }
+impl<PDU: Copy + Clone + Debug> Debug for &IncomingPDU<PDU> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        f.debug_struct("IncomingPDU")
+            .field("pdu", &self.pdu)
+            .field("iv_index", &self.iv_index)
+            .field("net_key_index", &self.net_key_index)
+            .field("src", &self.src)
+            .field("dst", &self.dst)
+            .finish()
+    }
+}
+#[derive(Copy, Clone, Debug)]
 pub enum SegmentEvent {
     IncomingSegment(IncomingPDU<lower::SegmentedPDU>),
     IncomingAck(IncomingPDU<control::Ack>),
 }
 pub struct Segments {
-    incoming_events_sink: mpsc::Sender<SegmentEvent>,
-    incoming_events: mpsc::Receiver<SegmentEvent>,
+    outgoing_pdus: mpsc::Sender<OutgoingTransportMessage>,
+    finished_pdus: mpsc::Sender<IncomingTransportPDU<Box<[u8]>>>,
+    incoming_events_rx: mpsc::Receiver<SegmentEvent>,
+    incoming_events_tx: mpsc::Sender<SegmentEvent>,
     outgoing: VecDeque<OutgoingSegments>,
-    incoming: BTreeMap<(UnicastAddress, SeqZero), IncomingSegments>,
+    reassembler: Reassembler,
 }
 impl Segments {
-    pub fn feed_event(&self, event: SegmentEvent) {
-        self.incoming_events_sink
+    pub async fn feed_event(&mut self, event: SegmentEvent) {
+        self.incoming_events_tx
             .send(event)
-            .expect("segmenter feed failed")
+            .await
+            .expect("channel closed")
     }
-    pub fn handle_ack(&mut self, _ack: IncomingPDU<control::Ack>) {}
-    pub fn handle_segment(&mut self, _segment: IncomingPDU<lower::SegmentedPDU>) {}
-    pub fn handle_event(&mut self, event: SegmentEvent) {
+    pub fn incoming_events(&self) -> &mpsc::Sender<SegmentEvent> {
+        &self.incoming_events_tx
+    }
+    pub async fn handle_ack(
+        &mut self,
+        _ack: IncomingPDU<control::Ack>,
+    ) -> Result<(), ReassemblyError> {
+        unimplemented!()
+    }
+    pub async fn handle_segment(
+        &mut self,
+        segment: IncomingPDU<lower::SegmentedPDU>,
+    ) -> Result<(), ReassemblyError> {
+        let _maybe_new_message = self.reassembler.feed_pdu(segment).await?;
+        Ok(())
+    }
+    pub async fn handle_event(&mut self, event: SegmentEvent) -> Result<(), ReassemblyError> {
         match event {
-            SegmentEvent::IncomingSegment(seg) => self.handle_segment(seg),
-            SegmentEvent::IncomingAck(ack) => self.handle_ack(ack),
+            SegmentEvent::IncomingSegment(seg) => self.handle_segment(seg).await,
+            SegmentEvent::IncomingAck(ack) => self.handle_ack(ack).await,
         }
     }
-    pub fn new() -> Self {
-        let (tx, rx) = mpsc::channel();
+    pub fn new(
+        channel_capacity: usize,
+        outgoing_pdus: mpsc::Sender<OutgoingTransportMessage>,
+        finished_pdus: mpsc::Sender<IncomingTransportPDU<Box<[u8]>>>,
+    ) -> Self {
+        let (tx, rx) = mpsc::channel(channel_capacity);
         Self {
-            incoming_events_sink: tx,
-            incoming_events: rx,
-            outgoing: Default::default(),
-            incoming: Default::default(),
+            outgoing_pdus: outgoing_pdus.clone(),
+            finished_pdus,
+            incoming_events_tx: tx,
+            incoming_events_rx: rx,
+            outgoing: VecDeque::default(),
+            reassembler: Reassembler::new(outgoing_pdus),
         }
     }
 }
 
-mod async_segs {
-    use crate::address::UnicastAddress;
-    use crate::lower;
-    use crate::lower::{SegmentedPDU, SeqZero};
-    use crate::reassembler;
-    use crate::stack::messages::IncomingTransportPDU;
-    use crate::stack::segments::{IncomingPDU, IncomingSegments};
-    use alloc::collections::BTreeMap;
-    use std::collections::btree_map::Entry;
-    use tokio::sync::mpsc;
-    use tokio::sync::mpsc::error::SendError;
-    use tokio::task::JoinHandle;
+pub struct ReassemblerContext {
+    sender: mpsc::Sender<IncomingPDU<lower::SegmentedPDU>>,
+}
+pub struct ReassemblerHandle {
+    pub src: UnicastAddress,
+    pub seq_zero: SeqZero,
+    pub sender: mpsc::Sender<IncomingPDU<lower::SegmentedPDU>>,
+    pub handle: JoinHandle<Result<IncomingTransportPDU<Box<[u8]>>, ReassemblyError>>,
+}
+pub struct Reassembler {
+    incoming_channels: BTreeMap<(UnicastAddress, lower::SeqZero), ReassemblerContext>,
+    outgoing_pdus: mpsc::Sender<OutgoingTransportMessage>,
+}
+pub enum ReassemblyError {
+    Canceled,
+    Timeout,
+    InvalidFirstSegment,
+    ChannelClosed,
+    Reassemble(reassembler::ReassembleError),
+}
+pub const REASSEMBLER_CHANNEL_LEN: usize = 8;
+impl Reassembler {
+    pub fn new(outgoing_pdus: mpsc::Sender<OutgoingTransportMessage>) -> Self {
+        Self {
+            incoming_channels: BTreeMap::new(),
+            outgoing_pdus,
+        }
+    }
+    pub fn reassemble(
+        &mut self,
+        first_seg: IncomingPDU<lower::SegmentedPDU>,
+    ) -> Option<ReassemblerHandle> {
+        let src = (first_seg.src, first_seg.pdu.seq_zero());
+        let entry = self.incoming_channels.entry(src);
+        match entry {
+            Entry::Vacant(v) => {
+                let (tx, rx) = mpsc::channel(REASSEMBLER_CHANNEL_LEN);
+                let handle = tokio::spawn(Self::reassemble_segs(
+                    first_seg,
+                    self.outgoing_pdus.clone(),
+                    rx,
+                ));
+                v.insert(ReassemblerContext { sender: tx.clone() });
+                Some(ReassemblerHandle {
+                    src: src.0,
+                    seq_zero: src.1,
+                    sender: tx,
+                    handle,
+                })
+            }
+            Entry::Occupied(_) => None,
+        }
+    }
+    pub async fn feed_pdu(
+        &mut self,
+        pdu: IncomingPDU<lower::SegmentedPDU>,
+    ) -> Result<Option<ReassemblerHandle>, ReassemblyError> {
+        match self
+            .incoming_channels
+            .get_mut(&(pdu.src, pdu.pdu.seq_zero()))
+        {
+            Some(context) => match context.sender.send(pdu).await {
+                Ok(_) => Ok(None),
+                Err(_) => Err(ReassemblyError::ChannelClosed),
+            },
+            None => Ok(Some(
+                self.reassemble(pdu)
+                    .expect("guaranteed for the handle to not exists yet"),
+            )),
+        }
+    }
+    async fn send_ack(
+        segs: &IncomingSegments,
+        outgoing: &mut mpsc::Sender<OutgoingTransportMessage>,
+        ack: BlockAck,
+    ) -> Result<(), ReassemblyError> {
+        outgoing
+            .send(OutgoingTransportMessage {
+                pdu: lower::PDU::UnsegmentedControl(
+                    control::Ack {
+                        obo: false,
+                        seq_zero: segs.seq_auth.first_seq.into(),
+                        block_ack: ack,
+                    }
+                    .try_to_unseg()
+                    .expect("correctly formatted PDU"),
+                ),
+                src: segs.src,
+                dst: segs.dst,
+                ttl: segs.ack_ttl,
+                iv_index: segs.seq_auth.iv_index,
+                net_key_index: segs.net_key_index,
+            })
+            .await;
+        Ok(())
+    }
+    async fn cancel_ack(
+        segs: &IncomingSegments,
+        outgoing: &mut mpsc::Sender<OutgoingTransportMessage>,
+    ) -> Result<(), ReassemblyError> {
+        Self::send_ack(segs, outgoing, BlockAck::cancel()).await
+    }
+    async fn reassemble_segs(
+        first_seg: IncomingPDU<lower::SegmentedPDU>,
+        mut outgoing: mpsc::Sender<OutgoingTransportMessage>,
+        mut rx: mpsc::Receiver<IncomingPDU<lower::SegmentedPDU>>,
+    ) -> Result<IncomingTransportPDU<Box<[u8]>>, ReassemblyError> {
+        let mut segments =
+            IncomingSegments::new(first_seg).ok_or(ReassemblyError::InvalidFirstSegment)?;
 
-    pub struct ReassemblerContext {
-        sender: mpsc::Sender<IncomingPDU<lower::SegmentedPDU>>,
-    }
-    pub struct ReassemblerHandle {
-        pub src: UnicastAddress,
-        pub seq_zero: SeqZero,
-        pub sender: mpsc::Sender<IncomingPDU<lower::SegmentedPDU>>,
-        pub handle: JoinHandle<Result<IncomingTransportPDU<Box<[u8]>>, ReassemblyError>>,
-    }
-    pub struct Reassembler {
-        incoming_channels: BTreeMap<(UnicastAddress, lower::SeqZero), ReassemblerContext>,
-    }
-    pub enum ReassemblyError {
-        Timeout,
-        InvalidFirstSegment,
-        ChannelClosed,
-        Reassemble(reassembler::ReassembleError),
-    }
-    pub const REASSEMBLER_CHANNEL_LEN: usize = 8;
-    impl Reassembler {
-        pub fn new() -> Self {
-            Self {
-                incoming_channels: BTreeMap::new(),
+        while !segments.is_ready() {
+            let next = tokio::time::timeout(segments.recv_timeout(), rx.recv())
+                .await
+                .map_err(|_| ReassemblyError::Timeout)?
+                .ok_or(ReassemblyError::ChannelClosed)?;
+            if !segments.seq_auth.valid_seq(next.seq) {
+                // cancel
+                Self::cancel_ack(&segments, &mut outgoing).await?;
+                return Err(ReassemblyError::Canceled);
             }
+            let seg_header = next.pdu.segment_header();
+            segments
+                .context
+                .insert_data(seg_header.seg_n, next.pdu.seg_data())
+                .map_err(ReassemblyError::Reassemble)?;
         }
-        pub fn reassemble(
-            &mut self,
-            first_seg: IncomingPDU<lower::SegmentedPDU>,
-        ) -> Option<ReassemblerHandle> {
-            let src = (first_seg.src, first_seg.pdu.seq_zero());
-            let entry = self.incoming_channels.entry(src);
-            match entry {
-                Entry::Vacant(v) => {
-                    let (tx, rx) = mpsc::channel(REASSEMBLER_CHANNEL_LEN);
-                    let handle = tokio::spawn(Self::reassemble_segs(first_seg, rx));
-                    v.insert(ReassemblerContext { sender: tx.clone() });
-                    Some(ReassemblerHandle {
-                        src: src.0,
-                        seq_zero: src.1,
-                        sender: tx,
-                        handle,
-                    })
-                }
-                Entry::Occupied(_) => None,
-            }
-        }
-        pub async fn feed_pdu(
-            &mut self,
-            pdu: IncomingPDU<lower::SegmentedPDU>,
-        ) -> Result<Option<ReassemblerHandle>, ReassemblyError> {
-            match self
-                .incoming_channels
-                .get_mut(&(pdu.src, pdu.pdu.seq_zero()))
-            {
-                Some(context) => match context.sender.send(pdu).await {
-                    Ok(_) => Ok(None),
-                    Err(_) => Err(ReassemblyError::ChannelClosed),
-                },
-                None => Ok(Some(
-                    self.reassemble(pdu)
-                        .expect("guaranteed for the handle to not exists yet"),
-                )),
-            }
-        }
-        async fn reassemble_segs(
-            first_seg: IncomingPDU<lower::SegmentedPDU>,
-            mut rx: mpsc::Receiver<IncomingPDU<lower::SegmentedPDU>>,
-        ) -> Result<IncomingTransportPDU<Box<[u8]>>, ReassemblyError> {
-            let mut segments =
-                IncomingSegments::new(first_seg).ok_or(ReassemblyError::InvalidFirstSegment)?;
-            while !segments.is_ready() {
-                let next = tokio::time::timeout(segments.recv_timeout(), rx.recv())
-                    .await
-                    .map_err(|_| ReassemblyError::Timeout)?
-                    .ok_or(ReassemblyError::ChannelClosed)?;
-                let seg_header = next.pdu.segment_header();
-                segments
-                    .context
-                    .insert_data(seg_header.seg_n, next.pdu.seg_data())
-                    .map_err(ReassemblyError::Reassemble)?;
-            }
-            match segments.finish() {
-                Ok(msg) => Ok(msg),
-                Err(_) => unreachable!("segments is ensured to be is_ready() by the loop above"),
-            }
+        match segments.finish() {
+            Ok(msg) => Ok(msg),
+            Err(_) => unreachable!("segments is ensured to be is_ready() by the loop above"),
         }
     }
 }
