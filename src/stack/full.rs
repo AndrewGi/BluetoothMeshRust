@@ -16,8 +16,8 @@ use crate::mesh::{AppKeyIndex, ElementCount, ElementIndex, IVIndex, IVUpdateFlag
 use crate::upper::{AppPayload, PDU};
 use alloc::boxed::Box;
 use core::convert::TryFrom;
-use parking_lot::{Mutex, RwLock};
-use std::sync::mpsc;
+use std::ops::Deref;
+use tokio::sync::{mpsc, Mutex, RwLock};
 
 pub struct FullStack<'a> {
     network_pdu_sender: mpsc::Sender<IncomingEncryptedNetworkPDU>,
@@ -34,7 +34,7 @@ pub struct FullStack<'a> {
 pub struct InputInterfaceSink(mpsc::Sender<IncomingEncryptedNetworkPDU>);
 
 impl InterfaceSink for InputInterfaceSink {
-    fn consume_pdu(&self, pdu: &IncomingEncryptedNetworkPDU) {
+    fn consume_pdu(&mut self, pdu: &IncomingEncryptedNetworkPDU) {
         // Proper Error Handling?
         self.0.send(*pdu).expect("stack sink shutdown")
     }
@@ -60,9 +60,13 @@ impl<'a> FullStack<'a> {
     /// `StackInternals` holds the `device_state::State` which should be save persistently for the
     /// entire time a node is in a Mesh Network. If you lose the `StackInternals`, the node will
     /// have to be reprovisioned as a new nodes and the old allocated Unicast Addresses are lost.
-    pub fn new(internals: StackInternals, replay_cache: replay::Cache) -> Self {
-        let (tx_net, rx_net) = mpsc::channel();
-        let (tx_app, rx_app) = mpsc::channel();
+    pub fn new(
+        internals: StackInternals,
+        replay_cache: replay::Cache,
+        channel_size: usize,
+    ) -> Self {
+        let (tx_net, rx_net) = mpsc::channel(channel_size);
+        let (tx_app, rx_app) = mpsc::channel(channel_size);
         Self {
             network_pdu_sender: tx_net.clone(),
             network_pdu_receiver: rx_net,
@@ -100,9 +104,14 @@ impl<'a> FullStack<'a> {
     /// Returns `true` if the `header` is old or `false` if the `header` is new and valid.
     /// If no information about the source of the PDU (Src and Seq), it records the header
     /// and returns `false`
-    fn check_replay_cache(&self, header: &net::Header, seq_zero: Option<SeqZero>) -> (bool, bool) {
+    async fn check_replay_cache(
+        &self,
+        header: &net::Header,
+        seq_zero: Option<SeqZero>,
+    ) -> (bool, bool) {
         self.replay_cache
             .lock()
+            .await
             .replay_net_check(header.src, header.seq, header.ivi, seq_zero)
     }
     fn handle_net_pdu(&self, incoming: IncomingNetworkPDU) -> Result<(), RecvError> {
@@ -145,9 +154,13 @@ impl<'a> FullStack<'a> {
         unimplemented!()
     }
     /// Send encrypted net_pdu through all output interfaces.
-    fn send_encrypted_net_pdu(&self, pdu: OutgoingEncryptedNetworkPDU) -> Result<(), SendError> {
+    async fn send_encrypted_net_pdu(
+        &self,
+        pdu: OutgoingEncryptedNetworkPDU,
+    ) -> Result<(), SendError> {
         self.output_interfaces
             .lock()
+            .await
             .send_pdu(&pdu)
             .map_err(|e| SendError::BearerError(e))
     }
@@ -195,8 +208,8 @@ impl<'a> FullStack<'a> {
         unimplemented!()
     }
 
-    pub fn internals_with<R>(&self, func: impl FnOnce(&StackInternals) -> R) -> R {
-        func(&self.internals.read())
+    pub async fn internals_with<R>(&self, func: impl FnOnce(&StackInternals) -> R) -> R {
+        func(self.internals.read().await.deref())
     }
     pub fn handle_encrypted_net_pdu(
         &self,
@@ -241,14 +254,19 @@ impl<'a> FullStack<'a> {
 
 impl<'a> Stack for FullStack<'_> {
     fn iv_index(&self) -> (IVIndex, IVUpdateFlag) {
-        let internals = self.internals.read();
+        let internals = self.internals.read().await;
         (
             internals.device_state.iv_index(),
             internals.device_state.iv_update_flag(),
         )
     }
     fn primary_address(&self) -> UnicastAddress {
-        self.internals.read().device_state.unicast_range().start
+        self.internals
+            .read()
+            .await
+            .device_state
+            .unicast_range()
+            .start
     }
 
     fn element_count(&self) -> ElementCount {

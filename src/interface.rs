@@ -3,7 +3,7 @@ use crate::bearer::{BearerError, IncomingEncryptedNetworkPDU, OutgoingEncryptedN
 use alloc::vec::Vec;
 
 pub trait InterfaceSink {
-    fn consume_pdu(&self, pdu: &IncomingEncryptedNetworkPDU);
+    fn consume_pdu(&mut self, pdu: &IncomingEncryptedNetworkPDU);
 }
 pub trait InputInterface<Sink: InterfaceSink> {
     fn take_sink(&mut self, sink: Sink);

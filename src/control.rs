@@ -173,6 +173,7 @@ impl TryFrom<&UnsegmentedControlPDU> for ControlPDU {
             .try_into()
     }
 }
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub enum ControlMessageError {
     BufferTooSmall,
     BadBytes,
@@ -184,12 +185,12 @@ pub trait ControlMessage: Sized {
     const OPCODE: ControlOpcode;
     fn byte_len(&self) -> usize;
     fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError>;
-    fn pack(buf: &mut [u8]) -> Result<(), ControlMessageError>;
+    fn pack(&self, buf: &mut [u8]) -> Result<(), ControlMessageError>;
     fn try_pack<Storage: AsRef<[u8]> + AsMut<[u8]>>(
         &self,
         payload: &mut ControlPayload<Storage>,
     ) -> Result<(), ControlMessageError> {
-        Self::pack(payload.payload.as_mut())?;
+        self.pack(payload.payload.as_mut())?;
         payload.opcode = Self::OPCODE;
         Ok(())
     }
@@ -200,7 +201,22 @@ pub trait ControlMessage: Sized {
             Err(ControlMessageError::BadOpcode)
         }
     }
+    fn try_to_unseg(&self) -> Result<UnsegmentedControlPDU, ControlMessageError> {
+        let len = self.byte_len();
+        if len > UnsegmentedControlPDU::max_parameters_size() {
+            Err(ControlMessageError::BufferTooSmall)
+        } else {
+            let mut out = [0_u8; UnsegmentedControlPDU::max_parameters_size()];
+            self.pack(&mut out[..len])?;
+            Ok(UnsegmentedControlPDU {
+                parameters_buf: out,
+                parameters_len: len,
+                opcode: Self::OPCODE,
+            })
+        }
+    }
 }
+const ACK_SIZE: usize = 6;
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct Ack {
     pub obo: bool,
@@ -211,11 +227,11 @@ impl ControlMessage for Ack {
     const OPCODE: ControlOpcode = ControlOpcode::Ack;
 
     fn byte_len(&self) -> usize {
-        6
+        ACK_SIZE
     }
 
     fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError> {
-        if buf.len() != 6 {
+        if buf.len() != ACK_SIZE {
             Err(ControlMessageError::BadLength)
         } else {
             let seq = u16::from_bytes_le(&buf[..2]).expect("seq_zero is always here");
@@ -231,8 +247,15 @@ impl ControlMessage for Ack {
         }
     }
 
-    fn pack(_buf: &mut [u8]) -> Result<(), ControlMessageError> {
-        unimplemented!()
+    fn pack(&self, buf: &mut [u8]) -> Result<(), ControlMessageError> {
+        if buf.len() < ACK_SIZE {
+            Err(ControlMessageError::BufferTooSmall)
+        } else {
+            let out = (u16::from(self.seq_zero) << 2) | (u16::from(self.obo) << 15);
+            buf[..2].copy_from_slice(&out.to_bytes_be());
+            buf[2..6].copy_from_slice(&self.block_ack.0.to_bytes_be());
+            Ok(())
+        }
     }
 }
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
@@ -248,7 +271,7 @@ impl ControlMessage for FriendPoll {
         unimplemented!()
     }
 
-    fn pack(_buf: &mut [u8]) -> Result<(), ControlMessageError> {
+    fn pack(&self, _buf: &mut [u8]) -> Result<(), ControlMessageError> {
         unimplemented!()
     }
 }
@@ -265,7 +288,7 @@ impl ControlMessage for FriendUpdate {
         unimplemented!()
     }
 
-    fn pack(_buf: &mut [u8]) -> Result<(), ControlMessageError> {
+    fn pack(&self, _buf: &mut [u8]) -> Result<(), ControlMessageError> {
         unimplemented!()
     }
 }
@@ -282,7 +305,7 @@ impl ControlMessage for FriendRequest {
         unimplemented!()
     }
 
-    fn pack(_buf: &mut [u8]) -> Result<(), ControlMessageError> {
+    fn pack(&self, _buf: &mut [u8]) -> Result<(), ControlMessageError> {
         unimplemented!()
     }
 }
@@ -299,7 +322,7 @@ impl ControlMessage for FriendOffer {
         unimplemented!()
     }
 
-    fn pack(_buf: &mut [u8]) -> Result<(), ControlMessageError> {
+    fn pack(&self, _buf: &mut [u8]) -> Result<(), ControlMessageError> {
         unimplemented!()
     }
 }
@@ -316,7 +339,7 @@ impl ControlMessage for FriendClear {
         unimplemented!()
     }
 
-    fn pack(_buf: &mut [u8]) -> Result<(), ControlMessageError> {
+    fn pack(&self, _buf: &mut [u8]) -> Result<(), ControlMessageError> {
         unimplemented!()
     }
 }
@@ -333,7 +356,7 @@ impl ControlMessage for FriendClearConfirm {
         unimplemented!()
     }
 
-    fn pack(_buf: &mut [u8]) -> Result<(), ControlMessageError> {
+    fn pack(&self, _buf: &mut [u8]) -> Result<(), ControlMessageError> {
         unimplemented!()
     }
 }
@@ -350,7 +373,7 @@ impl ControlMessage for FriendSubscriptionListAdd {
         unimplemented!()
     }
 
-    fn pack(_buf: &mut [u8]) -> Result<(), ControlMessageError> {
+    fn pack(&self, _buf: &mut [u8]) -> Result<(), ControlMessageError> {
         unimplemented!()
     }
 }
@@ -367,7 +390,7 @@ impl ControlMessage for FriendSubscriptionListRemove {
         unimplemented!()
     }
 
-    fn pack(_buf: &mut [u8]) -> Result<(), ControlMessageError> {
+    fn pack(&self, _buf: &mut [u8]) -> Result<(), ControlMessageError> {
         unimplemented!()
     }
 }
@@ -385,7 +408,7 @@ impl ControlMessage for FriendSubscriptionListConfirm {
         unimplemented!()
     }
 
-    fn pack(_buf: &mut [u8]) -> Result<(), ControlMessageError> {
+    fn pack(&self, _buf: &mut [u8]) -> Result<(), ControlMessageError> {
         unimplemented!()
     }
 }
@@ -403,7 +426,7 @@ impl ControlMessage for Heartbeat {
         unimplemented!()
     }
 
-    fn pack(_buf: &mut [u8]) -> Result<(), ControlMessageError> {
+    fn pack(&self, _buf: &mut [u8]) -> Result<(), ControlMessageError> {
         unimplemented!()
     }
 }
