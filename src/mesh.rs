@@ -4,6 +4,7 @@ use core::convert::{TryFrom, TryInto};
 use core::fmt::{Display, Error, Formatter};
 use core::str::FromStr;
 use core::time;
+use std::ops::{Add, Sub};
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -352,6 +353,20 @@ impl SequenceNumber {
     pub fn next(&self) -> SequenceNumber {
         assert!(self.0.value() <= U24_MAX);
         SequenceNumber(U24((self.0).0 + 1))
+    }
+}
+impl Add<SequenceNumber> for SequenceNumber {
+    type Output = u32;
+
+    fn add(self, rhs: SequenceNumber) -> Self::Output {
+        u32::from(self.0 + rhs.0)
+    }
+}
+impl Sub<SequenceNumber> for SequenceNumber {
+    type Output = u32;
+
+    fn sub(self, rhs: SequenceNumber) -> Self::Output {
+        u32::from(self.0 - rhs.0)
     }
 }
 impl Display for SequenceNumber {

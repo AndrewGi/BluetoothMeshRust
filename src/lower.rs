@@ -8,7 +8,7 @@
 use crate::bytes::ToFromBytesEndian;
 use crate::control::ControlOpcode;
 use crate::crypto::{AID, AKF, MIC};
-use crate::mesh::{SequenceNumber, CTL, U24};
+use crate::mesh::{IVIndex, SequenceNumber, CTL, U24};
 use core::convert::{TryFrom, TryInto};
 
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
@@ -36,6 +36,11 @@ impl SeqZero {
         assert!(seq_zero <= SEQ_ZERO_MAX);
         SeqZero(seq_zero)
     }
+    pub fn original_seq(&self, seq: SequenceNumber) -> SequenceNumber {
+        SequenceNumber(U24::new(
+            (u32::from(seq.0) & !u32::from(SEQ_ZERO_MAX)) & u32::from(self.0),
+        ))
+    }
 }
 impl From<SequenceNumber> for SeqZero {
     fn from(n: SequenceNumber) -> Self {
@@ -54,7 +59,24 @@ impl From<SeqZero> for u16 {
 
 /// 53-bit Sequence Authentication value.
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
-pub struct SeqAuth(u64);
+pub struct SeqAuth {
+    pub first_seq: SequenceNumber,
+    pub iv_index: IVIndex,
+}
+impl SeqAuth {
+    pub fn new(first_seq: SequenceNumber, iv_index: IVIndex) -> Self {
+        SeqAuth {
+            first_seq,
+            iv_index,
+        }
+    }
+    pub fn from_seq_zero(seq_zero: SeqZero, seq: SequenceNumber, iv_index: IVIndex) -> Self {
+        SeqAuth::new(seq_zero.original_seq(seq), iv_index)
+    }
+    pub fn valid_seq(&self, new_seq: SequenceNumber) -> bool {
+        new_seq >= self.first_seq && (new_seq - self.first_seq) < 8192
+    }
+}
 
 pub const SEG_MAX: u8 = 0x1F;
 
@@ -135,6 +157,9 @@ impl BlockAck {
         // Mask Upper bits so we don't underflow
         self = BlockAck(self.0 & ((1 << u32::from(u8::from(seg_o))) - 1));
         u8::from(seg_o) - self.count_ones()
+    }
+    pub const fn cancel() -> Self {
+        BlockAck(!0)
     }
 }
 /// SEG Flag for signaling segmented PDUs. Unsegmented PDUs have `SEG(false)` while segmented
