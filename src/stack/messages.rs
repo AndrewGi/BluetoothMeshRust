@@ -29,6 +29,14 @@ pub struct OutgoingMessage<Storage: AsRef<[u8]> + AsMut<[u8]>> {
     pub dst: Address,
     pub ttl: Option<TTL>,
 }
+pub struct OutgoingTransportMessage {
+    pub pdu: lower::PDU,
+    pub src: UnicastAddress,
+    pub dst: Address,
+    pub ttl: Option<TTL>,
+    pub iv_index: IVIndex,
+    pub net_key_index: NetKeyIndex,
+}
 impl<Storage: AsRef<[u8]> + AsMut<[u8]>> OutgoingMessage<Storage> {
     pub fn data_with_mic_len(&self) -> usize {
         self.app_payload.0.as_ref().len() + self.mic_size.byte_size()
