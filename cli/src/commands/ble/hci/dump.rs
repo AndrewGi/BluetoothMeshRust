@@ -1,3 +1,4 @@
+use crate::helper;
 use crate::CLIError;
 use btle::hci::stream::{HCIReader, HCIWriter};
 
@@ -11,6 +12,15 @@ pub fn sub_command() -> clap::App<'static, 'static> {
                 .long("decode")
                 .takes_value(false),
         )
+        .arg(
+            clap::Arg::with_name("adapter_id")
+                .help("specify the HCI adapter ID")
+                .short("a")
+                .long("adapter_id")
+                .default_value("0")
+                .value_name("ADAPTER_ID")
+                .validator(helper::is_u16_validator),
+        )
 }
 
 pub fn dump_matches(
@@ -19,8 +29,13 @@ pub fn dump_matches(
 ) -> Result<(), CLIError> {
     let logger = parent_logger.new(o!());
     info!(logger, "dump");
+    let adapter_id: u16 = dump_matches
+        .value_of("adapter_id")
+        .expect("has default value")
+        .parse()
+        .expect("validated by clap");
     match dump_matches.subcommand() {
-        ("", _) => dump_bluez(0, &logger),
+        ("", _) => dump_bluez(adapter_id, &logger),
         _ => unreachable!("unhandled subcommand"),
     }
 }
@@ -57,7 +72,7 @@ pub fn dump_bluez(adapter_id: u16, parent_logger: &slog::Logger) -> Result<(), C
     let manager = socket::Manager::new().map_err(map_hci_socket_err)?;
     info!(logger, "opening hci socket...");
     let socket = manager
-        .get_adapter_socket(socket::AdapterID(0))
+        .get_adapter_socket(socket::AdapterID(adapter_id))
         .map_err(map_hci_socket_err)?;
     info!(logger, "opened socket");
     let mut runtime = tokio::runtime::Builder::new()
