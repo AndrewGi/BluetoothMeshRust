@@ -3,32 +3,31 @@ use crate::interface::{InputInterfaces, InterfaceSink, OutputInterfaces};
 
 use crate::relay::RelayPDU;
 use crate::stack::messages::{
-    EncryptedIncomingMessage, IncomingControlMessage, IncomingMessage, IncomingNetworkPDU,
-    IncomingTransportPDU,
+    EncryptedIncomingMessage, IncomingControlMessage, IncomingNetworkPDU, IncomingTransportPDU,
+    OutgoingTransportMessage,
 };
 use crate::stack::{segments, SendError, Stack, StackInternals};
 use crate::{lower, net, replay};
 
-use crate::address::{Address, UnicastAddress};
 use crate::control;
 use crate::lower::SeqZero;
-use crate::mesh::{AppKeyIndex, ElementCount, ElementIndex, IVIndex, IVUpdateFlag};
-use crate::upper::{AppPayload, PDU};
+use crate::stack::segments::Segments;
+use crate::upper::PDU;
 use alloc::boxed::Box;
 use core::convert::TryFrom;
 use std::ops::Deref;
+use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex, RwLock};
 
 pub struct FullStack<'a> {
     network_pdu_sender: mpsc::Sender<IncomingEncryptedNetworkPDU>,
-    network_pdu_receiver: mpsc::Receiver<IncomingEncryptedNetworkPDU>,
-    app_pdu_sender: mpsc::Sender<IncomingMessage<Box<[u8]>>>,
-    app_pdu_receiver: mpsc::Receiver<IncomingMessage<Box<[u8]>>>,
+    upper_pdu_sender: mpsc::Sender<OutgoingTransportMessage>,
+    control_pdu_sender: mpsc::Sender<IncomingControlMessage>,
     input_interfaces: Mutex<InputInterfaces<InputInterfaceSink>>,
     output_interfaces: Mutex<OutputInterfaces<'a>>,
-    segments: segments::Segments,
-    replay_cache: Mutex<replay::Cache>,
-    internals: RwLock<StackInternals>,
+    segments: Arc<Mutex<segments::Segments>>,
+    replay_cache: Arc<Mutex<replay::Cache>>,
+    internals: Arc<RwLock<StackInternals>>,
 }
 #[derive(Clone)]
 pub struct InputInterfaceSink(mpsc::Sender<IncomingEncryptedNetworkPDU>);
@@ -36,7 +35,10 @@ pub struct InputInterfaceSink(mpsc::Sender<IncomingEncryptedNetworkPDU>);
 impl InterfaceSink for InputInterfaceSink {
     fn consume_pdu(&mut self, pdu: &IncomingEncryptedNetworkPDU) {
         // Proper Error Handling?
-        self.0.send(*pdu).expect("stack sink shutdown")
+        match self.0.try_send(*pdu) {
+            Ok(_) => (),  // Worked
+            Err(_) => (), // Full Queue, drop packet
+        }
     }
 }
 pub enum FullStackError {
@@ -55,6 +57,7 @@ pub enum RecvError {
     NetworkPDUQueueClosed,
     OldSeqZero,
 }
+pub const CONTROL_CHANNEL_SIZE: usize = 5;
 impl<'a> FullStack<'a> {
     /// Create a new `FullStack` based on `StackInternals` and `replay::Cache`.
     /// `StackInternals` holds the `device_state::State` which should be save persistently for the
@@ -66,36 +69,80 @@ impl<'a> FullStack<'a> {
         channel_size: usize,
     ) -> Self {
         let (tx_net, rx_net) = mpsc::channel(channel_size);
-        let (tx_app, rx_app) = mpsc::channel(channel_size);
+        let (tx_transport, rx_transport) = mpsc::channel(channel_size);
+        let (tx_msg, rx_msg) = mpsc::channel(channel_size);
+        let (tx_control, rx_control) = mpsc::channel(CONTROL_CHANNEL_SIZE);
+        let net_handler = tokio::task::spawn(async move {});
+        let incoming_transport_handler = tokio::task::spawn(Self::handle_net_loop()
         Self {
             network_pdu_sender: tx_net.clone(),
-            network_pdu_receiver: rx_net,
-            app_pdu_sender: tx_app,
-            app_pdu_receiver: rx_app,
+            upper_pdu_sender: tx_transport.clone(),
+            control_pdu_sender: tx_control,
             input_interfaces: Mutex::new(InputInterfaces::new(InputInterfaceSink(tx_net))),
             output_interfaces: Mutex::new(OutputInterfaces::default()),
-            internals: RwLock::new(internals),
-            replay_cache: Mutex::new(replay_cache),
-            segments: segments::Segments::new(),
+            internals: Arc::new(RwLock::new(internals)),
+            replay_cache: Arc::new(Mutex::new(replay_cache)),
+            segments: Arc::new(Mutex::new(segments::Segments::new(
+                channel_size,
+                tx_transport,
+                tx_msg,
+            ))),
         }
     }
     pub fn output_interfaces(&self, use_interfaces: impl FnOnce(&mut OutputInterfaces)) {
         use_interfaces(&mut self.output_interfaces.lock());
     }
-
+    async fn handle_net_loop(
+        mut rx_net: mpsc::Receiver<IncomingEncryptedNetworkPDU>,
+        tx_control: mpsc::Sender<IncomingControlMessage>,
+        segments: Arc<Mutex<Segments>>,
+    ) -> Result<(), RecvError> {
+        loop {
+            let incoming = rx_net
+                .recv()
+                .await
+                .ok_or(RecvError::NetworkPDUQueueClosed)?;
+            if let Ok(seg_event) = segments::SegmentEvent::try_from(&incoming) {
+                segments.lock().await.feed_event(seg_event);
+                continue;
+            }
+            match &incoming.pdu.payload {
+                lower::PDU::UnsegmentedAccess(unseg_access) => self
+                    .handle_encrypted_incoming_message(EncryptedIncomingMessage {
+                        encrypted_app_payload: unseg_access.into(),
+                        seq: incoming.pdu.header.seq.into(),
+                        seg_count: 0,
+                        iv_index: incoming.iv_index,
+                        net_key_index: incoming.net_key_index,
+                        dst: incoming.pdu.header.dst,
+                        src: incoming.pdu.header.src,
+                        ttl: Some(incoming.pdu.header.ttl),
+                        rssi: incoming.rssi,
+                    }),
+                lower::PDU::UnsegmentedControl(unseg_control) => {
+                    self.handle_control(IncomingControlMessage {
+                        control_pdu: {
+                            match control::ControlPDU::try_from(unseg_control) {
+                                Ok(pdu) => pdu,
+                                Err(_) => return Err(RecvError::MalformedControlPDU), // Badly formatted Control PDU
+                            }
+                        },
+                        src: incoming.pdu.header.src,
+                        rssi: incoming.rssi,
+                        ttl: Some(incoming.pdu.header.ttl),
+                    })
+                }
+                // The rest of Segmented PDUs which are SegmentEvents. If they made it this far
+                // they are badly formatted Segmented PDUs
+                _ => Err(RecvError::MalformedNetworkPDU),
+            }
+        }
+    }
     pub fn input_interfaces(
         &self,
         use_interfaces: impl FnOnce(&mut InputInterfaces<InputInterfaceSink>),
     ) {
         use_interfaces(&mut self.input_interfaces.lock());
-    }
-    fn handle_next_encrypted_network_pdu(&self) -> Result<(), RecvError> {
-        self.handle_encrypted_net_pdu(self.next_encrypted_network_pdu()?)
-    }
-    fn next_encrypted_network_pdu(&self) -> Result<IncomingEncryptedNetworkPDU, RecvError> {
-        self.network_pdu_receiver
-            .recv()
-            .map_err(|_| RecvError::NetworkPDUQueueClosed)
     }
     fn handle_recv_error(&self, error: RecvError, pdu: &IncomingNetworkPDU) {
         #[cfg(debug_assertions)]
@@ -114,42 +161,7 @@ impl<'a> FullStack<'a> {
             .await
             .replay_net_check(header.src, header.seq, header.ivi, seq_zero)
     }
-    fn handle_net_pdu(&self, incoming: IncomingNetworkPDU) -> Result<(), RecvError> {
-        if let Ok(seg_event) = segments::SegmentEvent::try_from(&incoming) {
-            self.segments.feed_event(seg_event);
-        }
-        match &incoming.pdu.payload {
-            lower::PDU::UnsegmentedAccess(unseg_access) => {
-                self.handle_encrypted_incoming_message(EncryptedIncomingMessage {
-                    encrypted_app_payload: unseg_access.into(),
-                    seq: incoming.pdu.header.seq.into(),
-                    seg_count: 0,
-                    iv_index: incoming.iv_index,
-                    net_key_index: incoming.net_key_index,
-                    dst: incoming.pdu.header.dst,
-                    src: incoming.pdu.header.src,
-                    ttl: Some(incoming.pdu.header.ttl),
-                    rssi: incoming.rssi,
-                })
-            }
-            lower::PDU::UnsegmentedControl(unseg_control) => {
-                self.handle_control(IncomingControlMessage {
-                    control_pdu: {
-                        match control::ControlPDU::try_from(unseg_control) {
-                            Ok(pdu) => pdu,
-                            Err(_) => return Err(RecvError::MalformedControlPDU), // Badly formatted Control PDU
-                        }
-                    },
-                    src: incoming.pdu.header.src,
-                    rssi: incoming.rssi,
-                    ttl: Some(incoming.pdu.header.ttl),
-                })
-            }
-            // The rest of Segmented PDUs which are SegmentEvents. If they made it this far
-            // they are badly formatted Segmented PDUs
-            _ => Err(RecvError::MalformedNetworkPDU),
-        }
-    }
+    fn handle_net_pdu(&self, incoming: IncomingNetworkPDU) -> Result<(), RecvError> {}
     fn handle_control(&self, _control_pdu: IncomingControlMessage) -> Result<(), RecvError> {
         unimplemented!()
     }
@@ -251,7 +263,7 @@ impl<'a> FullStack<'a> {
         }
     }
 }
-
+/*
 impl<'a> Stack for FullStack<'_> {
     fn iv_index(&self) -> (IVIndex, IVUpdateFlag) {
         let internals = self.internals.read().await;
@@ -283,3 +295,4 @@ impl<'a> Stack for FullStack<'_> {
         unimplemented!()
     }
 }
+*/

@@ -23,12 +23,12 @@ readme = "README.md"
 
 [features]
 default = ["full_stack"]
-full_stack = ["parking_lot", "std", "tokio", "tokio/sync", "tokio/rt-core", "tokio/time", "futures"]
+full_stack = ["parking_lot", "std", "tokio", "futures"]
 std = []
 
 [dependencies]
 btle = {path = "btle"}
-tokio = {version = "0.2.11", optional=true}
+tokio = {version = "0.2.11", optional=true, features=["sync", "rt-core", "time"]}
 futures = {version = "0.3.3", optional=true}
 rand = "0.7"
 aes = "0.3.2"

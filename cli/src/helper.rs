@@ -41,20 +41,25 @@ pub fn is_128_bit_hex_str_validator(input: String) -> Result<(), String> {
     }
 }
 pub fn is_ttl(input: String) -> Result<(), String> {
-    let error_msg = ||
-        Err(format!("`{}` is not a valid TTL", &input));
+    let error_msg = || Err(format!("`{}` is not a valid TTL", &input));
     match u8::from_str(&input) {
         Ok(v) => match mesh::TTL::try_from(v) {
             Ok(_) => Ok(()),
-            Err(_) => error_msg()
-        }
-        Err(_) => error_msg()
+            Err(_) => error_msg(),
+        },
+        Err(_) => error_msg(),
     }
 }
 pub fn is_u8_validator(input: String) -> Result<(), String> {
     match u8::from_str(&input) {
         Ok(_) => Ok(()),
         Err(_) => Err(format!("'{}' is not a 8-bit unsigned integer", &input)),
+    }
+}
+pub fn is_u16_validator(input: String) -> Result<(), String> {
+    match u16::from_str(&input) {
+        Ok(_) => Ok(()),
+        Err(_) => Err(format!("'{}' is not a 16-bit unsigned integer", &input)),
     }
 }
 pub fn is_u24_validator(input: String) -> Result<(), String> {
