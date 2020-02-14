@@ -17,7 +17,8 @@ use alloc::boxed::Box;
 use core::convert::TryFrom;
 use std::ops::Deref;
 use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex, RwLock};
+use tokio::sync::{mpsc, Mutex, RwLock, MutexGuard};
+use crate::replay::Cache;
 
 pub struct FullStack<'a> {
     network_pdu_sender: mpsc::Sender<IncomingEncryptedNetworkPDU>,
@@ -68,11 +69,37 @@ impl<'a> FullStack<'a> {
         replay_cache: replay::Cache,
         channel_size: usize,
     ) -> Self {
-        let (tx_net, rx_net) = mpsc::channel(channel_size);
+        let (tx_incoming_net, rx_incoming_net) = mpsc::channel(channel_size);
         let (tx_transport, rx_transport) = mpsc::channel(channel_size);
-        let (tx_msg, rx_msg) = mpsc::channel(channel_size);
+        let (tx_incoming_transport, rx_incoming_transport) = mpsc::channel(channel_size);
         let (tx_control, rx_control) = mpsc::channel(CONTROL_CHANNEL_SIZE);
-        let net_handler = tokio::task::spawn(async move {});
+
+
+        let internals = Arc::new(RwLock::new(internals));
+        let replay_cache = Arc::new(Mutex::new(replay_cache));
+
+        let internals_net_handler = internals.clone();
+        let replay_cache_net_handler = replay_cache.clone();
+        let rx_incoming_net_handle = rx_incoming_net.clone();
+        let tx_incoming_transport_net_handle = tx_incoming_transport.clone();
+        let net_handler = tokio::task::spawn(async move {
+            let mut rx_net = rx_incoming_net_handle;
+            let mut tx_transport = tx_incoming_transport_net_handle;
+            let internals = internals_net_handler;
+            let replay_cache = replay_cache_net_handler;
+            loop {
+                let next = rx_net.recv().await.ok_or(RecvError::NetworkPDUQueueClosed)?;
+                match Self::handle_encrypted_net_pdu(&internals, &replay_cache, None, next).await {
+                    Ok(pdu) => tx_transport.send(pdu).await,
+                    Err(e) => {
+                        // Log the error, otherwise ignore it.
+                        #[cfg(debug_assertions)]
+                        eprintln!("recv error: {:?}", e);
+                    }
+
+                }
+            }
+        });
         let incoming_transport_handler = tokio::task::spawn(Self::handle_net_loop()
         Self {
             network_pdu_sender: tx_net.clone(),
@@ -89,26 +116,19 @@ impl<'a> FullStack<'a> {
             ))),
         }
     }
-    pub fn output_interfaces(&self, use_interfaces: impl FnOnce(&mut OutputInterfaces)) {
-        use_interfaces(&mut self.output_interfaces.lock());
-    }
-    async fn handle_net_loop(
-        mut rx_net: mpsc::Receiver<IncomingEncryptedNetworkPDU>,
-        tx_control: mpsc::Sender<IncomingControlMessage>,
-        segments: Arc<Mutex<Segments>>,
+    async fn handle_net(
+        tx_control: &mut mpsc::Sender<IncomingControlMessage>,
+        tx_access: &mut mpsc::Sender<EncryptedIncomingMessage<Box<[u8]>>>,
+        segments: &Mutex<Segments>,
+        incoming: IncomingNetworkPDU
     ) -> Result<(), RecvError> {
         loop {
-            let incoming = rx_net
-                .recv()
-                .await
-                .ok_or(RecvError::NetworkPDUQueueClosed)?;
             if let Ok(seg_event) = segments::SegmentEvent::try_from(&incoming) {
                 segments.lock().await.feed_event(seg_event);
-                continue;
+                return Ok(());
             }
             match &incoming.pdu.payload {
-                lower::PDU::UnsegmentedAccess(unseg_access) => self
-                    .handle_encrypted_incoming_message(EncryptedIncomingMessage {
+                lower::PDU::UnsegmentedAccess(unseg_access) => tx_access.send(EncryptedIncomingMessage {
                         encrypted_app_payload: unseg_access.into(),
                         seq: incoming.pdu.header.seq.into(),
                         seg_count: 0,
@@ -118,9 +138,9 @@ impl<'a> FullStack<'a> {
                         src: incoming.pdu.header.src,
                         ttl: Some(incoming.pdu.header.ttl),
                         rssi: incoming.rssi,
-                    }),
-                lower::PDU::UnsegmentedControl(unseg_control) => {
-                    self.handle_control(IncomingControlMessage {
+                    }).await,
+                lower::PDU::UnsegmentedControl(unseg_control) =>
+                    tx_control.send(IncomingControlMessage {
                         control_pdu: {
                             match control::ControlPDU::try_from(unseg_control) {
                                 Ok(pdu) => pdu,
@@ -130,40 +150,14 @@ impl<'a> FullStack<'a> {
                         src: incoming.pdu.header.src,
                         rssi: incoming.rssi,
                         ttl: Some(incoming.pdu.header.ttl),
-                    })
-                }
+                    }).await,
+
                 // The rest of Segmented PDUs which are SegmentEvents. If they made it this far
                 // they are badly formatted Segmented PDUs
-                _ => Err(RecvError::MalformedNetworkPDU),
+                _ => return Err(RecvError::MalformedNetworkPDU),
             }
         }
-    }
-    pub fn input_interfaces(
-        &self,
-        use_interfaces: impl FnOnce(&mut InputInterfaces<InputInterfaceSink>),
-    ) {
-        use_interfaces(&mut self.input_interfaces.lock());
-    }
-    fn handle_recv_error(&self, error: RecvError, pdu: &IncomingNetworkPDU) {
-        #[cfg(debug_assertions)]
-        eprintln!("recv_error: `{:?}` pdu: `{:?}`", error, pdu);
-    }
-    /// Returns `true` if the `header` is old or `false` if the `header` is new and valid.
-    /// If no information about the source of the PDU (Src and Seq), it records the header
-    /// and returns `false`
-    async fn check_replay_cache(
-        &self,
-        header: &net::Header,
-        seq_zero: Option<SeqZero>,
-    ) -> (bool, bool) {
-        self.replay_cache
-            .lock()
-            .await
-            .replay_net_check(header.src, header.seq, header.ivi, seq_zero)
-    }
-    fn handle_net_pdu(&self, incoming: IncomingNetworkPDU) -> Result<(), RecvError> {}
-    fn handle_control(&self, _control_pdu: IncomingControlMessage) -> Result<(), RecvError> {
-        unimplemented!()
+        Ok(())
     }
     /// Send encrypted net_pdu through all output interfaces.
     async fn send_encrypted_net_pdu(
@@ -223,16 +217,19 @@ impl<'a> FullStack<'a> {
     pub async fn internals_with<R>(&self, func: impl FnOnce(&StackInternals) -> R) -> R {
         func(self.internals.read().await.deref())
     }
-    pub fn handle_encrypted_net_pdu(
-        &self,
+    pub async fn handle_encrypted_net_pdu(
+        internals: &RwLock<StackInternals>,
+        replay_cache: &Mutex<replay::Cache>,
+        outgoing_relay: Option<mpsc::Sender<RelayPDU>>,
         incoming: IncomingEncryptedNetworkPDU,
-    ) -> Result<(), RecvError> {
-        let internals = self.internals.read();
+    ) -> Result<IncomingNetworkPDU, RecvError> {
+        let internals = internals.read().await;
         if let Some((net_key_index, iv_index, pdu)) =
             internals.decrypt_network_pdu(incoming.encrypted_pdu.as_ref())
         {
+            let header = pdu.header();
             let (is_old_seq, is_old_seq_zero) =
-                self.check_replay_cache(pdu.header(), pdu.payload.seq_zero());
+                replay_cache.lock().await.replay_net_check(header.src, header.seq, header.ivi, pdu.payload.seq_zero());
             if is_old_seq {
                 // We've already seen this PDU
                 return Err(RecvError::OldSeq);
@@ -242,17 +239,19 @@ impl<'a> FullStack<'a> {
                 && pdu.header().ttl.should_relay()
                 && internals.device_state.relay_state().is_enabled()
             {
-                self.relay_pdu(RelayPDU {
-                    pdu,
-                    iv_index,
-                    net_key_index,
-                })
+                if let Some(mut relay_tx) = outgoing_relay {
+                    relay_tx.send(RelayPDU {
+                        pdu,
+                        iv_index,
+                        net_key_index,
+                    }).await;
+                }
             }
             if is_old_seq_zero {
                 // We've already handle this PDU
                 return Err(RecvError::OldSeqZero);
             }
-            self.handle_net_pdu(IncomingNetworkPDU {
+            Ok(IncomingNetworkPDU {
                 pdu,
                 net_key_index,
                 iv_index,
