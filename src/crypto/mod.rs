@@ -32,7 +32,7 @@ pub mod key;
 pub mod materials;
 pub mod nonce;
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash, Ord, PartialOrd)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub enum MIC {
     Big(u64),
     Small(u32),
@@ -137,7 +137,7 @@ impl Display for MIC {
 
 /// 6 bit Application Key ID
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct AID(u8);
 const AID_MAX: u8 = (1 << 6) - 1;
 
@@ -182,7 +182,7 @@ impl From<AKF> for bool {
 pub struct TryFromBlockError(());
 const SALT_LEN: usize = 16;
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct Salt([u8; SALT_LEN]);
 
 impl Salt {
@@ -216,7 +216,7 @@ impl AsRef<[u8]> for Salt {
     }
 }
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct ProvisioningSalt(Salt);
 impl ProvisioningSalt {
     pub fn as_salt(&self) -> Salt {
@@ -224,7 +224,7 @@ impl ProvisioningSalt {
     }
 }
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct ECDHSecret(Salt);
 impl ECDHSecret {
     pub fn new_bytes(bytes: [u8; SALT_LEN]) -> Self {
@@ -240,7 +240,7 @@ impl AsRef<[u8]> for ECDHSecret {
     }
 }
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct NetworkID(u64);
 impl From<&key::NetKey> for NetworkID {
     fn from(k: &NetKey) -> Self {
@@ -252,7 +252,7 @@ impl Display for NetworkID {
         write!(f, "{}", self.0)
     }
 }
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Copy, Clone, PartialOrd, PartialEq, Ord, Eq, Debug, Hash)]
 #[repr(u8)]
 pub enum KeyRefreshPhases {

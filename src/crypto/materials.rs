@@ -8,7 +8,7 @@ use alloc::collections::btree_map;
 use core::fmt::{Display, Error, Formatter};
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct NetworkKeys {
     nid: NID,
     encryption: EncryptionKey,
@@ -50,7 +50,7 @@ impl From<&NetKey> for NetworkKeys {
     }
 }
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct NetworkSecurityMaterials {
     net_key: NetKey,
     network_keys: NetworkKeys,
@@ -101,13 +101,13 @@ impl From<&NetKey> for NetworkSecurityMaterials {
     }
 }
 #[derive(Clone, Copy, Eq, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct KeyPair<K: Clone + Copy + Eq + PartialEq> {
     pub new: K,
     pub old: K,
 }
 #[derive(Clone, Copy, Eq, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub enum KeyPhase<K: Clone + Copy + Eq + PartialEq> {
     Normal(K),
     Phase1(KeyPair<K>),
@@ -144,7 +144,7 @@ impl<K: Clone + Copy + Eq> KeyPhase<K> {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct NetKeyMap {
     pub map: btree_map::BTreeMap<NetKeyIndex, KeyPhase<NetworkSecurityMaterials>>,
 }
@@ -198,7 +198,7 @@ impl NetKeyMap {
         self.map.insert(index, KeyPhase::Normal(new_key.into()))
     }
 }
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct ApplicationSecurityMaterials {
     pub app_key: AppKey,
     pub aid: AID,
@@ -213,7 +213,7 @@ impl ApplicationSecurityMaterials {
         }
     }
 }
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct AppKeyMap {
     pub map: btree_map::BTreeMap<AppKeyIndex, ApplicationSecurityMaterials>,
 }
@@ -263,7 +263,7 @@ impl AppKeyMap {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct SecurityMaterials {
     pub iv_update_flag: IVUpdateFlag,
     pub iv_index: IVIndex,

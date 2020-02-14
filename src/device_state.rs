@@ -19,17 +19,17 @@ use core::ops::Range;
 use core::sync::atomic::Ordering;
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct ModelInfo {
     pub publish: Option<ModelPublishInfo>,
     pub app_key: Vec<AppKeyIndex>,
 }
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct Models(BTreeMap<ModelIdentifier, ModelInfo>);
 
 #[derive(Default, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct ConfigStates {
     pub relay_state: RelayState,
     pub gatt_proxy_state: GATTProxyState,
@@ -42,7 +42,7 @@ pub struct ConfigStates {
 /// somehow when the program shuts down or you will lose all your crypto keys. Normal operations
 /// should use just immutable functions (include increases Seqs) but config clients and others will
 /// use mutable references to configure the node.
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct DeviceState {
     element_address: UnicastAddress,
     element_count: ElementCount,
@@ -87,7 +87,7 @@ impl Iterator for SeqRange {
 /// Atomic SeqCounter so no PDUs get the same SeqNumber. Sequence Numbers are a finite resource
 /// (only 24-bits) that only get reset every IVIndex update. Also segmented PDUs require sequential
 #[derive(Default, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct SeqCounter(core::sync::atomic::AtomicU32);
 impl SeqCounter {
     pub fn new(start_seq: SequenceNumber) -> Self {

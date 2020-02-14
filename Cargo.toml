@@ -23,19 +23,18 @@ readme = "README.md"
 
 [features]
 default = ["full_stack"]
-full_stack = ["parking_lot", "std", "tokio", "futures"]
+full_stack = ["std", "tokio", "futures-core"]
+serde-1 = ["serde"]
 std = []
 
 [dependencies]
-btle = {path = "btle"}
-tokio = {version = "0.2.11", optional=true, features=["sync", "rt-core", "time"]}
-futures = {version = "0.3.3", optional=true}
+btle = {path = "btle", default_features = false}
+tokio = {version = "0.2.11", optional=true, default-features = false, features=["sync", "rt-core", "time"]}
+futures-core = {version = "0.3.4", optional=true}
 rand = "0.7"
 aes = "0.3.2"
 aead = "0.2.0"
-crypto-mac = "0.7.0"
 dbl = "0.2.1"
 block-modes = "0.3.3"
 subtle = "2.2.2"
 serde = {version = "1.0.104", default-features = false, features = ["derive"], optional = true }
-parking_lot = {version = "0.10.0", optional = true}

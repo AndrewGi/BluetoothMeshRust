@@ -10,7 +10,7 @@ use alloc::collections::btree_map::Entry;
 use alloc::collections::BTreeMap;
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct CacheEntry {
     seq: SequenceNumber,
     ivi: IVI,
@@ -45,7 +45,7 @@ impl From<PrivateHeader<'_>> for CacheEntry {
     }
 }
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct Cache {
     map: BTreeMap<UnicastAddress, CacheEntry>,
 }

@@ -30,7 +30,7 @@ const VIRTUAL_BIT: u16 = 0x8000;
 const VIRTUAL_MASK: u16 = GROUP_MASK;
 
 /// Element Unicast Address. Each Element has one Unicast assigned to it.
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct UnicastAddress(u16);
 /// Group Address. Some Group Address are reserved.
@@ -42,7 +42,7 @@ pub struct UnicastAddress(u16);
 /// | 0xFFFD        | All Friends   |
 /// | 0xFFFE        | All Relays    |
 /// | 0xFFFF        | All Nodes     |
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct GroupAddress(u16);
 impl GroupAddress {
@@ -74,7 +74,7 @@ impl GroupAddress {
 const VIRTUAL_ADDRESS_HASH_MAX: u16 = (1_u16 << 14) - 1;
 /// Only stores the 14 bit hash of the virtual UUID.
 /// For the full 128 bit UUID, look at [`VirtualAddress`]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct VirtualAddressHash(u16);
 impl VirtualAddressHash {
@@ -94,7 +94,7 @@ impl VirtualAddressHash {
 /// messages over the air. During the application decryption process, the UUID is supplied to the
 /// AES CCM decryptor as associated data. If the hash matches but the decryption fails (MIC doesn't
 /// match), the message doesn't belong to that VirtualAddress.
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct VirtualAddress(VirtualAddressHash, UUID);
 impl VirtualAddress {
@@ -201,7 +201,7 @@ impl From<VirtualAddress> for u16 {
         (v.0).0
     }
 }
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub enum Address {
     Unassigned,
