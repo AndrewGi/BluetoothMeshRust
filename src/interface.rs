@@ -21,22 +21,22 @@ impl<Sink: InterfaceSink + Clone> InputInterfaces<Sink> {
     }
 }
 pub trait OutputInterface {
-    fn send_pdu(&self, pdu: &OutgoingEncryptedNetworkPDU) -> Result<(), BearerError>;
+    fn send_pdu(&mut self, pdu: &OutgoingEncryptedNetworkPDU) -> Result<(), BearerError>;
 }
-#[derive(Clone, Default)]
+#[derive(Default)]
 pub struct OutputInterfaces<'a> {
-    interfaces: Vec<&'a dyn OutputInterface>,
+    interfaces: Vec<&'a mut dyn OutputInterface>,
 }
 impl<'a> OutputInterfaces<'a> {
     pub fn new() -> Self {
         Self::default()
     }
-    pub fn add_interface<'b: 'a>(&mut self, interface: &'b dyn OutputInterface) {
+    pub fn add_interface<'b: 'a>(&mut self, interface: &'b mut dyn OutputInterface) {
         self.interfaces.push(interface)
     }
-    pub fn send_pdu(&self, pdu: &OutgoingEncryptedNetworkPDU) -> Result<(), BearerError> {
-        for &interface in self.interfaces.iter() {
-            interface.send_pdu(pdu)?
+    pub fn send_pdu(&mut self, pdu: &OutgoingEncryptedNetworkPDU) -> Result<(), BearerError> {
+        for interface in self.interfaces.iter_mut() {
+            (*interface).send_pdu(pdu)?
         }
         Ok(())
     }

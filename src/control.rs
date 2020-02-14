@@ -208,11 +208,7 @@ pub trait ControlMessage: Sized {
         } else {
             let mut out = [0_u8; UnsegmentedControlPDU::max_parameters_size()];
             self.pack(&mut out[..len])?;
-            Ok(UnsegmentedControlPDU {
-                parameters_buf: out,
-                parameters_len: len,
-                opcode: Self::OPCODE,
-            })
+            Ok(UnsegmentedControlPDU::new(Self::OPCODE, &out[..len]))
         }
     }
 }

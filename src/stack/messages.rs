@@ -34,6 +34,7 @@ pub struct OutgoingTransportMessage {
     pub src: UnicastAddress,
     pub dst: Address,
     pub ttl: Option<TTL>,
+    pub seq: Option<SequenceNumber>,
     pub iv_index: IVIndex,
     pub net_key_index: NetKeyIndex,
 }

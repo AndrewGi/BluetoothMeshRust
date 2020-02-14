@@ -94,7 +94,7 @@ impl StackInternals {
         Option::<&'_ VirtualAddress>::None.into_iter()
     }
 
-    fn decrypt_app<Storage: AsRef<[u8]> + AsMut<[u8]> + Clone>(
+    fn app_decrypt<Storage: AsRef<[u8]> + AsMut<[u8]> + Clone>(
         &self,
         msg: EncryptedIncomingMessage<Storage>,
     ) -> Result<IncomingMessage<Storage>, RecvError> {

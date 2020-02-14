@@ -320,11 +320,13 @@ impl Reassembler {
                 src: segs.src,
                 dst: segs.dst,
                 ttl: segs.ack_ttl,
+                seq: None,
                 iv_index: segs.seq_auth.iv_index,
                 net_key_index: segs.net_key_index,
             })
-            .await;
-        Ok(())
+            .await
+            .ok()
+            .ok_or(ReassemblyError::ChannelClosed)
     }
     async fn cancel_ack(
         segs: &IncomingSegments,

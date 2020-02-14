@@ -1,38 +1,87 @@
 use crate::bearer::IncomingEncryptedNetworkPDU;
+use crate::control;
 use crate::relay::RelayPDU;
-use crate::stack::full::RecvError;
 use crate::stack::messages::{
-    EncryptedIncomingMessage, IncomingControlMessage, IncomingNetworkPDU, IncomingTransportPDU,
+    EncryptedIncomingMessage, IncomingControlMessage, IncomingMessage, IncomingNetworkPDU,
+    IncomingTransportPDU, OutgoingTransportMessage,
 };
 use crate::stack::segments::Segments;
 use crate::stack::{RecvError, StackInternals};
 use crate::{lower, replay, upper};
 use futures::SinkExt;
+use std::convert::TryFrom;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex, RwLock};
+use tokio::task::JoinHandle;
 
-pub struct Incoming {}
+pub struct Incoming {
+    net_handler: JoinHandle<Result<(), RecvError>>,
+    encrypted_net_handler: JoinHandle<Result<(), RecvError>>,
+    upper_transport_handler: JoinHandle<Result<(), RecvError>>,
+    encrypted_access_handler: JoinHandle<Result<(), RecvError>>,
+}
 impl Incoming {
     pub fn new(
-        interals: Arc<RwLock<StackInternals>>,
+        internals: Arc<RwLock<StackInternals>>,
         replay_cache: Arc<Mutex<replay::Cache>>,
         incoming_net: mpsc::Receiver<IncomingEncryptedNetworkPDU>,
+        outgoing_transport: mpsc::Sender<OutgoingTransportMessage>,
+        tx_access: mpsc::Sender<IncomingMessage<Box<[u8]>>>,
+        tx_control: mpsc::Sender<IncomingControlMessage>,
         channel_size: usize,
     ) -> Self {
-        let encrypted_net_handler = tokio::task::spawn(Self::handle_encrypted_net_pdu_loop(
-            internals.clone(),
-            replay_cache.clone(),
-            None,
-            rx_incoming_encrypted_net,
-            tx_incoming_net,
-        ));
-
-        let net_handler = tokio::task::spawn(Self::handle_net_loop(
-            segments.clone(),
-            tx_control.clone(),
-            tx_access.clone(),
-            rx_incoming_net,
-        ));
+        let (tx_incoming_net, rx_incoming_net) = mpsc::channel(channel_size);
+        let (tx_encrypted_access, rx_encrypted_access) = mpsc::channel(channel_size);
+        let (tx_incoming_upper, rx_incoming_upper) = mpsc::channel(chanel_size);
+        let segments = Arc::new(Mutex::new(Segments::new(
+            channel_size,
+            outgoing_transport,
+            tx_incoming_upper,
+        )));
+        Self {
+            encrypted_net_handler: tokio::task::spawn(Self::handle_encrypted_net_pdu_loop(
+                internals.clone(),
+                replay_cache,
+                None,
+                incoming_net,
+                tx_incoming_net,
+            )),
+            net_handler: tokio::task::spawn(Self::handle_net_loop(
+                segments,
+                tx_control.clone(),
+                tx_encrypted_access.clone(),
+                rx_incoming_net,
+            )),
+            upper_transport_handler: tokio::task::spawn(Self::handle_upper_transport_loop(
+                rx_incoming_upper,
+                tx_encrypted_access,
+                tx_control,
+            )),
+            encrypted_access_handler: tokio::task::spawn(Self::handle_encrypted_access_loop(
+                internals,
+                rx_encrypted_access,
+                tx_access,
+            )),
+        }
+    }
+    async fn handle_encrypted_access_loop(
+        internals: Arc<RwLock<StackInternals>>,
+        mut incoming_encrypted_access: mpsc::Receiver<EncryptedIncomingMessage<Box<[u8]>>>,
+        mut outgoing_encrypted_access: mpsc::Sender<IncomingMessage<Box<[u8]>>>,
+    ) -> Result<(), RecvError> {
+        loop {
+            let next = incoming_encrypted_access
+                .recv()
+                .await
+                .ok_or(RecvError::ChannelClosed)?;
+            if let Ok(decrypted) = internals.read().await.app_decrypt(next) {
+                outgoing_encrypted_access
+                    .send(decrypted)
+                    .await
+                    .ok()
+                    .ok_or(RecvError::ChannelClosed)?;
+            }
+        }
     }
     async fn handle_net_loop(
         segments: Arc<Mutex<Segments>>,
@@ -102,7 +151,7 @@ impl Incoming {
             _ => Err(RecvError::MalformedNetworkPDU),
         }
     }
-    async fn handle_upper_pdu_loop<Storage: AsRef<[u8]> + AsMut<[u8]> + Clone>(
+    async fn handle_upper_transport_loop<Storage: AsRef<[u8]> + AsMut<[u8]> + Clone>(
         mut incoming: mpsc::Receiver<IncomingTransportPDU<Storage>>,
         mut tx_access: mpsc::Sender<EncryptedIncomingMessage<Storage>>,
         mut tx_control: mpsc::Sender<IncomingControlMessage>,
