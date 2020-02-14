@@ -5,6 +5,7 @@ use crate::mesh::TransmitInterval;
 use crate::provisioning::pb_adv;
 use crate::{beacon, net};
 
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub enum BearerError {
     AdvertiseError,
 }

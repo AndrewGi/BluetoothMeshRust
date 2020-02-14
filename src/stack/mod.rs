@@ -1,8 +1,10 @@
 //! Bluetooth Mesh Stack that connects all the layers together.
 
 pub mod element;
-#[cfg(feature = "std")]
+#[cfg(feature = "full")]
 pub mod full;
+#[cfg(feature = "full")]
+pub mod incoming;
 pub mod messages;
 pub mod model;
 #[cfg(feature = "std")]
@@ -20,7 +22,6 @@ use crate::mesh::{
 };
 use crate::segmenter::EncryptedNetworkPDUIterator;
 use crate::stack::element::ElementRef;
-use crate::stack::full::RecvError;
 use crate::stack::messages::{
     EncryptedIncomingMessage, EncryptedOutgoingMessage, IncomingMessage, MessageKeys,
     OutgoingMessage,
@@ -52,6 +53,7 @@ pub struct NetworkHeader {
 pub struct StackInternals {
     device_state: device_state::DeviceState,
 }
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub enum SendError {
     InvalidAppKeyIndex,
     InvalidIVIndex,
@@ -60,6 +62,19 @@ pub enum SendError {
     InvalidSourceElement,
     OutOfSeq,
     BearerError(BearerError),
+}
+
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
+pub enum RecvError {
+    NoMatchingNetKey,
+    NoMatchingAppKey,
+    InvalidDeviceKey,
+    InvalidDestination,
+    MalformedNetworkPDU,
+    MalformedControlPDU,
+    OldSeq,
+    ChannelClosed,
+    OldSeqZero,
 }
 impl StackInternals {
     /// Wraps a `device_state::DeviceState` and lets you perform encrypt and decryption with it.
