@@ -260,6 +260,20 @@ impl Address {
         }
     }
     #[must_use]
+    pub fn unicast(&self) -> Option<UnicastAddress> {
+        match self {
+            Address::Unicast(u) => Some(*u),
+            _ => None,
+        }
+    }
+    #[must_use]
+    pub fn group(&self) -> Option<GroupAddress> {
+        match self {
+            Address::Group(g) => Some(*g),
+            _ => None,
+        }
+    }
+    #[must_use]
     pub fn value(&self) -> u16 {
         self.into()
     }

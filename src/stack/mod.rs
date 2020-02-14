@@ -25,8 +25,8 @@ use crate::mesh::{
 use crate::segmenter::EncryptedNetworkPDUIterator;
 use crate::stack::element::ElementRef;
 use crate::stack::messages::{
-    EncryptedIncomingMessage, EncryptedOutgoingMessage, IncomingMessage, MessageKeys,
-    OutgoingMessage,
+    EncryptedIncomingMessage, IncomingMessage, MessageKeys, OutgoingMessage,
+    OutgoingUpperTransportMessage,
 };
 use crate::upper;
 use crate::upper::{AppPayload, SecurityMaterials, SecurityMaterialsIterator};
@@ -189,7 +189,7 @@ impl StackInternals {
     pub fn app_encrypt<Storage: AsRef<[u8]> + AsMut<[u8]>>(
         &self,
         msg: OutgoingMessage<Storage>,
-    ) -> Result<EncryptedOutgoingMessage<Storage>, (SendError, OutgoingMessage<Storage>)> {
+    ) -> Result<OutgoingUpperTransportMessage<Storage>, (SendError, OutgoingMessage<Storage>)> {
         // If DST is a VirtualAddress, it must have the full Label UUID.
         let dst = msg.dst;
         match &dst {
@@ -298,7 +298,7 @@ impl StackInternals {
         };
         let ttl = msg.ttl.unwrap_or(self.default_ttl());
         let encrypted = msg.app_payload.encrypt(&sm, msg.mic_size);
-        Ok(EncryptedOutgoingMessage {
+        Ok(OutgoingUpperTransportMessage {
             encrypted_app_payload: encrypted,
             seq,
             seg_count: SegO::new(seg_count),

@@ -1,5 +1,5 @@
 use crate::crypto::MIC;
-use crate::lower::{BlockAck, SegN, SegO, SegmentHeader, SegmentedAccessPDU, SeqZero};
+use crate::lower::{BlockAck, SegN, SegO, SegmentHeader, SegmentedAccessPDU, SeqAuth, SeqZero};
 
 use crate::crypto::materials::NetworkKeys;
 use crate::device_state::SeqRange;
@@ -10,26 +10,26 @@ use crate::{lower, net, upper};
 
 use core::cmp::min;
 
-pub(crate) struct UpperSegmenter<Storage: AsRef<[u8]>> {
-    pub upper_pdu: upper::PDU<Storage>,
+pub struct UpperSegmenter<Storage: AsRef<[u8]>> {
+    upper_pdu: upper::PDU<Storage>,
     seg_o: SegO,
-    seq_zero: SeqZero,
+    seq_auth: SeqAuth,
 }
 impl<Storage: Clone + AsRef<[u8]>> Clone for UpperSegmenter<Storage> {
     fn clone(&self) -> Self {
         Self {
             upper_pdu: self.upper_pdu.clone(),
             seg_o: self.seg_o,
-            seq_zero: self.seq_zero,
+            seq_auth: self.seq_auth,
         }
     }
 }
 impl<Storage: AsRef<[u8]>> UpperSegmenter<Storage> {
-    pub fn new(upper_pdu: upper::PDU<Storage>, seq_zero: SeqZero) -> Self {
+    pub fn new(upper_pdu: upper::PDU<Storage>, seq_auth: SeqAuth) -> Self {
         Self {
             seg_o: upper_pdu.seg_o(),
             upper_pdu,
-            seq_zero,
+            seq_auth,
         }
     }
     pub fn iter(&self, block_ack: BlockAck) -> SegmentIterator<Storage> {
@@ -38,6 +38,15 @@ impl<Storage: AsRef<[u8]>> UpperSegmenter<Storage> {
             segmenter: self,
             seg_n: 0,
         }
+    }
+    pub fn upper_pdu(&self) -> &upper::PDU<Storage> {
+        &self.upper_pdu
+    }
+    pub fn seg_o(&self) -> SegO {
+        self.seg_o
+    }
+    pub fn seq_auth(&self) -> SeqAuth {
+        self.seq_auth
     }
     pub fn seg_count(&self) -> u8 {
         u8::from(self.seg_o) + 1
