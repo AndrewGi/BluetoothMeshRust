@@ -1,6 +1,6 @@
 use crate::bearer::{BearerError, IncomingEncryptedNetworkPDU, OutgoingEncryptedNetworkPDU};
 use crate::btle::advertisement::{AdStructure, RawAdvertisement};
-use crate::btle::gap::{Advertiser, Scanner, ScannerSink};
+use crate::btle::advertiser::{Advertiser, Scanner, ScannerSink};
 use crate::interface::{InputInterface, InterfaceSink, OutputInterface};
 use crate::net;
 
@@ -21,7 +21,7 @@ impl<InterSink: InterfaceSink + Clone> Clone for ScannerInputSink<InterSink> {
     }
 }
 impl<InterSink: InterfaceSink> ScannerSink for ScannerInputSink<InterSink> {
-    fn consume_advertisement(&self, advertisement: &RawAdvertisement) {
+    fn consume_advertisement(&mut self, advertisement: &RawAdvertisement) {
         match advertisement.iter().next() {
             Some(AdStructure::MeshPDU(buf)) => {
                 if let Some(pdu) = net::OwnedEncryptedPDU::new(buf.as_ref()) {
@@ -39,7 +39,7 @@ impl<InterSink: InterfaceSink> ScannerSink for ScannerInputSink<InterSink> {
 }
 
 impl<A: Advertiser> OutputInterface for A {
-    fn send_pdu(&self, pdu: &OutgoingEncryptedNetworkPDU) -> Result<(), BearerError> {
+    fn send_pdu(&mut self, pdu: &OutgoingEncryptedNetworkPDU) -> Result<(), BearerError> {
         for _ in 0..u8::from(pdu.transmit_parameters.count) {
             self.advertise(&(&AdStructure::from(pdu.pdu.as_ref())).into())
                 .map_err(|_| BearerError::AdvertiseError)?;
