@@ -19,7 +19,7 @@
 #[macro_use]
 extern crate std;
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serde-1")]
 extern crate serde;
 
 extern crate alloc;

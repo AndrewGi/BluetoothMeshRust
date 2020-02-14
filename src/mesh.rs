@@ -7,7 +7,7 @@ use core::time;
 use std::ops::{Add, Sub};
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct IVI(pub bool);
 impl From<IVI> for bool {
     #[must_use]
@@ -50,7 +50,7 @@ impl From<bool> for KeyRefreshFlag {
     }
 }
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct IVUpdateFlag(pub bool);
 impl From<IVUpdateFlag> for bool {
     #[must_use]
@@ -65,7 +65,7 @@ impl From<bool> for IVUpdateFlag {
     }
 }
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct TTL(u8);
 
 const TTL_MASK: u8 = 127;
@@ -130,7 +130,7 @@ impl Display for TTL {
 }
 /// 7-bit `NID` (different than `NetworkID`!!)
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct NID(u8);
 
 impl Display for NID {
@@ -173,7 +173,7 @@ impl From<NID> for u8 {
 }
 /// 24-bit Unsigned Integer. Commonly used for other 24-bit Unsigned types (`IVIndex`, `SequenceNumber`, Etc)
 #[derive(Default, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct U24(u32);
 const U24_MAX: u32 = (1_u32 << 24) - 1; // 2**24 - 1
 impl Display for U24 {
@@ -283,7 +283,7 @@ impl From<U24> for u32 {
     }
 }
 #[derive(Copy, Clone, Eq, Ord, PartialOrd, PartialEq, Debug, Default, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct IVIndex(pub u32);
 impl IVIndex {
     pub fn ivi(&self) -> IVI {
@@ -347,7 +347,7 @@ impl ToFromBytesEndian for IVIndex {
 }
 /// 24-bit Sequence number. Sent with each Network PDU. Each element has their own Sequence Number.
 #[derive(Copy, Clone, Eq, Ord, PartialOrd, PartialEq, Debug, Default, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct SequenceNumber(pub U24);
 impl SequenceNumber {
     pub fn next(&self) -> SequenceNumber {
@@ -401,7 +401,7 @@ impl ToFromBytesEndian for SequenceNumber {
 /// 16-bit Bluetooth Company Identifier. Companies are assigned unique Company Identifiers to
 /// Bluetooth SIG members requesting them. [See here for more](https://www.bluetooth.com/specifications/assigned-numbers/company-identifiers/)
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct CompanyID(pub u16);
 impl CompanyID {
     /// Return the length in bytes of `CompanyID` (2-bytes, 16-bits)
@@ -433,7 +433,7 @@ impl ToFromBytesEndian for CompanyID {
     }
 }
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash, Ord, PartialOrd)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct ModelID(pub u16);
 impl ModelID {
     pub const fn byte_len() -> usize {
@@ -468,7 +468,7 @@ pub struct KeyIndexConversationError(());
 const KEY_INDEX_MAX: u16 = (1 << 12) - 1;
 /// 12-bit KeyIndex
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct KeyIndex(u16);
 impl KeyIndex {
     /// # Panics
@@ -501,15 +501,15 @@ impl From<KeyIndex> for u16 {
 }
 /// 12-bit NetKeyIndex
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct NetKeyIndex(pub KeyIndex);
 /// 12-bit AppKeyIndex
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct AppKeyIndex(pub KeyIndex);
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct ElementIndex(pub u8);
 impl ElementIndex {
     #[must_use]
@@ -518,12 +518,12 @@ impl ElementIndex {
     }
 }
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct ElementCount(pub u8);
 const TRANSMIT_COUNT_MAX: u8 = 0b111;
 /// 3-bit Transit Count,
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct TransmitCount(u8);
 
 impl TransmitCount {
@@ -542,7 +542,7 @@ impl From<TransmitCount> for u8 {
 const STEPS_MAX: u8 = (1u8 << 5) - 1;
 /// 5-bit Transmit Interval Steps
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct TransmitSteps(u8);
 
 impl TransmitSteps {
@@ -566,7 +566,7 @@ impl From<TransmitSteps> for u8 {
     }
 }
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct TransmitInterval {
     pub count: TransmitCount,
     pub steps: TransmitSteps,

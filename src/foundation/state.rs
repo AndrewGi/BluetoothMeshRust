@@ -3,7 +3,7 @@ use crate::mesh::{TransmitCount, TransmitInterval, TransmitSteps};
 use core::convert::TryFrom;
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
 pub enum RelayState {
     Disabled = 0x00,
@@ -38,10 +38,10 @@ impl RelayState {
     }
 }
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct RelayRetransmit(pub TransmitInterval);
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
 pub enum SecureNetworkBeaconState {
     NotBroadcasting = 0x00,
@@ -69,7 +69,7 @@ impl Default for SecureNetworkBeaconState {
     }
 }
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
 pub enum GATTProxyState {
     Disabled = 0x00,
@@ -99,7 +99,7 @@ impl Default for GATTProxyState {
     }
 }
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
 pub enum NodeIdentityState {
     Stopped = 0x00,
@@ -125,7 +125,7 @@ impl TryFrom<u8> for NodeIdentityState {
     }
 }
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
 pub enum FriendState {
     Disabled = 0x00,
@@ -151,7 +151,7 @@ impl TryFrom<u8> for FriendState {
     }
 }
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
 pub enum KeyRefreshPhaseState {
     Normal = 0x00,
@@ -178,7 +178,7 @@ impl TryFrom<u8> for KeyRefreshPhaseState {
 }
 /// Used to allow the element to physical get the attention of a person (flashing, beep, etc).
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct AttentionTimer(pub u8);
 impl AttentionTimer {
     pub fn new(seconds_remaining: u8) -> Self {
@@ -192,7 +192,7 @@ impl AttentionTimer {
     }
 }
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct DefaultTTLState(u8);
 impl DefaultTTLState {
     pub fn new(v: u8) -> DefaultTTLState {
@@ -222,7 +222,7 @@ impl Default for DefaultTTLState {
     }
 }
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct DefaultTTLStateError(());
 impl TryFrom<u8> for DefaultTTLState {
     type Error = DefaultTTLStateError;
@@ -232,7 +232,7 @@ impl TryFrom<u8> for DefaultTTLState {
     }
 }
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct NetworkTransmit(pub TransmitInterval);
 impl Default for NetworkTransmit {
     fn default() -> Self {

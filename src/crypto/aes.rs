@@ -20,7 +20,6 @@ use crate::bytes::ToFromBytesEndian;
 use aead::Aead;
 use core::convert::TryInto;
 use core::slice;
-use crypto_mac::Mac;
 
 const AES_BLOCK_LEN: usize = 16;
 type AesBlock = [u8; AES_BLOCK_LEN];

@@ -7,6 +7,8 @@ pub mod full;
 pub mod incoming;
 pub mod messages;
 pub mod model;
+#[cfg(feature = "full")]
+pub mod outgoing;
 #[cfg(feature = "std")]
 pub mod segments;
 

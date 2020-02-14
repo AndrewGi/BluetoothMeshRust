@@ -2,8 +2,21 @@
 //! certain public functions.
 // Copied from cmac crates because they didn't make `from_cipher` public :(
 
-pub use crypto_mac::Mac;
-use crypto_mac::{InvalidKeyLength, MacResult};
+#[derive(Clone)]
+pub struct MacResult<N: ArrayLength<u8>> {
+    code: GenericArray<u8, N>,
+}
+impl<N: ArrayLength<u8>> MacResult<N> {
+    pub fn code(self) -> GenericArray<u8, N> {
+        self.code
+    }
+}
+#[derive(Default, Debug, Copy, Clone, Eq, PartialEq)]
+pub struct MacError;
+
+#[derive(Default, Debug, Copy, Clone, Eq, PartialEq)]
+pub struct InvalidKeyLength;
+
 use dbl::Dbl;
 
 use aes::block_cipher_trait::generic_array::{typenum::Unsigned, ArrayLength, GenericArray};
@@ -55,26 +68,23 @@ fn xor<L: ArrayLength<u8>>(buf: &mut Block<L>, data: &Block<L>) {
     }
 }
 
-impl<C> Mac for Cmac<C>
+impl<C> Cmac<C>
 where
     C: BlockCipher + Clone,
     Block<C::BlockSize>: Dbl,
     C::BlockSize: Clone,
 {
-    type OutputSize = C::BlockSize;
-    type KeySize = C::KeySize;
-
-    fn new(key: &GenericArray<u8, Self::KeySize>) -> Self {
+    pub fn new(key: &GenericArray<u8, C::KeySize>) -> Self {
         Self::from_cipher(C::new(key))
     }
 
-    fn new_varkey(key: &[u8]) -> Result<Self, InvalidKeyLength> {
+    pub fn new_varkey(key: &[u8]) -> Result<Self, InvalidKeyLength> {
         let cipher = C::new_varkey(key).map_err(|_| InvalidKeyLength)?;
         Ok(Self::from_cipher(cipher))
     }
 
     #[inline]
-    fn input(&mut self, mut data: &[u8]) {
+    pub fn input(&mut self, mut data: &[u8]) {
         let n = C::BlockSize::to_usize();
 
         let rem = n - self.pos;
@@ -112,13 +122,13 @@ where
         }
     }
 
-    fn reset(&mut self) {
+    pub fn reset(&mut self) {
         self.buffer = Default::default();
         self.pos = 0;
     }
 
     #[inline]
-    fn result(mut self) -> MacResult<Self::OutputSize> {
+    pub fn result(mut self) -> MacResult<C::BlockSize> {
         let n = C::BlockSize::to_usize();
         let mut buf = self.buffer.clone();
         if self.pos == n {
@@ -131,7 +141,7 @@ where
 
         self.reset();
 
-        MacResult::new(buf)
+        MacResult { code: buf }
     }
 }
 

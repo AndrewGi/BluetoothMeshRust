@@ -51,7 +51,7 @@ pub trait TimestampTrait: Sized + Add<Duration, Output = Self> + Clone + Copy + 
     fn since(&self, earlier: Self) -> Option<Duration>;
 }
 
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct DummyTimestamp(());
 impl Add<Duration> for DummyTimestamp {
     type Output = Self;

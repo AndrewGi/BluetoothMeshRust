@@ -4,7 +4,7 @@ use crate::bytes::ToFromBytesEndian;
 use crate::mesh::{CompanyID, ModelID};
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct SigModelID(u16);
 impl SigModelID {
     pub const fn byte_len() -> usize {
@@ -12,7 +12,7 @@ impl SigModelID {
     }
 }
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct VendorModelID(u16);
 impl VendorModelID {
     pub const fn byte_len() -> usize {
@@ -20,7 +20,7 @@ impl VendorModelID {
     }
 }
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub enum SigOpcode {
     SingleOctet(u8),
     DoubleOctet(u16),
@@ -41,7 +41,7 @@ impl From<SigOpcode> for Opcode {
 const VENDOR_OPCODE_MAX: u8 = (1u8 << 6) - 1;
 /// 6 bit Vendor Opcode
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct VendorOpcode(u8);
 impl VendorOpcode {
     pub fn new(opcode: u8) -> Self {
@@ -52,7 +52,7 @@ impl VendorOpcode {
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
 pub struct OpcodeConversationError(pub ());
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub enum Opcode {
     SIG(SigOpcode),
     Vendor(VendorOpcode, CompanyID),
@@ -147,7 +147,7 @@ impl Opcode {
     }
 }
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct ModelIdentifier {
     model_id: ModelID,
     company_id: Option<CompanyID>,

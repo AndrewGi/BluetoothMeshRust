@@ -5,8 +5,8 @@ use crate::stack::messages::{
     EncryptedIncomingMessage, IncomingControlMessage, IncomingMessage, IncomingNetworkPDU,
     IncomingTransportPDU, OutgoingTransportMessage,
 };
-use crate::stack::segments::Segments;
-use crate::stack::{RecvError, StackInternals};
+use crate::stack::segments::SegmentEvent;
+use crate::stack::{segments, RecvError, StackInternals};
 use crate::{lower, replay, upper};
 use futures::SinkExt;
 use std::convert::TryFrom;
@@ -26,6 +26,7 @@ impl Incoming {
         replay_cache: Arc<Mutex<replay::Cache>>,
         incoming_net: mpsc::Receiver<IncomingEncryptedNetworkPDU>,
         outgoing_transport: mpsc::Sender<OutgoingTransportMessage>,
+        tx_ack: mpsc::Sender<segments::IncomingPDU<control::Ack>>,
         tx_access: mpsc::Sender<IncomingMessage<Box<[u8]>>>,
         tx_control: mpsc::Sender<IncomingControlMessage>,
         channel_size: usize,
@@ -33,11 +34,7 @@ impl Incoming {
         let (tx_incoming_net, rx_incoming_net) = mpsc::channel(channel_size);
         let (tx_encrypted_access, rx_encrypted_access) = mpsc::channel(channel_size);
         let (tx_incoming_upper, rx_incoming_upper) = mpsc::channel(chanel_size);
-        let segments = Arc::new(Mutex::new(Segments::new(
-            channel_size,
-            outgoing_transport,
-            tx_incoming_upper,
-        )));
+        let reassembler = Arc::new(Mutex::new(segments::Reassembler::new(outgoing_transport)));
         Self {
             encrypted_net_handler: tokio::task::spawn(Self::handle_encrypted_net_pdu_loop(
                 internals.clone(),
@@ -47,7 +44,8 @@ impl Incoming {
                 tx_incoming_net,
             )),
             net_handler: tokio::task::spawn(Self::handle_net_loop(
-                segments,
+                reassembler,
+                tx_ack,
                 tx_control.clone(),
                 tx_encrypted_access.clone(),
                 rx_incoming_net,
@@ -84,14 +82,16 @@ impl Incoming {
         }
     }
     async fn handle_net_loop(
-        segments: Arc<Mutex<Segments>>,
+        reassembler: Arc<Mutex<segments::Reassembler>>,
+        mut tx_ack: mpsc::Sender<segments::IncomingPDU<control::Ack>>,
         mut tx_control: mpsc::Sender<IncomingControlMessage>,
         mut tx_access: mpsc::Sender<EncryptedIncomingMessage<Box<[u8]>>>,
         mut incoming: mpsc::Receiver<IncomingNetworkPDU>,
     ) -> Result<(), RecvError> {
         loop {
             match Self::handle_net(
-                &segments,
+                &reassembler,
+                &mut tx_ack,
                 &mut tx_control,
                 &mut tx_access,
                 incoming.recv().await.ok_or(RecvError::ChannelClosed)?,
@@ -103,13 +103,20 @@ impl Incoming {
         }
     }
     async fn handle_net(
-        segments: &Mutex<Segments>,
+        reassembler: &Mutex<segments::Reassembler>,
+        tx_ack: &mut mpsc::Sender<segments::IncomingPDU<control::Ack>>,
         tx_control: &mut mpsc::Sender<IncomingControlMessage>,
         tx_access: &mut mpsc::Sender<EncryptedIncomingMessage<Box<[u8]>>>,
         incoming: IncomingNetworkPDU,
     ) -> Result<(), RecvError> {
         if let Ok(seg_event) = segments::SegmentEvent::try_from(&incoming) {
-            segments.lock().await.feed_event(seg_event);
+            match seg_event {
+                SegmentEvent::IncomingSegment(seg) => {
+                    reassembler.lock().await.feed_pdu(seg).await.ok()
+                }
+                SegmentEvent::IncomingAck(ack) => tx_ack.send(ack).await.ok(),
+            }
+            .ok_or(RecvError::ChannelClosed)?;
             return Ok(());
         }
         match &incoming.pdu.payload {

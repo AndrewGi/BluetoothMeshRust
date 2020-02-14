@@ -10,7 +10,7 @@ use core::fmt::{Display, Error, Formatter};
 
 type UUIDBytes = [u8; 16];
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Default)]
 pub struct UUID(pub UUIDBytes);
 
