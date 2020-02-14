@@ -76,6 +76,9 @@ impl SeqAuth {
     pub fn valid_seq(&self, new_seq: SequenceNumber) -> bool {
         new_seq >= self.first_seq && (new_seq - self.first_seq) < 8192
     }
+    pub fn seq_zero(&self) -> SeqZero {
+        self.first_seq.into()
+    }
 }
 
 pub const SEG_MAX: u8 = 0x1F;
@@ -120,6 +123,12 @@ impl From<SegN> for u8 {
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq, Default)]
 pub struct BlockAck(pub u32);
 impl BlockAck {
+    pub const fn new() -> Self {
+        Self(0)
+    }
+    pub const fn new_all_acked(seg_o: SegO) -> Self {
+        Self((1 << u32::from(u8::from(seg_o) + 1u8)) - 1)
+    }
     /// Sets the `bit` bit to 1. Does nothing if bit > 32
     pub fn set(&mut self, bit: u8) {
         debug_assert!(bit < 32, "{} index overflow into u32", bit);
@@ -141,7 +150,7 @@ impl BlockAck {
     /// Returns if the block ack (up to `seg_o` bits) is all 1s. False if otherwise
     #[must_use]
     pub fn all_acked(self, seg_o: SegO) -> bool {
-        self.0 == (1_u32 << u32::from(seg_o.0)).wrapping_sub(1)
+        self == Self::new_all_acked(seg_O)
     }
     /// Returns the max length of BlockAck in bits (32).
     pub const fn max_len() -> usize {
@@ -155,11 +164,20 @@ impl BlockAck {
     }
     pub fn seg_left(mut self, seg_o: SegO) -> u8 {
         // Mask Upper bits so we don't underflow
-        self = BlockAck(self.0 & ((1 << u32::from(u8::from(seg_o))) - 1));
+        self = BlockAck(self.0 & Self::new_all_acked(seg_O));
         u8::from(seg_o) - self.count_ones()
     }
+    pub fn valid_for(self, seg_o: SegO) -> bool {
+        self <= Self::new_all_acked(seg_o)
+    }
+    /// Checks if the `maybe_new` `BlockAck` could be the next `BlockAck`. If the ack has
+    /// bits that were 1 that are now 0, it is invalid (`false`).
+    pub fn is_new(self, maybe_new: Self) -> bool {
+        // maybe_new can only have more new bits set than self.
+        maybe_new > self && ((maybe_new & self) == maybe_new)
+    }
     pub const fn cancel() -> Self {
-        BlockAck(!0)
+        BlockAck::new()
     }
 }
 /// SEG Flag for signaling segmented PDUs. Unsegmented PDUs have `SEG(false)` while segmented

@@ -3,7 +3,7 @@ use crate::control;
 use crate::relay::RelayPDU;
 use crate::stack::messages::{
     EncryptedIncomingMessage, IncomingControlMessage, IncomingMessage, IncomingNetworkPDU,
-    IncomingTransportPDU, OutgoingTransportMessage,
+    IncomingTransportPDU, OutgoingLowerTransportMessage,
 };
 use crate::stack::segments::SegmentEvent;
 use crate::stack::{segments, RecvError, StackInternals};
@@ -25,7 +25,7 @@ impl Incoming {
         internals: Arc<RwLock<StackInternals>>,
         replay_cache: Arc<Mutex<replay::Cache>>,
         incoming_net: mpsc::Receiver<IncomingEncryptedNetworkPDU>,
-        outgoing_transport: mpsc::Sender<OutgoingTransportMessage>,
+        outgoing_transport: mpsc::Sender<OutgoingLowerTransportMessage>,
         tx_ack: mpsc::Sender<segments::IncomingPDU<control::Ack>>,
         tx_access: mpsc::Sender<IncomingMessage<Box<[u8]>>>,
         tx_control: mpsc::Sender<IncomingControlMessage>,

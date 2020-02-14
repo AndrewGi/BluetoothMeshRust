@@ -4,7 +4,10 @@ use crate::lower::{BlockAck, SegmentedPDU, SeqAuth, SeqZero};
 use crate::mesh::{IVIndex, NetKeyIndex, SequenceNumber, TTL};
 use crate::reassembler;
 use crate::reassembler::LowerHeader;
-use crate::stack::messages::{IncomingNetworkPDU, IncomingTransportPDU, OutgoingTransportMessage};
+use crate::stack::messages::{
+    IncomingNetworkPDU, IncomingTransportPDU, OutgoingLowerTransportMessage, OutgoingMessage,
+    OutgoingUpperTransportMessage,
+};
 use crate::{control, lower, segmenter, timestamp};
 use alloc::collections::BTreeMap;
 use std::collections::btree_map::Entry;
@@ -18,11 +21,54 @@ use tokio::task::JoinHandle;
 #[derive(Copy, Clone, PartialOrd, PartialEq, Ord, Eq, Hash, Debug)]
 pub struct SegmentsConversionError(());
 
-pub struct OutgoingSegments {
-    segments: segmenter::UpperSegmenter<Box<[u8]>>,
-    last_ack: timestamp::Timestamp,
+#[derive(Copy, Clone, PartialOrd, PartialEq, Ord, Eq, Hash, Debug)]
+pub enum AckError {
+    BadDst,
+    BadIVIndex,
+    BadSeqZero,
+    BadBlockAck,
+}
+
+pub struct OutgoingSegments<Storage: AsRef<[u8]>> {
+    segments: segmenter::UpperSegmenter<Storage>,
+    block_ack: BlockAck,
+    net_key_index: NetKeyIndex,
     src: UnicastAddress,
     dst: Address,
+    ttl: Option<TTL>,
+}
+impl<Storage: AsRef<[u8]>> OutgoingSegments<Storage> {
+    pub fn is_new_ack(&self, ack: IncomingPDU<control::Ack>) -> Result<bool, AckError> {
+        if ack.pdu.seq_zero != self.segments.seq_auth().seq_zero() {
+            Err(AckError::BadSeqZero)
+        } else if ack.iv_index != self.segments.seq_auth().iv_index {
+            Err(AckError::BadIVIndex)
+        } else if !ack.pdu.block_ack.valid_for(self.segments.seg_o()) {
+            Err(AckError::BadBlockAck)
+        } else if !ack.dst.unicast().map(|u| u == self.src).unwrap_or(false) {
+            Err(AckError::BadDst)
+        } else {
+            Ok(self.block_ack.is_new(ack.pdu.block_ack))
+        }
+    }
+    pub fn seg_to_outgoing(
+        &self,
+        seg: SegmentedPDU,
+        seq: Option<SequenceNumber>,
+    ) -> OutgoingLowerTransportMessage {
+        OutgoingLowerTransportMessage {
+            pdu: match seg {
+                SegmentedPDU::Access(a) => lower::PDU::SegmentedAccess(a),
+                SegmentedPDU::Control(c) => lower::PDU::SegmentedControl(c),
+            },
+            src: self.src,
+            dst: self.dst,
+            ttl: self.ttl,
+            seq,
+            iv_index: self.segments.seq_auth().iv_index,
+            net_key_index: self.net_key_index,
+        }
+    }
 }
 pub struct IncomingSegments {
     context: reassembler::Context,
@@ -176,57 +222,78 @@ pub enum SegmentEvent {
     IncomingSegment(IncomingPDU<lower::SegmentedPDU>),
     IncomingAck(IncomingPDU<control::Ack>),
 }
-pub struct Segments {
-    outgoing_pdus: mpsc::Sender<OutgoingTransportMessage>,
-    finished_pdus: mpsc::Sender<IncomingTransportPDU<Box<[u8]>>>,
-    incoming_events_rx: mpsc::Receiver<SegmentEvent>,
-    incoming_events_tx: mpsc::Sender<SegmentEvent>,
-    outgoing: VecDeque<OutgoingSegments>,
-    reassembler: Reassembler,
+pub struct Segments<Storage> {
+    outgoing_pdus: mpsc::Sender<OutgoingLowerTransportMessage>,
+    finished_pdus: mpsc::Sender<IncomingTransportPDU<Storage>>,
+    incoming_events_tx: mpsc::Sender<IncomingPDU<control::Ack>>,
+    outgoing_queue: mpsc::Sender<OutgoingUpperTransportMessage<Storage>>,
 }
-impl Segments {
-    pub async fn feed_event(&mut self, event: SegmentEvent) {
+pub enum SegmentError {
+    ChannelClosed,
+}
+impl<Storage: AsRef<[u8]>> Segments<Storage> {
+    pub async fn feed_ack(&mut self, ack: IncomingPDU<control::Ack>) -> Result<(), SegmentError> {
         self.incoming_events_tx
-            .send(event)
+            .send(ack)
             .await
-            .expect("channel closed")
-    }
-    pub fn incoming_events(&self) -> &mpsc::Sender<SegmentEvent> {
-        &self.incoming_events_tx
-    }
-    pub async fn handle_ack(
-        &mut self,
-        _ack: IncomingPDU<control::Ack>,
-    ) -> Result<(), ReassemblyError> {
-        unimplemented!()
-    }
-    pub async fn handle_segment(
-        &mut self,
-        segment: IncomingPDU<lower::SegmentedPDU>,
-    ) -> Result<(), ReassemblyError> {
-        let _maybe_new_message = self.reassembler.feed_pdu(segment).await?;
-        Ok(())
-    }
-    pub async fn handle_event(&mut self, event: SegmentEvent) -> Result<(), ReassemblyError> {
-        match event {
-            SegmentEvent::IncomingSegment(seg) => self.handle_segment(seg).await,
-            SegmentEvent::IncomingAck(ack) => self.handle_ack(ack).await,
-        }
+            .ok()
+            .ok_or(SegmentError::ChannelClosed)
     }
     pub fn new(
         channel_capacity: usize,
-        outgoing_pdus: mpsc::Sender<OutgoingTransportMessage>,
-        finished_pdus: mpsc::Sender<IncomingTransportPDU<Box<[u8]>>>,
+        outgoing_pdus: mpsc::Sender<OutgoingLowerTransportMessage>,
+        finished_pdus: mpsc::Sender<IncomingTransportPDU<Storage>>,
     ) -> Self {
-        let (tx, rx) = mpsc::channel(channel_capacity);
+        let (ack_tx, ack_rx) = mpsc::channel(channel_capacity);
+        let (queue_tx, queue_rx) = mpsc::channel(channel_capacity);
         Self {
-            outgoing_pdus: outgoing_pdus.clone(),
+            outgoing_pdus,
             finished_pdus,
-            incoming_events_tx: tx,
-            incoming_events_rx: rx,
-            outgoing: VecDeque::default(),
-            reassembler: Reassembler::new(outgoing_pdus),
+            incoming_events_tx: ack_tx,
+            outgoing_queue: queue_tx,
         }
+    }
+    async fn send_loop(
+        mut ack_rx: mpsc::Receiver<IncomingPDU<control::Ack>>,
+        mut queue_rx: mpsc::Receiver<OutgoingUpperTransportMessage<Storage>>,
+        mut outgoing_tx: mpsc::Sender<OutgoingLowerTransportMessage>,
+    ) -> Result<(), SegmentError> {
+        loop {
+            let next = queue_rx.recv().await.ok_or(SegmentError::ChannelClosed)?;
+            Self::send(next, &mut outgoing_tx, &mut ack_rx)
+        }
+    }
+    async fn send(
+        pdu: OutgoingUpperTransportMessage<Storage>,
+        outgoing_tx: &mut mpsc::Sender<OutgoingLowerTransportMessage>,
+        ack_rx: &mut mpsc::Receiver<IncomingPDU<control::Ack>>,
+    ) -> Result<(), SegmentError> {
+        let segments = OutgoingSegments {
+            segments: segmenter::UpperSegmenter::new(pdu.upper_pdu, pdu.seq.start().into()),
+            block_ack: BlockAck::default(),
+            net_key_index: pdu.net_key_index,
+            src: pdu.src,
+            dst: pdu.dst,
+            ttl: pdu.ttl,
+        };
+        // Immediately send out the PDUs with the acquired seq range.
+        for (seg, seq) in segments.segments.iter(segments.block_ack).zip(pdu.seq) {
+            outgoing_tx
+                .send(segments.seg_to_outgoing(seg, Some(seq)))
+                .await
+                .ok()
+                .ok_or(SegmentError::ChannelClosed)?;
+        }
+        // todo NEEDS TIMEOUT
+        loop {
+            let next_ack = ack_rx.recv().await.ok_or(SegmentError::ChannelClosed)?;
+            // todo is cancel ack?
+            let is_new_ack = match segments.is_new_ack(next_ack) {
+                Ok(is_new) => is_new,
+                Err(_) => continue, // Ack doesn't match
+            };
+        }
+        Ok(())
     }
 }
 
@@ -241,7 +308,7 @@ pub struct ReassemblerHandle {
 }
 pub struct Reassembler {
     incoming_channels: BTreeMap<(UnicastAddress, lower::SeqZero), ReassemblerContext>,
-    outgoing_pdus: mpsc::Sender<OutgoingTransportMessage>,
+    outgoing_pdus: mpsc::Sender<OutgoingLowerTransportMessage>,
 }
 pub enum ReassemblyError {
     Canceled,
@@ -252,7 +319,7 @@ pub enum ReassemblyError {
 }
 pub const REASSEMBLER_CHANNEL_LEN: usize = 8;
 impl Reassembler {
-    pub fn new(outgoing_pdus: mpsc::Sender<OutgoingTransportMessage>) -> Self {
+    pub fn new(outgoing_pdus: mpsc::Sender<OutgoingLowerTransportMessage>) -> Self {
         Self {
             incoming_channels: BTreeMap::new(),
             outgoing_pdus,
@@ -303,11 +370,11 @@ impl Reassembler {
     }
     async fn send_ack(
         segs: &IncomingSegments,
-        outgoing: &mut mpsc::Sender<OutgoingTransportMessage>,
+        outgoing: &mut mpsc::Sender<OutgoingLowerTransportMessage>,
         ack: BlockAck,
     ) -> Result<(), ReassemblyError> {
         outgoing
-            .send(OutgoingTransportMessage {
+            .send(OutgoingLowerTransportMessage {
                 pdu: lower::PDU::UnsegmentedControl(
                     control::Ack {
                         obo: false,
@@ -330,13 +397,13 @@ impl Reassembler {
     }
     async fn cancel_ack(
         segs: &IncomingSegments,
-        outgoing: &mut mpsc::Sender<OutgoingTransportMessage>,
+        outgoing: &mut mpsc::Sender<OutgoingLowerTransportMessage>,
     ) -> Result<(), ReassemblyError> {
         Self::send_ack(segs, outgoing, BlockAck::cancel()).await
     }
     async fn reassemble_segs(
         first_seg: IncomingPDU<lower::SegmentedPDU>,
-        mut outgoing: mpsc::Sender<OutgoingTransportMessage>,
+        mut outgoing: mpsc::Sender<OutgoingLowerTransportMessage>,
         mut rx: mpsc::Receiver<IncomingPDU<lower::SegmentedPDU>>,
     ) -> Result<IncomingTransportPDU<Box<[u8]>>, ReassemblyError> {
         let mut segments =

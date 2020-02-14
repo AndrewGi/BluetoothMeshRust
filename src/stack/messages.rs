@@ -29,7 +29,7 @@ pub struct OutgoingMessage<Storage: AsRef<[u8]> + AsMut<[u8]>> {
     pub dst: Address,
     pub ttl: Option<TTL>,
 }
-pub struct OutgoingTransportMessage {
+pub struct OutgoingLowerTransportMessage {
     pub pdu: lower::PDU,
     pub src: UnicastAddress,
     pub dst: Address,
@@ -56,13 +56,14 @@ impl<Storage: AsRef<[u8]> + AsMut<[u8]>> OutgoingMessage<Storage> {
         }
     }
 }
-pub struct EncryptedOutgoingMessage<Storage: AsRef<[u8]> + AsMut<[u8]>> {
-    pub encrypted_app_payload: EncryptedAppPayload<Storage>,
+pub struct OutgoingUpperTransportMessage<Storage: AsRef<[u8]> + AsMut<[u8]>> {
+    pub upper_pdu: upper::PDU<Storage>,
     pub seq: SeqRange,
     pub seg_count: SegO,
     pub net_key_index: NetKeyIndex,
+    pub src: UnicastAddress,
     pub dst: Address,
-    pub ttl: TTL,
+    pub ttl: Option<TTL>,
 }
 pub struct EncryptedIncomingMessage<Storage: AsRef<[u8]>> {
     pub encrypted_app_payload: EncryptedAppPayload<Storage>,
