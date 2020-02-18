@@ -58,6 +58,7 @@ impl<Storage: AsRef<[u8]> + AsMut<[u8]>> OutgoingMessage<Storage> {
 }
 pub struct OutgoingUpperTransportMessage<Storage: AsRef<[u8]> + AsMut<[u8]>> {
     pub upper_pdu: upper::PDU<Storage>,
+    pub iv_index: IVIndex,
     pub seq: SeqRange,
     pub seg_count: SegO,
     pub net_key_index: NetKeyIndex,

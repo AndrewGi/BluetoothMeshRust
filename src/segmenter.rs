@@ -1,5 +1,5 @@
 use crate::crypto::MIC;
-use crate::lower::{BlockAck, SegN, SegO, SegmentHeader, SegmentedAccessPDU, SeqAuth, SeqZero};
+use crate::lower::{BlockAck, SegN, SegO, SegmentHeader, SegmentedAccessPDU, SeqAuth};
 
 use crate::crypto::materials::NetworkKeys;
 use crate::device_state::SeqRange;

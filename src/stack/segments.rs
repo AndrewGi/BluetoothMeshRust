@@ -5,13 +5,12 @@ use crate::mesh::{IVIndex, NetKeyIndex, SequenceNumber, TTL};
 use crate::reassembler;
 use crate::reassembler::LowerHeader;
 use crate::stack::messages::{
-    IncomingNetworkPDU, IncomingTransportPDU, OutgoingLowerTransportMessage, OutgoingMessage,
+    IncomingNetworkPDU, IncomingTransportPDU, OutgoingLowerTransportMessage,
     OutgoingUpperTransportMessage,
 };
-use crate::{control, lower, segmenter, timestamp};
+use crate::{control, lower, segmenter};
 use alloc::collections::BTreeMap;
 use std::collections::btree_map::Entry;
-use std::collections::VecDeque;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::{Debug, Error, Formatter};
 use std::time::Duration;
@@ -231,7 +230,7 @@ pub struct Segments<Storage> {
 pub enum SegmentError {
     ChannelClosed,
 }
-impl<Storage: AsRef<[u8]>> Segments<Storage> {
+impl<Storage: AsRef<[u8]> + AsMut<[u8]>> Segments<Storage> {
     pub async fn feed_ack(&mut self, ack: IncomingPDU<control::Ack>) -> Result<(), SegmentError> {
         self.incoming_events_tx
             .send(ack)
@@ -269,7 +268,10 @@ impl<Storage: AsRef<[u8]>> Segments<Storage> {
         ack_rx: &mut mpsc::Receiver<IncomingPDU<control::Ack>>,
     ) -> Result<(), SegmentError> {
         let segments = OutgoingSegments {
-            segments: segmenter::UpperSegmenter::new(pdu.upper_pdu, pdu.seq.start().into()),
+            segments: segmenter::UpperSegmenter::new(
+                pdu.upper_pdu,
+                SeqAuth::new(pdu.seq.start(), pdu.iv_index),
+            ),
             block_ack: BlockAck::default(),
             net_key_index: pdu.net_key_index,
             src: pdu.src,
