@@ -68,7 +68,7 @@ impl<'a, Storage: AsRef<[u8]>> SegmentIterator<'a, Storage> {
             .unwrap_or(false);
         SegmentHeader::new(
             flag,
-            self.segmenter.seq_zero,
+            self.segmenter.seq_auth.seq_zero(),
             self.segmenter.seg_o,
             SegN::new(self.seg_n),
         )
@@ -105,7 +105,7 @@ impl<'a, Storage: AsRef<[u8]>> Iterator for SegmentIterator<'a, Storage> {
                         let out = lower::SegmentedAccessPDU::new(
                             access.aid(),
                             mic.is_big().into(),
-                            self.segmenter.seq_zero,
+                            self.segmenter.seq_auth.first_seq.into(),
                             self.segmenter.seg_o,
                             seg_n_out,
                             &buf[..min(
@@ -119,7 +119,7 @@ impl<'a, Storage: AsRef<[u8]>> Iterator for SegmentIterator<'a, Storage> {
                         let out = lower::SegmentedAccessPDU::new(
                             access.aid(),
                             access.mic().is_big().into(),
-                            self.segmenter.seq_zero,
+                            self.segmenter.seq_auth.seq_zero(),
                             self.segmenter.seg_o,
                             seg_n_out,
                             segment_data,

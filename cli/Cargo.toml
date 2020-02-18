@@ -14,7 +14,9 @@ serde_json = "1.0.45"
 slog = "2.5.2"
 slog-term = "2.4.2"
 tokio = {version = "0.2.11", features=["tcp", "time", "rt-threaded"]}
-futures = "0.3.3"
+futures-core = {version = "0.3.4", default_features = false}
+futures-io = {version = "0.3.4", default_features = false}
+futures-util = {version = "0.3.4", default_features = false}
 [target.'cfg(unix)'.dependencies]
 btle = {path = "../btle", features= ["bluez_async"]}
 
