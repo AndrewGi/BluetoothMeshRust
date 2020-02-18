@@ -221,7 +221,7 @@ pub enum SegmentEvent {
     IncomingSegment(IncomingPDU<lower::SegmentedPDU>),
     IncomingAck(IncomingPDU<control::Ack>),
 }
-pub struct Segments<Storage> {
+pub struct Segments<Storage: AsRef<[u8]> + AsMut<[u8]>> {
     outgoing_pdus: mpsc::Sender<OutgoingLowerTransportMessage>,
     finished_pdus: mpsc::Sender<IncomingTransportPDU<Storage>>,
     incoming_events_tx: mpsc::Sender<IncomingPDU<control::Ack>>,
@@ -259,7 +259,8 @@ impl<Storage: AsRef<[u8]> + AsMut<[u8]>> Segments<Storage> {
     ) -> Result<(), SegmentError> {
         loop {
             let next = queue_rx.recv().await.ok_or(SegmentError::ChannelClosed)?;
-            Self::send(next, &mut outgoing_tx, &mut ack_rx)
+            // Try Sending the PDU
+            let _send_result = Self::send(next, &mut outgoing_tx, &mut ack_rx);
         }
     }
     async fn send(
@@ -295,7 +296,6 @@ impl<Storage: AsRef<[u8]> + AsMut<[u8]>> Segments<Storage> {
                 Err(_) => continue, // Ack doesn't match
             };
         }
-        Ok(())
     }
 }
 

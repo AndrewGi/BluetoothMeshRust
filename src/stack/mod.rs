@@ -299,12 +299,14 @@ impl StackInternals {
         let ttl = msg.ttl.unwrap_or(self.default_ttl());
         let encrypted = msg.app_payload.encrypt(&sm, msg.mic_size);
         Ok(OutgoingUpperTransportMessage {
-            encrypted_app_payload: encrypted,
+            upper_pdu: upper::PDU::Access(encrypted),
             seq,
             seg_count: SegO::new(seg_count),
             net_key_index,
+            src,
             dst,
-            ttl,
+            ttl: Some(ttl),
+            iv_index,
         })
     }
     /// Check if the given `unicast_address` is owned by this node. Ex: If this node has 5 elements
