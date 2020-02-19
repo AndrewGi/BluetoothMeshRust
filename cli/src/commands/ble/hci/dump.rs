@@ -1,5 +1,6 @@
 use crate::helper;
 use crate::CLIError;
+use btle::hci::event::StatusReturn;
 use btle::hci::stream::{HCIReader, HCIWriter};
 
 pub fn sub_command() -> clap::App<'static, 'static> {
@@ -83,21 +84,21 @@ pub fn dump_bluez(adapter_id: u16, parent_logger: &slog::Logger) -> Result<(), C
     runtime.block_on(async move {
         let mut async_socket = socket::AsyncHCISocket::try_from(socket)
             .map_err(|e| map_hci_socket_err(socket::HCISocketError::IO(e)))?;
-        let mut stream = btle::hci::stream::ByteStream::new(async_socket);
+        let stream = btle::hci::stream::ByteStream::new(async_socket);
+        let stream = btle::hci::stream::HCIStream::new(stream);
+        futures_util::pin_mut!(stream);
         info!(logger, "send_command");
-        stream
-            .send_command(SetScanEnable {
+        stream.as_mut()
+            .send_command::<SetScanEnable, StatusReturn>(SetScanEnable {
                 is_enabled: false,
                 filter_duplicates: false,
             })
-            .expect("correctly formatted command")
             .await
             .expect("io_error");
         info!(logger, "sent_enable");
         loop {
-            let next = stream.read_event().await;
+            let next = stream.as_mut().read_event().await;
             println!("got something");
         }
-        Ok(())
     })
 }
