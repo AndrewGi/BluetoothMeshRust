@@ -126,7 +126,7 @@ impl BlockAck {
     pub const fn new() -> Self {
         Self(0)
     }
-    pub const fn new_all_acked(seg_o: SegO) -> Self {
+    pub fn new_all_acked(seg_o: SegO) -> Self {
         Self((1 << u32::from(u8::from(seg_o) + 1u8)) - 1)
     }
     /// Sets the `bit` bit to 1. Does nothing if bit > 32
@@ -150,7 +150,7 @@ impl BlockAck {
     /// Returns if the block ack (up to `seg_o` bits) is all 1s. False if otherwise
     #[must_use]
     pub fn all_acked(self, seg_o: SegO) -> bool {
-        self == Self::new_all_acked(seg_O)
+        self == Self::new_all_acked(seg_o)
     }
     /// Returns the max length of BlockAck in bits (32).
     pub const fn max_len() -> usize {
@@ -164,7 +164,7 @@ impl BlockAck {
     }
     pub fn seg_left(mut self, seg_o: SegO) -> u8 {
         // Mask Upper bits so we don't underflow
-        self = BlockAck(self.0 & Self::new_all_acked(seg_O));
+        self = BlockAck(self.0 & Self::new_all_acked(seg_o).0);
         u8::from(seg_o) - self.count_ones()
     }
     pub fn valid_for(self, seg_o: SegO) -> bool {
@@ -174,7 +174,7 @@ impl BlockAck {
     /// bits that were 1 that are now 0, it is invalid (`false`).
     pub fn is_new(self, maybe_new: Self) -> bool {
         // maybe_new can only have more new bits set than self.
-        maybe_new > self && ((maybe_new & self) == maybe_new)
+        maybe_new > self && ((maybe_new.0 & self.0) == maybe_new.0)
     }
     pub const fn cancel() -> Self {
         BlockAck::new()

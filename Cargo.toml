@@ -23,14 +23,15 @@ readme = "README.md"
 
 [features]
 default = ["full_stack"]
-full_stack = ["std", "tokio", "futures-core"]
+full_stack = ["std", "tokio", "futures-core", "futures-util"]
 serde-1 = ["serde"]
 std = []
 
 [dependencies]
-btle = {path = "btle", default_features = false}
+btle = {path = "btle", default-features = false}
 tokio = {version = "0.2.11", optional=true, default-features = false, features=["sync", "rt-core", "time"]}
 futures-core = {version = "0.3.4", optional=true}
+futures-util = {version = "0.3.4", optional=true}
 rand = "0.7"
 aes = "0.3.2"
 aead = "0.2.0"

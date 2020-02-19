@@ -81,10 +81,10 @@ pub fn dump_bluez(adapter_id: u16, parent_logger: &slog::Logger) -> Result<(), C
         .expect("can't make async runtime");
     info!(logger, "starting async loop");
     runtime.block_on(async move {
-        use futures::StreamExt;
         let mut async_socket = socket::AsyncHCISocket::try_from(socket)
             .map_err(|e| map_hci_socket_err(socket::HCISocketError::IO(e)))?;
-        let mut stream = btle::hci::stream::ByteStream::new(&mut async_socket);
+        let mut stream = btle::hci::stream::ByteStream::new(async_socket);
+        info!(logger, "send_command");
         stream
             .send_command(SetScanEnable {
                 is_enabled: false,

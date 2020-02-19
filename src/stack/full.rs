@@ -5,7 +5,7 @@ use crate::relay::RelayPDU;
 use crate::stack::messages::{
     EncryptedIncomingMessage, IncomingControlMessage, IncomingNetworkPDU, IncomingTransportPDU,
 };
-use crate::stack::{segments, RecvError, SendError, Stack, StackInternals};
+use crate::stack::{incoming, outgoing, segments, RecvError, SendError, Stack, StackInternals};
 use crate::{lower, replay};
 
 use crate::control;
@@ -13,16 +13,17 @@ use crate::stack::segments::Segments;
 use crate::upper::PDU;
 use alloc::boxed::Box;
 use core::convert::TryFrom;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex, RwLock};
 
 pub struct FullStack<'a> {
     input_interfaces: Mutex<InputInterfaces<InputInterfaceSink>>,
     output_interfaces: Mutex<OutputInterfaces<'a>>,
-    segments: Arc<Mutex<segments::Segments>>,
     replay_cache: Arc<Mutex<replay::Cache>>,
     internals: Arc<RwLock<StackInternals>>,
+    incoming: incoming::Incoming,
+    outgoing: outgoing::Outgoing,
 }
 #[derive(Clone)]
 pub struct InputInterfaceSink(mpsc::Sender<IncomingEncryptedNetworkPDU>);
@@ -91,5 +92,8 @@ impl FullStack<'_> {
 
     pub async fn internals_with<R>(&self, func: impl FnOnce(&StackInternals) -> R) -> R {
         func(self.internals.read().await.deref())
+    }
+    pub async fn internals_with_mut<R>(&self, func: impl FnOnce(&mut StackInternals) -> R) -> R {
+        func(self.internals.write().await.deref_mut())
     }
 }
