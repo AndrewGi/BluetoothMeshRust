@@ -162,18 +162,12 @@ impl NetKeyMap {
     pub fn matching_nid(
         &self,
         nid_to_match: NID,
-    ) -> impl Iterator<Item = (NetKeyIndex, &'_ NetworkSecurityMaterials)> {
-        self.map.iter().filter_map(move |(&index, phase)| {
-            let keys = phase.rx_keys();
-            if keys.0.network_keys.nid == nid_to_match {
-                Some((index, keys.0))
-            } else {
-                match keys.1 {
-                    Some(sm) if sm.network_keys.nid == nid_to_match => Some((index, sm)),
-                    _ => None,
-                }
-            }
-        })
+    ) -> NIDFilterMap<btree_map::Iter<'_, NetKeyIndex, KeyPhase<NetworkSecurityMaterials>>> {
+        NIDFilterMap {
+            iter: self.map.iter(),
+            nid: nid_to_match,
+            temp: None,
+        }
     }
     pub fn get_keys(&self, index: NetKeyIndex) -> Option<&KeyPhase<NetworkSecurityMaterials>> {
         self.map.get(&index)
@@ -196,6 +190,41 @@ impl NetKeyMap {
         new_key: &NetKey,
     ) -> Option<KeyPhase<NetworkSecurityMaterials>> {
         self.map.insert(index, KeyPhase::Normal(new_key.into()))
+    }
+}
+pub struct NIDFilterMap<
+    'a,
+    I: Iterator<Item = (&'a NetKeyIndex, &'a KeyPhase<NetworkSecurityMaterials>)>,
+> {
+    iter: I,
+    nid: NID,
+    temp: Option<(NetKeyIndex, &'a NetworkSecurityMaterials)>,
+}
+impl<'a, I: Iterator<Item = (&'a NetKeyIndex, &'a KeyPhase<NetworkSecurityMaterials>)>> Iterator
+    for NIDFilterMap<'a, I>
+{
+    type Item = (NetKeyIndex, &'a NetworkSecurityMaterials);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(v) = self.temp.take() {
+            return Some(v);
+        }
+        let (index, phase) = self.iter.next()?;
+        match phase.rx_keys() {
+            (first, Some(second))
+                if first.network_keys.nid == self.nid && second.network_keys.nid == self.nid =>
+            {
+                self.temp = Some((*index, second));
+                Some((*index, first))
+            }
+            (materials, None) if materials.network_keys.nid == self.nid => {
+                Some((*index, materials))
+            }
+            (_, Some(materials)) if materials.network_keys.nid == self.nid => {
+                Some((*index, materials))
+            }
+            _ => self.next(),
+        }
     }
 }
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]

@@ -8,7 +8,7 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bluetooth_mesh = {path = "../", features=["full_stack", "serde"]}
+bluetooth_mesh = {path = "../", features=["full_stack", "serde-1"]}
 clap = "2.33.0"
 serde_json = "1.0.45"
 slog = "2.5.2"

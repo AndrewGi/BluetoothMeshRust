@@ -127,14 +127,20 @@ impl From<&UUID> for VirtualAddress {
     }
 }
 impl UnicastAddress {
+    /// Creates a new `UnicastAddress`.
+    /// # Panics
+    /// Panics if the `u16` is not a valid `UnicastAddress`. (Panics if `u16==0 || u16&UNICAST_BIT!=0`)
     #[must_use]
     pub fn new(v: u16) -> UnicastAddress {
-        assert!(v & UNICAST_BIT == 0, "non unicast address");
+        assert!((v & UNICAST_BIT) != 0 || v == 0, "non unicast address");
         UnicastAddress(v)
     }
     /// Creates a Unicast address by masking any u16 into it.
+    /// # Panics
+    /// Panics if the `u16` masked equals `0`.
     #[must_use]
-    pub const fn from_mask_u16(v: u16) -> UnicastAddress {
+    pub fn from_mask_u16(v: u16) -> UnicastAddress {
+        assert_ne!(v & UNICAST_MASK, 0, "unassigned unicast address");
         UnicastAddress(v & UNICAST_MASK)
     }
 }
