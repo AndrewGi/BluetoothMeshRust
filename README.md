@@ -17,8 +17,8 @@ Partially `serde` support but still needs much more work.
 
 The only heap allocations made durning processing a message is allocating memory for the message at the access layer. Most Mesh PDUs are <31 bytes (to fit in a single BLE Advertisement) so the Network and Lower Transport Layer stores its data staticly on the stack.
 
-## 8 Layer system
-![The 8 Layer of the Bluetooth Mesh Stack](/mesh_layout.PNG)
+## How the Stack works
+![The flowchart of the full mesh stack](/mesh_stack.png)
 
 ### Big Endian
 - Network
