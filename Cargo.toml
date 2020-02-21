@@ -1,18 +1,13 @@
 [package]
 name = "bluetooth_mesh"
 description = """
-!! VERY WIP AND NOT STABLE !!
+Cross-platform, full Bluetooth Mesh stack implemented in Rust. Following the Bluetooth Mesh Spec Core v1.0 by SIG.
 
-Offers Bluetooth Mesh Primitives (PDUs, Encryption/Decryption, Messages, etc). A stack in still in process of being built
-but one should be able to build their own stack based on the provided primitives.
+Designed to work with any almost any BLE radio (uses https://github.com/AndrewGi/btle/ for
+platform dependent Bluetooth drivers). While a stack is provided by the library, all the primatives and objects needed
+to customize and create your own stack are provided.
 
-Bluetooth Mesh stack implemented in Rust. In progress port/rewrite of Ero Bluetooth Mesh. Following the Bluetooth Mesh Spec Core v1.0. Designed to work with any BLE radio but currently targeting linux for testing. The complete stack still needs more glue between the layers but all the parts should be fully functional. If any mistake are found, please contact me!
-
-#![no_std] excepts for dependence on std::Instant for time but a different source can be provided. While not provided, on ARM; a crystal oscilator can be the time source.
-
-Partially serde support but still needs much more work.
-
-The only heap allocations made durning processing a message is allocating memory for the message at the access layer. Most Mesh PDUs are <31 bytes (to fit in a single BLE Advertisement) so the Network and Lower Transport Layer stores its data staticly on the stack.
+See https://github.com/AndrewGi/BluetoothMeshRust for more.
 """
 license = "GPL-3.0-only"
 repository = "https://github.com/AndrewGi/BluetoothMeshRust"
