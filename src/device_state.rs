@@ -54,83 +54,13 @@ pub struct DeviceState {
 
     security_materials: SecurityMaterials,
 }
-pub struct SeqRange(pub core::ops::Range<u32>);
-impl SeqRange {
-    pub fn start(&self) -> SequenceNumber {
-        SequenceNumber(U24::new(self.0.start))
-    }
-    pub fn seqs_lefts(&self) -> u32 {
-        (self.0.end - self.0.start)
-    }
-    pub fn is_empty(&self) -> bool {
-        self.0.start >= self.0.end
-    }
-}
-impl From<SequenceNumber> for SeqRange {
-    fn from(seq: SequenceNumber) -> Self {
-        Self(seq.0.value()..seq.0.value() + 1)
-    }
-}
-impl Iterator for SeqRange {
-    type Item = SequenceNumber;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.is_empty() {
-            None
-        } else {
-            let out = self.0.start;
-            self.0.start = out + 1;
-            Some(SequenceNumber(U24::new(out)))
-        }
-    }
-}
-/// Atomic SeqCounter so no PDUs get the same SeqNumber. Sequence Numbers are a finite resource
-/// (only 24-bits) that only get reset every IVIndex update. Also segmented PDUs require sequential
-#[derive(Default, Debug)]
-#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
-pub struct SeqCounter(core::sync::atomic::AtomicU32);
-impl SeqCounter {
-    pub fn new(start_seq: SequenceNumber) -> Self {
-        Self(core::sync::atomic::AtomicU32::new(start_seq.0.value()))
-    }
-    /// Allocates a or some SequenceNumbers and increments the internal counter by amount. Allocating
-    /// `amount` Sequence Numbers is useful for Segmented Transport PDUs.
-    /// Returns `None` if `SequenceNumber` is at its max.
-    pub fn inc_seq(&self, amount: u32) -> Option<SeqRange> {
-        let next = self
-            .0
-            .fetch_add(amount, core::sync::atomic::Ordering::SeqCst);
-        if next >= U24::max_value().value() {
-            // Overflow of Seq Number
-            self.0.store(
-                U24::max_value().value(),
-                core::sync::atomic::Ordering::SeqCst,
-            );
-            None
-        } else {
-            Some(SeqRange(next..next + amount))
-        }
-    }
-    pub fn set_seq(&mut self, new_seq: SequenceNumber) {
-        *self.0.get_mut() = new_seq.0.value()
-    }
-    pub fn check(&self) -> SequenceNumber {
-        SequenceNumber(U24::new(self.0.load(Ordering::SeqCst)))
-    }
-}
-impl Clone for SeqCounter {
-    fn clone(&self) -> Self {
-        SeqCounter(core::sync::atomic::AtomicU32::new(
-            self.0.load(Ordering::SeqCst),
-        ))
-    }
-}
 impl DeviceState {
     /// Generates a new `DeviceState`. `SecurityMaterials` will be new random keys.
     /// # Panics
     /// Panics if `element_count == 0 || (primary_address + eleent_count).is_not_unicast()`
     pub fn new(primary_address: UnicastAddress, element_count: ElementCount) -> Self {
-        assert!(element_count.0 != 0, "zero element_count given");
+        assert_ne!(element_count.0, 0, "zero element_count given");
         assert!(
             UnicastAddress::try_from(u16::from(primary_address) + u16::from(element_count.0))
                 .is_ok(),
@@ -235,5 +165,131 @@ impl DeviceState {
     }
     pub fn relay_state(&self) -> RelayState {
         self.config_states.relay_state
+    }
+}
+
+#[derive(Default)]
+pub struct DeviceStateBuilder {
+    pub element_address: Option<UnicastAddress>,
+    pub element_count: Option<ElementCount>,
+    pub seq_counters: Option<Vec<SeqCounter>>,
+    pub models: Option<Models>,
+    pub config_states: Option<ConfigStates>,
+    pub security_materials: Option<SecurityMaterials>,
+}
+impl DeviceStateBuilder {
+    pub fn empty() -> Self {
+        Self::default()
+    }
+    pub fn new_provisioner() -> Self {
+        Self {
+            element_address: Some(UnicastAddress::new(1)),
+            element_count: Some(ElementCount(1)),
+            seq_counters: Some(vec![SeqCounter::default()]),
+            models: None,
+            config_states: None,
+            security_materials: None,
+        }
+    }
+    pub fn element_count(mut self, element_count: ElementCount) -> Self {
+        self.element_count = Some(element_count);
+        self
+    }
+    pub fn element_address(mut self, element_address: UnicastAddress) -> Self {
+        self.element_address = Some(element_address);
+        self
+    }
+    pub fn config_states(mut self, config_states: ConfigStates) -> Self {
+        self.config_states = Some(config_states);
+        self
+    }
+    pub fn finish(self) -> Option<DeviceState> {
+        Some(DeviceState {
+            element_address: self.element_address?,
+            element_count: self.element_count?,
+            seq_counters: self.seq_counters?,
+            models: self.models?,
+            config_states: self.config_states?,
+            security_materials: self.security_materials?,
+        })
+    }
+}
+//#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
+pub struct SeqRange(pub core::ops::Range<u32>);
+impl SeqRange {
+    pub fn start(&self) -> SequenceNumber {
+        SequenceNumber(U24::new(self.0.start))
+    }
+    pub fn end(&self) -> SequenceNumber {
+        SequenceNumber(U24::new(self.0.end))
+    }
+    pub fn seqs_lefts(&self) -> u32 {
+        (self.0.end - self.0.start)
+    }
+    pub fn is_empty(&self) -> bool {
+        self.0.start >= self.0.end
+    }
+}
+impl From<SequenceNumber> for SeqRange {
+    fn from(seq: SequenceNumber) -> Self {
+        Self(seq.0.value()..seq.0.value() + 1)
+    }
+}
+impl Iterator for SeqRange {
+    type Item = SequenceNumber;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.is_empty() {
+            None
+        } else {
+            let out = self.0.start;
+            self.0.start = out + 1;
+            Some(SequenceNumber(U24::new(out)))
+        }
+    }
+}
+/// Atomic SeqCounter so no PDUs get the same SeqNumber. Sequence Numbers are a finite resource
+/// (only 24-bits) that only get reset every IVIndex update. Also segmented PDUs require sequential
+/// Sequence Number.
+#[derive(Default, Debug)]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
+pub struct SeqCounter(core::sync::atomic::AtomicU32);
+impl SeqCounter {
+    pub fn new(start_seq: SequenceNumber) -> Self {
+        Self(core::sync::atomic::AtomicU32::new(start_seq.0.value()))
+    }
+    /// Allocates a or some SequenceNumbers and increments the internal counter by amount. Allocating
+    /// `amount` Sequence Numbers is useful for Segmented Transport PDUs.
+    /// Returns `None` if `SequenceNumber` is at its max or will overflow.
+    pub fn inc_seq(&self, amount: u32) -> Option<SeqRange> {
+        let next = self
+            .0
+            .fetch_add(amount, core::sync::atomic::Ordering::SeqCst);
+        if next >= U24::max_value().value() {
+            // Overflow of Seq Number
+            self.0.store(
+                U24::max_value().value(),
+                core::sync::atomic::Ordering::SeqCst,
+            );
+            None
+        } else {
+            Some(SeqRange(next..next + amount))
+        }
+    }
+    /// Set the atomic sequence number. This should only really be called when initally setuping up
+    /// the `SeqCounter` or reseting it. Setting `SeqCounter` to an older value may cause PDUs to be
+    /// dropped by message recipients.
+    pub fn set_seq(&mut self, new_seq: SequenceNumber) {
+        *self.0.get_mut() = new_seq.0.value()
+    }
+    pub fn check(&self) -> SequenceNumber {
+        SequenceNumber(U24::new(self.0.load(Ordering::SeqCst)))
+    }
+}
+impl Clone for SeqCounter {
+    fn clone(&self) -> Self {
+        SeqCounter(core::sync::atomic::AtomicU32::new(
+            self.0.load(Ordering::SeqCst),
+        ))
     }
 }
