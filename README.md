@@ -13,7 +13,7 @@ This library is designed for `#![no_std]` in mind. However, because of the compl
 The only heap allocations made during processing a message is allocating memory for the message at the access layer. Most Mesh PDUs are <31 bytes (to fit in a single BLE Advertisement) so the Network and Lower Transport Layer stores its data statically on the stack. Upper PDUs and above allow for allocation elsewhere than the stack (Upper Transport PDUs can be up to 380 bytes!) but a custom allocator/storage for the PDU can be genericly provided.
 
 ## Examples
-See [Mesh CLI](/cli) for an application example.  
+See [Mesh CLI](/cli/) for an application example.  
 
 ## How the Stack works
-![The flowchart of the full mesh stack](/mesh_stack.png)
+![The flowchart of the full mesh stack](/docs/mesh_stack.png)
