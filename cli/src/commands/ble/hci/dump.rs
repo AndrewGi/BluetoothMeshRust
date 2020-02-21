@@ -1,6 +1,7 @@
 use crate::helper;
 use crate::CLIError;
-use btle::hci::stream::{HCIReader, HCIWriter};
+use btle::hci::event::StatusReturn;
+use btle::hci::stream::HCIReader;
 
 pub fn sub_command() -> clap::App<'static, 'static> {
     clap::SubCommand::with_name("dump")
@@ -81,21 +82,23 @@ pub fn dump_bluez(adapter_id: u16, parent_logger: &slog::Logger) -> Result<(), C
         .expect("can't make async runtime");
     info!(logger, "starting async loop");
     runtime.block_on(async move {
-        let mut async_socket = socket::AsyncHCISocket::try_from(socket)
+        let async_socket = socket::AsyncHCISocket::try_from(socket)
             .map_err(|e| map_hci_socket_err(socket::HCISocketError::IO(e)))?;
-        let mut stream = btle::hci::stream::ByteStream::new(async_socket);
+        let stream = btle::hci::stream::ByteStream::new(async_socket);
+        let stream = btle::hci::stream::Stream::new(stream);
+        futures_util::pin_mut!(stream);
         info!(logger, "send_command");
         stream
-            .send_command(SetScanEnable {
+            .as_mut()
+            .send_command::<SetScanEnable, StatusReturn>(SetScanEnable {
                 is_enabled: false,
                 filter_duplicates: false,
             })
-            .expect("correctly formatted command")
             .await
             .expect("io_error");
         info!(logger, "sent_enable");
         loop {
-            let next = stream.read_event().await;
+            let next = stream.as_mut().read_event().await;
             println!("got something");
         }
         Ok(())
