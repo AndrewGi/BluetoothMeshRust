@@ -221,16 +221,15 @@ pub enum SegmentEvent {
     IncomingSegment(IncomingPDU<lower::SegmentedPDU>),
     IncomingAck(IncomingPDU<control::Ack>),
 }
-pub struct Segments<Storage: AsRef<[u8]> + AsMut<[u8]>> {
-    outgoing_pdus: mpsc::Sender<OutgoingLowerTransportMessage>,
-    finished_pdus: mpsc::Sender<IncomingTransportPDU<Storage>>,
+pub struct Segments<Storage: AsRef<[u8]> + AsMut<[u8]> + Send + 'static> {
+    send_task: tokio::task::JoinHandle<Result<(), SegmentError>>,
     incoming_events_tx: mpsc::Sender<IncomingPDU<control::Ack>>,
     outgoing_queue: mpsc::Sender<OutgoingUpperTransportMessage<Storage>>,
 }
 pub enum SegmentError {
     ChannelClosed,
 }
-impl<Storage: AsRef<[u8]> + AsMut<[u8]>> Segments<Storage> {
+impl<Storage: AsRef<[u8]> + AsMut<[u8]> + Send + 'static> Segments<Storage> {
     pub async fn feed_ack(&mut self, ack: IncomingPDU<control::Ack>) -> Result<(), SegmentError> {
         self.incoming_events_tx
             .send(ack)
@@ -241,13 +240,11 @@ impl<Storage: AsRef<[u8]> + AsMut<[u8]>> Segments<Storage> {
     pub fn new(
         channel_capacity: usize,
         outgoing_pdus: mpsc::Sender<OutgoingLowerTransportMessage>,
-        finished_pdus: mpsc::Sender<IncomingTransportPDU<Storage>>,
     ) -> Self {
         let (ack_tx, ack_rx) = mpsc::channel(channel_capacity);
         let (queue_tx, queue_rx) = mpsc::channel(channel_capacity);
         Self {
-            outgoing_pdus,
-            finished_pdus,
+            send_task: tokio::task::spawn(Self::send_loop(ack_rx, queue_rx, outgoing_pdus)),
             incoming_events_tx: ack_tx,
             outgoing_queue: queue_tx,
         }
@@ -291,7 +288,7 @@ impl<Storage: AsRef<[u8]> + AsMut<[u8]>> Segments<Storage> {
         loop {
             let next_ack = ack_rx.recv().await.ok_or(SegmentError::ChannelClosed)?;
             // todo is cancel ack?
-            let is_new_ack = match segments.is_new_ack(next_ack) {
+            let _is_new_ack = match segments.is_new_ack(next_ack) {
                 Ok(is_new) => is_new,
                 Err(_) => continue, // Ack doesn't match
             };

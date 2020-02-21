@@ -25,7 +25,7 @@ readme = "README.md"
 default = ["full_stack"]
 full_stack = ["std", "tokio", "futures-core", "futures-util"]
 serde-1 = ["serde"]
-std = []
+std = ["serde/std"]
 
 [dependencies]
 btle = {path = "btle", default-features = false}
