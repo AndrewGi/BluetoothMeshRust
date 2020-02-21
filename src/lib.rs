@@ -27,7 +27,6 @@ extern crate btle;
 pub use btle::bytes;
 pub mod random;
 pub mod scheduler;
-pub mod serializable;
 pub mod timestamp;
 pub mod uuid;
 
