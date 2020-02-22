@@ -8,16 +8,17 @@ use crate::stack::messages::{
 use crate::stack::segments::SegmentEvent;
 use crate::stack::{segments, RecvError, StackInternals};
 use crate::{lower, replay, upper};
-use futures::SinkExt;
 use std::convert::TryFrom;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio::task::JoinHandle;
 
+/// Asynchronous incoming message handler stack. Input Encrypted Network PDUs and it Outputs Acks,
+/// Control and Encrypted Access PDUs. This will only mutate a `replay::Cache` state but it does
+/// not mutate `StackInternals`.
 pub struct Incoming {
     net_handler: JoinHandle<Result<(), RecvError>>,
     encrypted_net_handler: JoinHandle<Result<(), RecvError>>,
-    upper_transport_handler: JoinHandle<Result<(), RecvError>>,
     encrypted_access_handler: JoinHandle<Result<(), RecvError>>,
 }
 impl Incoming {
@@ -33,7 +34,6 @@ impl Incoming {
     ) -> Self {
         let (tx_incoming_net, rx_incoming_net) = mpsc::channel(channel_size);
         let (tx_encrypted_access, rx_encrypted_access) = mpsc::channel(channel_size);
-        let (tx_incoming_upper, rx_incoming_upper) = mpsc::channel(chanel_size);
         let reassembler = Arc::new(Mutex::new(segments::Reassembler::new(outgoing_transport)));
         Self {
             encrypted_net_handler: tokio::task::spawn(Self::handle_encrypted_net_pdu_loop(
@@ -49,11 +49,6 @@ impl Incoming {
                 tx_control.clone(),
                 tx_encrypted_access.clone(),
                 rx_incoming_net,
-            )),
-            upper_transport_handler: tokio::task::spawn(Self::handle_upper_transport_loop(
-                rx_incoming_upper,
-                tx_encrypted_access,
-                tx_control,
             )),
             encrypted_access_handler: tokio::task::spawn(Self::handle_encrypted_access_loop(
                 internals,
@@ -156,48 +151,6 @@ impl Incoming {
             // The rest of Segmented PDUs which are SegmentEvents. If they made it this far
             // they are badly formatted Segmented PDUs
             _ => Err(RecvError::MalformedNetworkPDU),
-        }
-    }
-    async fn handle_upper_transport_loop<Storage: AsRef<[u8]> + AsMut<[u8]> + Clone>(
-        mut incoming: mpsc::Receiver<IncomingTransportPDU<Storage>>,
-        mut tx_access: mpsc::Sender<EncryptedIncomingMessage<Storage>>,
-        mut tx_control: mpsc::Sender<IncomingControlMessage>,
-    ) -> Result<(), RecvError> {
-        loop {
-            let pdu = incoming.recv().await.ok_or(RecvError::ChannelClosed)?;
-            match pdu.upper_pdu {
-                upper::PDU::Control(control_pdu) => {
-                    if let Ok(control_pdu) = control::ControlPDU::try_from(&control_pdu) {
-                        tx_control
-                            .send(IncomingControlMessage {
-                                control_pdu,
-                                src: pdu.src,
-                                rssi: pdu.rssi,
-                                ttl: pdu.ttl,
-                            })
-                            .await
-                            .ok()
-                            .ok_or(RecvError::ChannelClosed)?;
-                    }
-                }
-                upper::PDU::Access(access_pdu) => {
-                    tx_access
-                        .send(EncryptedIncomingMessage {
-                            encrypted_app_payload: access_pdu,
-                            seq: pdu.seq,
-                            seg_count: pdu.seg_count,
-                            iv_index: pdu.iv_index,
-                            net_key_index: pdu.net_key_index,
-                            dst: pdu.dst,
-                            src: pdu.src,
-                            ttl: pdu.ttl,
-                            rssi: pdu.rssi,
-                        })
-                        .await
-                        .ok()
-                        .ok_or(RecvError::ChannelClosed)?;
-                }
-            }
         }
     }
     pub async fn handle_encrypted_net_pdu_loop(

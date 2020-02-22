@@ -5,10 +5,11 @@ use crate::btle::RSSI;
 use crate::crypto::aes::MicSize;
 use crate::crypto::nonce::{AppNonce, AppNonceParts, DeviceNonce, DeviceNonceParts};
 use crate::device_state::SeqRange;
-use crate::lower::SegO;
+use crate::lower::{SegO, SeqAuth};
 use crate::mesh::{AppKeyIndex, ElementIndex, IVIndex, NetKeyIndex, SequenceNumber, TTL};
+use crate::stack::segments;
 use crate::upper::{AppPayload, EncryptedAppPayload};
-use crate::{control, lower, net, upper};
+use crate::{control, lower, net, segmenter, upper};
 
 pub enum MessageKeys {
     Device(NetKeyIndex),
@@ -19,7 +20,7 @@ pub struct OutgoingDestination {
     pub ttl: Option<TTL>,
     pub app_key_index: AppKeyIndex,
 }
-pub struct OutgoingMessage<Storage: AsRef<[u8]> + AsMut<[u8]>> {
+pub struct OutgoingMessage<Storage: AsRef<[u8]>> {
     pub app_payload: AppPayload<Storage>,
     pub mic_size: MicSize,
     pub force_segment: bool,
@@ -38,7 +39,7 @@ pub struct OutgoingLowerTransportMessage {
     pub iv_index: IVIndex,
     pub net_key_index: NetKeyIndex,
 }
-impl<Storage: AsRef<[u8]> + AsMut<[u8]>> OutgoingMessage<Storage> {
+impl<Storage: AsRef<[u8]>> OutgoingMessage<Storage> {
     pub fn data_with_mic_len(&self) -> usize {
         self.app_payload.0.as_ref().len() + self.mic_size.byte_size()
     }
@@ -56,7 +57,7 @@ impl<Storage: AsRef<[u8]> + AsMut<[u8]>> OutgoingMessage<Storage> {
         }
     }
 }
-pub struct OutgoingUpperTransportMessage<Storage: AsRef<[u8]> + AsMut<[u8]>> {
+pub struct OutgoingUpperTransportMessage<Storage: AsRef<[u8]>> {
     pub upper_pdu: upper::PDU<Storage>,
     pub iv_index: IVIndex,
     pub seq: SeqRange,
@@ -65,6 +66,30 @@ pub struct OutgoingUpperTransportMessage<Storage: AsRef<[u8]> + AsMut<[u8]>> {
     pub src: UnicastAddress,
     pub dst: Address,
     pub ttl: Option<TTL>,
+}
+impl<Storage: AsRef<[u8]>> OutgoingUpperTransportMessage<Storage> {
+    pub fn should_segment(&self) -> bool {
+        self.upper_pdu.should_segment()
+    }
+    pub fn into_outgoing_segments(self) -> segments::OutgoingSegments<Storage> {
+        debug_assert_eq!(
+            self.seq.seqs_lefts(),
+            u32::from(u8::from(self.seg_count)) + 1_u32,
+            "wrong about of sequence numbers"
+        );
+        segments::OutgoingSegments {
+            segments: segmenter::UpperSegmenter {
+                upper_pdu: self.upper_pdu,
+                seg_o: self.seg_count,
+                seq_auth: SeqAuth::new(self.seq.start(), self.iv_index),
+            },
+            block_ack: Default::default(),
+            net_key_index: self.net_key_index,
+            src: self.src,
+            dst: self.dst,
+            ttl: self.ttl,
+        }
+    }
 }
 pub struct EncryptedIncomingMessage<Storage: AsRef<[u8]>> {
     pub encrypted_app_payload: EncryptedAppPayload<Storage>,

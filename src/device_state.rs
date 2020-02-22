@@ -12,6 +12,7 @@ use crate::mesh::{
 };
 use crate::random::Randomizable;
 
+use crate::lower::SegO;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use core::convert::TryFrom;
@@ -40,7 +41,7 @@ pub struct ConfigStates {
 
 /// Contains all the persistant Bluetooth Mesh device data. This struct needs to be serialized/saved
 /// somehow when the program shuts down or you will lose all your crypto keys. Normal operations
-/// should use just immutable functions (include increases Seqs) but config clients and others will
+/// should use just immutable functions (including increasing SequenceNumbers) but config clients and others will
 /// use mutable references to configure the node.
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct DeviceState {
@@ -58,7 +59,7 @@ pub struct DeviceState {
 impl DeviceState {
     /// Generates a new `DeviceState`. `SecurityMaterials` will be new random keys.
     /// # Panics
-    /// Panics if `element_count == 0 || (primary_address + eleent_count).is_not_unicast()`
+    /// Panics if `element_count == 0 || (primary_address + element_count).is_not_unicast()`
     pub fn new(primary_address: UnicastAddress, element_count: ElementCount) -> Self {
         assert_ne!(element_count.0, 0, "zero element_count given");
         assert!(
@@ -84,6 +85,7 @@ impl DeviceState {
             },
         }
     }
+    /// Returns the assigned unicast address range.
     pub fn unicast_range(&self) -> Range<UnicastAddress> {
         Range {
             start: self.element_address,
@@ -92,9 +94,11 @@ impl DeviceState {
             ),
         }
     }
+    /// Returns the numbers of elements.
     pub fn element_count(&self) -> ElementCount {
         self.element_count
     }
+    /// Returns the unicast address of the element at the given `element_index` or `None` if `element_index>=element_count`.
     pub fn element_address(&self, element_index: ElementIndex) -> Option<UnicastAddress> {
         if element_index.0 >= self.element_count.0 {
             None
@@ -127,12 +131,19 @@ impl DeviceState {
     pub fn iv_update_flag_mut(&mut self) -> &mut IVUpdateFlag {
         &mut self.security_materials.iv_update_flag
     }
+    /// The security materials that contains all the required crypto materials for encrypting and
+    /// decrypting messages/PDU. Normal operation only requires an immutable reference.
     pub fn security_materials(&self) -> &SecurityMaterials {
         &self.security_materials
     }
+    /// The security materials that contains all the required crypto materials for encrypting and
+    /// decrypting messages/PDU. A mutable reference is used by the Config Client or other
+    /// configuration utilities.
     pub fn security_materials_mut(&mut self) -> &mut SecurityMaterials {
         &mut self.security_materials
     }
+    /// Each element has their own `SeqCounter` which is an atomic monotonically increasing
+    /// `SequenceNumber` counter.
     /// # Panics
     /// Panics if `element_index >= element_count`.
     pub fn seq_counter(&self, element_index: ElementIndex) -> &SeqCounter {
@@ -154,17 +165,8 @@ impl DeviceState {
     pub fn config_states_mut(&mut self) -> &mut ConfigStates {
         &mut self.config_states
     }
-    pub fn device_key(&self) -> &DevKey {
-        &self.security_materials.dev_key
-    }
-    pub fn device_key_mut(&mut self) -> &mut DevKey {
-        &mut self.security_materials.dev_key
-    }
     pub fn default_ttl(&self) -> TTL {
         TTL::new(self.config_states.default_ttl.into())
-    }
-    pub fn relay_state(&self) -> RelayState {
-        self.config_states.relay_state
     }
 }
 
@@ -217,6 +219,21 @@ impl DeviceStateBuilder {
 //#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub struct SeqRange(pub core::ops::Range<u32>);
 impl SeqRange {
+    pub fn new(start: SequenceNumber, end: SequenceNumber) -> Self {
+        assert!(start <= end);
+        Self(core::ops::Range {
+            start: start.0.into(),
+            end: end.0.into(),
+        })
+    }
+    pub fn new_segs(start: SequenceNumber, seg_o: SegO) -> Self {
+        Self::new(
+            start,
+            SequenceNumber(U24::new(
+                u32::from(start.0) + u32::from(u8::from(seg_o) + 1_u8),
+            )),
+        )
+    }
     pub fn start(&self) -> SequenceNumber {
         SequenceNumber(U24::new(self.0.start))
     }

@@ -26,6 +26,9 @@ impl<Storage: AsRef<[u8]>> PDU<Storage> {
             SegmentedAccessPDU::max_seg_len()
         }
     }
+    pub fn should_segment(&self) -> bool {
+        self.total_len() > self.max_seg_len()
+    }
     pub fn seg_o(&self) -> SegO {
         assert!(
             self.total_len() < ENCRYPTED_APP_PAYLOAD_MAX_LEN,
@@ -242,16 +245,15 @@ impl<
     }
 }
 /// Unencrypted Application payload.
-pub struct AppPayload<Storage: AsRef<[u8]> + AsMut<[u8]>>(pub Storage);
-impl<'a, Storage: AsRef<[u8]> + AsMut<[u8]>> AppPayload<Storage> {
+pub struct AppPayload<Storage: AsRef<[u8]>>(pub Storage);
+impl<'a, Storage: AsRef<[u8]>> AppPayload<Storage> {
     /// Encrypts the Access Payload in-place. It reuses the data `Box` containing the plaintext
     /// data to hold the encrypted data.
     #[must_use]
-    pub fn encrypt(
-        self,
-        sm: &SecurityMaterials,
-        mic_size: MicSize,
-    ) -> EncryptedAppPayload<Storage> {
+    pub fn encrypt(self, sm: &SecurityMaterials, mic_size: MicSize) -> EncryptedAppPayload<Storage>
+    where
+        Storage: AsMut<[u8]>,
+    {
         let mut data = self.0;
         let mic = sm.encrypt(data.as_mut(), mic_size);
         EncryptedAppPayload::new(data, mic, sm.aid())
@@ -284,7 +286,8 @@ pub struct EncryptedAppPayload<Storage: AsRef<[u8]>> {
     pub mic: MIC,
     pub aid: Option<AID>,
 }
-const ENCRYPTED_APP_PAYLOAD_MAX_LEN: usize = 380;
+/// Maximum Upper Transport PDU Payload include MIC.
+pub const ENCRYPTED_APP_PAYLOAD_MAX_LEN: usize = 384;
 impl<Storage: AsRef<[u8]>> EncryptedAppPayload<Storage> {
     #[must_use]
     pub fn new(data: Storage, mic: MIC, aid: Option<AID>) -> Self {

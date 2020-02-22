@@ -11,7 +11,7 @@ See https://github.com/AndrewGi/BluetoothMeshRust for more.
 """
 license = "GPL-3.0-only"
 repository = "https://github.com/AndrewGi/BluetoothMeshRust"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Andrew Gilbrough <andrew@gilbrough.com>"]
 edition = "2018"
 readme = "README.md"
@@ -23,7 +23,7 @@ serde-1 = ["serde"]
 std = ["serde/std"]
 
 [dependencies]
-btle = {path = "btle", default-features = false}
+btle = {version = "0.1.1", path = "btle", default-features = false}
 tokio = {version = "0.2.11", optional=true, default-features = false, features=["sync", "rt-core", "time"]}
 futures-core = {version = "0.3.4", optional=true}
 futures-util = {version = "0.3.4", optional=true}

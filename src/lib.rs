@@ -1,7 +1,10 @@
-//! Pure Rust Bluetooth Mesh Stack.
+//! # Pure Rust Bluetooth Mesh Stack.
 //! The layers are designed so they can be put together in different ways to make different stacks
 //! (single-threaded, multi-threaded, multi-radio, etc).
-//! A single-threaded stack is provided in [`stack`].
+//! General stack glue is available in [`stack`] while a prebuilt full-stack requires `std`,
+//! `async`, etc.
+//! ## How a Bluetooth Mesh Stack works
+//!
 // No STD disabled until https://github.com/rust-lang/rust/pull/69033 goes stable/nightly.
 //#![no_std]
 #![deny(intra_doc_link_resolution_failure)]

@@ -11,9 +11,9 @@ use crate::{lower, net, upper};
 use core::cmp::min;
 
 pub struct UpperSegmenter<Storage: AsRef<[u8]>> {
-    upper_pdu: upper::PDU<Storage>,
-    seg_o: SegO,
-    seq_auth: SeqAuth,
+    pub upper_pdu: upper::PDU<Storage>,
+    pub seg_o: SegO,
+    pub seq_auth: SeqAuth,
 }
 impl<Storage: Clone + AsRef<[u8]>> Clone for UpperSegmenter<Storage> {
     fn clone(&self) -> Self {

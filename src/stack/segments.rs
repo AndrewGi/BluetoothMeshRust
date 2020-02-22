@@ -29,12 +29,12 @@ pub enum AckError {
 }
 
 pub struct OutgoingSegments<Storage: AsRef<[u8]>> {
-    segments: segmenter::UpperSegmenter<Storage>,
-    block_ack: BlockAck,
-    net_key_index: NetKeyIndex,
-    src: UnicastAddress,
-    dst: Address,
-    ttl: Option<TTL>,
+    pub segments: segmenter::UpperSegmenter<Storage>,
+    pub block_ack: BlockAck,
+    pub net_key_index: NetKeyIndex,
+    pub src: UnicastAddress,
+    pub dst: Address,
+    pub ttl: Option<TTL>,
 }
 impl<Storage: AsRef<[u8]>> OutgoingSegments<Storage> {
     pub fn is_new_ack(&self, ack: IncomingPDU<control::Ack>) -> Result<bool, AckError> {
@@ -262,10 +262,10 @@ impl<Storage: AsRef<[u8]> + AsMut<[u8]> + Send + 'static> Segments<Storage> {
     }
     async fn send(
         pdu: OutgoingUpperTransportMessage<Storage>,
-        outgoing_tx: &mut mpsc::Sender<OutgoingLowerTransportMessage>,
-        ack_rx: &mut mpsc::Receiver<IncomingPDU<control::Ack>>,
+        _outgoing_tx: &mut mpsc::Sender<OutgoingLowerTransportMessage>,
+        _ack_rx: &mut mpsc::Receiver<IncomingPDU<control::Ack>>,
     ) -> Result<(), SegmentError> {
-        let segments = OutgoingSegments {
+        let _segments = OutgoingSegments {
             segments: segmenter::UpperSegmenter::new(
                 pdu.upper_pdu,
                 SeqAuth::new(pdu.seq.start(), pdu.iv_index),
@@ -276,23 +276,7 @@ impl<Storage: AsRef<[u8]> + AsMut<[u8]> + Send + 'static> Segments<Storage> {
             dst: pdu.dst,
             ttl: pdu.ttl,
         };
-        // Immediately send out the PDUs with the acquired seq range.
-        for (seg, seq) in segments.segments.iter(segments.block_ack).zip(pdu.seq) {
-            outgoing_tx
-                .send(segments.seg_to_outgoing(seg, Some(seq)))
-                .await
-                .ok()
-                .ok_or(SegmentError::ChannelClosed)?;
-        }
-        // todo NEEDS TIMEOUT
-        loop {
-            let next_ack = ack_rx.recv().await.ok_or(SegmentError::ChannelClosed)?;
-            // todo is cancel ack?
-            let _is_new_ack = match segments.is_new_ack(next_ack) {
-                Ok(is_new) => is_new,
-                Err(_) => continue, // Ack doesn't match
-            };
-        }
+        unimplemented!()
     }
 }
 

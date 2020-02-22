@@ -1,4 +1,5 @@
 //! Bluetooth Mesh Stack that connects all the layers together.
+//! See ['StackInternals'] for more.
 
 pub mod element;
 #[cfg(feature = "full")]
@@ -41,7 +42,9 @@ pub struct NetworkHeader {
     pub iv_index: IVIndex,
 }
 
-/// Bluetooth Mesh Stack Internals for
+/// Bluetooth Mesh Stack Internals for generic Stack operations. Provides foundational building
+/// blocks for building your own stack.
+///
 /// Layers:
 /// - Access
 /// - Control
@@ -49,23 +52,27 @@ pub struct NetworkHeader {
 /// - Lower Transport
 /// - Network
 /// - Bearer/IO
+///
 /// This stack acts as glue between the Mesh layers.
 /// This stack is inherently single threaded which Bluetooth Mesh requires some type of scheduling.
 /// The scheduling and input/output queues are handled by `FullStack`.
 pub struct StackInternals {
     device_state: device_state::DeviceState,
 }
+/// Returned when an outgoing message can't be sent for some reason.
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub enum SendError {
+    ChannelClosed,
     InvalidAppKeyIndex,
     InvalidIVIndex,
     InvalidNetKeyIndex,
     InvalidDestination,
     InvalidSourceElement,
     OutOfSeq,
+    AckTimeout,
     BearerError(BearerError),
 }
-
+/// Returned when an incoming message can't be received for some reason.
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub enum RecvError {
     NoMatchingNetKey,
@@ -89,13 +96,16 @@ impl StackInternals {
     pub fn seq_counter(&self, element_index: ElementIndex) -> &SeqCounter {
         self.device_state.seq_counter(element_index)
     }
+    /// Returns all the virtual addresses owned by the stack with a hash matching `hash`.
     pub fn matching_virtual_addresses(
         &self,
         _h: VirtualAddressHash,
     ) -> impl Iterator<Item = &'_ VirtualAddress> + Clone {
         Option::<&'_ VirtualAddress>::None.into_iter()
     }
-
+    /// Attempts to decrypt the application `msg`. Multiple keys may be used to try to decrypt the
+    /// message so it will have to be cloned once so any decryption can be undone if the key wasn't
+    /// correct. No matter matter what, this function will only call `Clone` at most ONCE.
     fn app_decrypt<Storage: AsRef<[u8]> + AsMut<[u8]> + Clone>(
         &self,
         msg: EncryptedIncomingMessage<Storage>,
@@ -159,9 +169,11 @@ impl StackInternals {
                         let nonce = msg.device_nonce();
                         let mic = msg.encrypted_app_payload.mic();
                         let mut storage: Storage = msg.encrypted_app_payload.into_storage();
-                        if let Ok(_) =
-                            SecurityMaterials::Device(nonce, self.device_state.device_key())
-                                .decrypt(&mut storage.as_mut()[..], mic)
+                        if let Ok(_) = SecurityMaterials::Device(
+                            nonce,
+                            &self.device_state.security_materials().dev_key,
+                        )
+                        .decrypt(&mut storage.as_mut()[..], mic)
                         {
                             Ok(IncomingMessage {
                                 payload: storage,
@@ -235,7 +247,7 @@ impl StackInternals {
                             iv_index,
                         }
                         .to_nonce(),
-                        self.device_state.device_key(),
+                        &self.device_state.security_materials().dev_key,
                     ),
                     net_key_index,
                     seq_range,
@@ -365,12 +377,14 @@ impl StackInternals {
 
         None
     }
+    /// Returns if the given `IVIndex` is a valid `IVIndex` (Based on IVI).
     fn is_valid_iv_index(&self, iv_index: IVIndex) -> bool {
         self.device_state
             .rx_iv_index(iv_index.ivi())
             .map(|iv| iv == iv_index)
             .unwrap_or(false)
     }
+    /// Encrypts a chain of Network PDUs. Useful for encrypting Lower Segmented PDUs all at once.
     fn encrypted_network_pdus<I: Iterator<Item = net::PDU>>(
         &self,
         network_pdus: I,
