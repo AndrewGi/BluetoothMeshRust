@@ -1,20 +1,21 @@
 //! Bluetooth Mesh Stack that connects all the layers together.
 //! See ['StackInternals'] for more.
 
+#[cfg(feature = "bearer")]
+pub mod bearer;
 pub mod element;
-#[cfg(feature = "full")]
+#[cfg(feature = "full_stack")]
 pub mod full;
-#[cfg(feature = "full")]
+#[cfg(feature = "full_stack")]
 pub mod incoming;
 pub mod messages;
 pub mod model;
-#[cfg(feature = "full")]
+#[cfg(feature = "full_stack")]
 pub mod outgoing;
 #[cfg(feature = "std")]
 pub mod segments;
 
 use crate::address::{Address, UnicastAddress, VirtualAddress, VirtualAddressHash};
-use crate::bearer::BearerError;
 
 use crate::crypto::materials::{ApplicationSecurityMaterials, NetKeyMap};
 use crate::crypto::nonce::{AppNonceParts, DeviceNonceParts};
@@ -23,12 +24,14 @@ use crate::lower::SegO;
 use crate::mesh::{
     AppKeyIndex, ElementCount, ElementIndex, IVIndex, IVUpdateFlag, NetKeyIndex, TTL,
 };
+use crate::reassembler::ReassembleError;
 use crate::segmenter::EncryptedNetworkPDUIterator;
 use crate::stack::element::ElementRef;
 use crate::stack::messages::{
     EncryptedIncomingMessage, IncomingMessage, MessageKeys, OutgoingMessage,
     OutgoingUpperTransportMessage,
 };
+use crate::stack::segments::ReassemblyError;
 use crate::upper;
 use crate::upper::{AppPayload, SecurityMaterials, SecurityMaterialsIterator};
 use crate::{device_state, net};
@@ -70,11 +73,11 @@ pub enum SendError {
     InvalidSourceElement,
     OutOfSeq,
     AckTimeout,
-    BearerError(BearerError),
 }
 /// Returned when an incoming message can't be received for some reason.
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub enum RecvError {
+    ReassemblerError(ReassemblyError),
     NoMatchingNetKey,
     NoMatchingAppKey,
     InvalidDeviceKey,

@@ -1,9 +1,8 @@
-use crate::bearer::OutgoingEncryptedNetworkPDU;
+//! Outgoing PDU handler.
 use crate::control;
 use crate::device_state::SeqRange;
-use crate::stack::messages::{
-    OutgoingLowerTransportMessage, OutgoingMessage, OutgoingUpperTransportMessage,
-};
+use crate::stack::bearer::OutgoingEncryptedNetworkPDU;
+use crate::stack::messages::OutgoingUpperTransportMessage;
 use crate::stack::segments::{IncomingPDU, OutgoingSegments};
 use crate::stack::{segments, SendError, StackInternals};
 use std::sync::Arc;
@@ -38,7 +37,7 @@ impl Outgoing {
         Duration::from_secs(SEND_TIMEOUT_SECS)
     }
     pub async fn next_ack<Storage: AsRef<[u8]>>(
-        &segments: &OutgoingSegments<Storage>,
+        segments: &OutgoingSegments<Storage>,
         ack_rx: &mut mpsc::Receiver<IncomingPDU<control::Ack>>,
     ) -> Result<IncomingPDU<control::Ack>, SendError> {
         loop {

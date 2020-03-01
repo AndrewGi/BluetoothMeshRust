@@ -1,13 +1,14 @@
+//! Incoming PDU message handler.
 use crate::bearer::IncomingEncryptedNetworkPDU;
 use crate::control;
 use crate::relay::RelayPDU;
 use crate::stack::messages::{
     EncryptedIncomingMessage, IncomingControlMessage, IncomingMessage, IncomingNetworkPDU,
-    IncomingTransportPDU, OutgoingLowerTransportMessage,
+    OutgoingLowerTransportMessage,
 };
-use crate::stack::segments::SegmentEvent;
+use crate::stack::segments::{SegmentEvent, ReassemblyError};
 use crate::stack::{segments, RecvError, StackInternals};
-use crate::{lower, replay, upper};
+use crate::{lower, replay};
 use std::convert::TryFrom;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex, RwLock};
@@ -90,8 +91,10 @@ impl Incoming {
                 &mut tx_control,
                 &mut tx_access,
                 incoming.recv().await.ok_or(RecvError::ChannelClosed)?,
-            ) {
-                RecvError::ChannelClosed => return Err(RecvError::ChannelClosed),
+            )
+            .await
+            {
+                Err(RecvError::ChannelClosed) => return Err(RecvError::ChannelClosed),
                 // Ignore handle_net errors.
                 _ => (),
             }
@@ -107,9 +110,17 @@ impl Incoming {
         if let Ok(seg_event) = segments::SegmentEvent::try_from(&incoming) {
             match seg_event {
                 SegmentEvent::IncomingSegment(seg) => {
-                    reassembler.lock().await.feed_pdu(seg).await.ok()
+                    match reassembler.lock().await.feed_pdu(seg).await.err()
+                    Ok(())
                 }
-                SegmentEvent::IncomingAck(ack) => tx_ack.send(ack).await.ok(),
+                SegmentEvent::IncomingAck(ack) => {
+                    tx_ack
+                        .send(ack)
+                        .await
+                        .ok()
+                        .ok_or(RecvError::ChannelClosed)?;
+                    Ok(())
+                }
             }
             .ok_or(RecvError::ChannelClosed)?;
             return Ok(());
@@ -207,7 +218,7 @@ impl Incoming {
             // Seq isn't old but SeqZero might be. Even if SeqZero is old, we still relay it to other nodes.
             if !incoming.dont_relay
                 && pdu.header().ttl.should_relay()
-                && internals.device_state.relay_state().is_enabled()
+                && internals.device_state.config_states().relay_state.is_enabled()
             {
                 if let Some(mut relay_tx) = outgoing_relay {
                     relay_tx

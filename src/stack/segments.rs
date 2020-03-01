@@ -1,3 +1,4 @@
+//! PDU Segmenter with header context and auto retransmitting.
 use crate::address::{Address, UnicastAddress};
 use crate::control::ControlMessage;
 use crate::lower::{BlockAck, SegmentedPDU, SeqAuth, SeqZero};

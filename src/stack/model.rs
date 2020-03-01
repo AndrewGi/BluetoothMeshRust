@@ -1,3 +1,4 @@
+//! Model layer.
 use crate::foundation::publication::ModelPublishInfo;
 
 pub trait Model {}

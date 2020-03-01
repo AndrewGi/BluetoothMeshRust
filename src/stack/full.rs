@@ -1,18 +1,11 @@
+//! Full Bluetooth Mesh Stack. Takes `IncomingEncryptedNetworkPDU`s and `OutgoingMessages` and takes
+//! care of all the stack layer between them.
 use crate::bearer::{IncomingEncryptedNetworkPDU, OutgoingEncryptedNetworkPDU};
 use crate::interface::{InputInterfaces, InterfaceSink, OutputInterfaces};
 
-use crate::relay::RelayPDU;
-use crate::stack::messages::{
-    EncryptedIncomingMessage, IncomingControlMessage, IncomingNetworkPDU, IncomingTransportPDU,
-};
-use crate::stack::{incoming, outgoing, segments, RecvError, SendError, Stack, StackInternals};
-use crate::{lower, replay};
+use crate::replay;
+use crate::stack::{incoming, outgoing, segments, RecvError, SendError, StackInternals};
 
-use crate::control;
-use crate::stack::segments::Segments;
-use crate::upper::PDU;
-use alloc::boxed::Box;
-use core::convert::TryFrom;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex, RwLock};
