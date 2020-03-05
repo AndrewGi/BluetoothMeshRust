@@ -108,6 +108,20 @@ impl DeviceState {
             ))
         }
     }
+    /// Check if the given `unicast_address` is owned by this node. Ex: If this node has 5 elements
+    /// and its primary unicast address is `0x0002`, then it owns the range `[0x0002..0x0007]`.
+    /// If `unicast_address` is not in that range, this returns `None`.
+    pub fn element_index(&self, unicast_address: UnicastAddress) -> Option<ElementIndex> {
+        let range = self.unicast_range();
+        if range.contains(&unicast_address) {
+            Some(ElementIndex(
+                u8::try_from(u16::from(range.start) - u16::from(unicast_address))
+                    .expect("too many elements"),
+            ))
+        } else {
+            None
+        }
+    }
     /// IVIndex used for transmitting.
     pub fn tx_iv_index(&self) -> IVIndex {
         self.security_materials.iv_index

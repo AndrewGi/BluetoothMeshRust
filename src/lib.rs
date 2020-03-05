@@ -51,7 +51,7 @@ pub mod friend;
 pub mod interface;
 pub mod relay;
 //pub mod mesh_io;
-pub mod advertisement;
+//pub mod advertisement;
 pub mod stack;
 
 pub mod models;

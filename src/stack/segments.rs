@@ -73,8 +73,8 @@ impl<Storage: AsRef<[u8]>> OutgoingSegments<Storage> {
 pub struct IncomingSegments {
     context: reassembler::Context,
     seq_auth: SeqAuth,
-    src: UnicastAddress,
-    dst: Address,
+    segs_src: UnicastAddress,
+    segs_dst: Address,
     net_key_index: NetKeyIndex,
     ack_ttl: Option<TTL>,
 }
@@ -94,8 +94,8 @@ impl IncomingSegments {
                     seg_header.seg_o,
                     first_seg.pdu.szmic().unwrap_or(false),
                 )),
-                src: first_seg.src,
-                dst: first_seg.dst,
+                segs_src: first_seg.src,
+                segs_dst: first_seg.dst,
                 seq_auth: SeqAuth::from_seq_zero(
                     first_seg.pdu.seq_zero(),
                     first_seg.seq,
@@ -277,7 +277,7 @@ impl<Storage: AsRef<[u8]> + AsMut<[u8]> + Send + 'static> Segments<Storage> {
             dst: pdu.dst,
             ttl: pdu.ttl,
         };
-        unimplemented!()
+        todo!()
     }
 }
 
@@ -368,8 +368,8 @@ impl Reassembler {
                     .try_to_unseg()
                     .expect("correctly formatted PDU"),
                 ),
-                src: segs.src,
-                dst: segs.dst,
+                src: segs.segs_src,
+                dst: segs.segs_dst,
                 ttl: segs.ack_ttl,
                 seq: None,
                 iv_index: segs.seq_auth.iv_index,

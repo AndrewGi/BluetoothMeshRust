@@ -770,6 +770,12 @@ impl SegmentedPDU {
             SegmentedPDU::Control(_) => None,
         }
     }
+    pub fn ctl(&self) -> CTL {
+        match self {
+            SegmentedPDU::Access(_) => CTL(false),
+            SegmentedPDU::Control(_) => CTL(true),
+        }
+    }
 }
 impl From<&SegmentedPDU> for PDU {
     fn from(pdu: &SegmentedPDU) -> Self {

@@ -1,7 +1,5 @@
 //! Network Input/Output Interface and Filter.
-use crate::bearer::{BearerError, IncomingEncryptedNetworkPDU, OutgoingEncryptedNetworkPDU};
-use alloc::vec::Vec;
-
+/*
 pub trait InterfaceSink {
     fn consume_pdu(&mut self, pdu: &IncomingEncryptedNetworkPDU);
 }
@@ -41,3 +39,4 @@ impl<'a> OutputInterfaces<'a> {
         Ok(())
     }
 }
+*/

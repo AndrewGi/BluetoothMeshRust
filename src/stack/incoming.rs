@@ -1,12 +1,12 @@
 //! Incoming PDU message handler.
-use crate::bearer::IncomingEncryptedNetworkPDU;
 use crate::control;
 use crate::relay::RelayPDU;
+use crate::stack::bearer::IncomingEncryptedNetworkPDU;
 use crate::stack::messages::{
     EncryptedIncomingMessage, IncomingControlMessage, IncomingMessage, IncomingNetworkPDU,
     OutgoingLowerTransportMessage,
 };
-use crate::stack::segments::{SegmentEvent, ReassemblyError};
+use crate::stack::segments::SegmentEvent;
 use crate::stack::{segments, RecvError, StackInternals};
 use crate::{lower, replay};
 use std::convert::TryFrom;
@@ -110,8 +110,8 @@ impl Incoming {
         if let Ok(seg_event) = segments::SegmentEvent::try_from(&incoming) {
             match seg_event {
                 SegmentEvent::IncomingSegment(seg) => {
-                    match reassembler.lock().await.feed_pdu(seg).await.err()
-                    Ok(())
+                    if let Ok(handle) = reassembler.lock().await.feed_pdu(seg).await {}
+                    Some(())
                 }
                 SegmentEvent::IncomingAck(ack) => {
                     tx_ack
@@ -119,7 +119,7 @@ impl Incoming {
                         .await
                         .ok()
                         .ok_or(RecvError::ChannelClosed)?;
-                    Ok(())
+                    Some(())
                 }
             }
             .ok_or(RecvError::ChannelClosed)?;
@@ -141,23 +141,21 @@ impl Incoming {
                 .await
                 .ok()
                 .ok_or(RecvError::ChannelClosed),
-            lower::PDU::UnsegmentedControl(unseg_control) => {
-                tx_control
-                    .send(IncomingControlMessage {
-                        control_pdu: {
-                            match control::ControlPDU::try_from(unseg_control) {
-                                Ok(pdu) => pdu,
-                                Err(_) => return Err(RecvError::MalformedControlPDU), // Badly formatted Control PDU
-                            }
-                        },
-                        src: incoming.pdu.header.src,
-                        rssi: incoming.rssi,
-                        ttl: Some(incoming.pdu.header.ttl),
-                    })
-                    .await
-                    .ok()
-                    .ok_or(RecvError::ChannelClosed)
-            }
+            lower::PDU::UnsegmentedControl(unseg_control) => tx_control
+                .send(IncomingControlMessage {
+                    control_pdu: {
+                        match control::ControlPDU::try_from(unseg_control) {
+                            Ok(pdu) => pdu,
+                            Err(_) => return Err(RecvError::MalformedControlPDU), // Badly formatted Control PDU
+                        }
+                    },
+                    src: incoming.pdu.header.src,
+                    rssi: incoming.rssi,
+                    ttl: Some(incoming.pdu.header.ttl),
+                })
+                .await
+                .ok()
+                .ok_or(RecvError::ChannelClosed),
 
             // The rest of Segmented PDUs which are SegmentEvents. If they made it this far
             // they are badly formatted Segmented PDUs
@@ -218,7 +216,11 @@ impl Incoming {
             // Seq isn't old but SeqZero might be. Even if SeqZero is old, we still relay it to other nodes.
             if !incoming.dont_relay
                 && pdu.header().ttl.should_relay()
-                && internals.device_state.config_states().relay_state.is_enabled()
+                && internals
+                    .device_state
+                    .config_states()
+                    .relay_state
+                    .is_enabled()
             {
                 if let Some(mut relay_tx) = outgoing_relay {
                     relay_tx

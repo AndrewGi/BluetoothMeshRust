@@ -10,7 +10,7 @@ use crate::crypto::aes::MicSize;
 use crate::crypto::nonce::{AppNonce, AppNonceParts, DeviceNonce, DeviceNonceParts};
 use crate::device_state::SeqRange;
 use crate::lower::{SegO, SeqAuth};
-use crate::mesh::{AppKeyIndex, ElementIndex, IVIndex, NetKeyIndex, SequenceNumber, TTL};
+use crate::mesh::{AppKeyIndex, ElementIndex, IVIndex, NetKeyIndex, SequenceNumber, NID, TTL};
 use crate::stack::segments;
 use crate::upper::{AppPayload, EncryptedAppPayload};
 use crate::{control, lower, net, segmenter, upper};
@@ -42,6 +42,22 @@ pub struct OutgoingLowerTransportMessage {
     pub seq: Option<SequenceNumber>,
     pub iv_index: IVIndex,
     pub net_key_index: NetKeyIndex,
+}
+impl OutgoingLowerTransportMessage {
+    pub fn net_pdu(&self, nid: NID, seq: SequenceNumber, ttl: TTL) -> net::PDU {
+        net::PDU {
+            header: net::Header {
+                ivi: self.iv_index.ivi(),
+                nid,
+                ctl: self.pdu.is_control().into(),
+                ttl,
+                seq,
+                src: self.src,
+                dst: self.dst,
+            },
+            payload: self.pdu,
+        }
+    }
 }
 impl<Storage: AsRef<[u8]>> OutgoingMessage<Storage> {
     pub fn data_with_mic_len(&self) -> usize {

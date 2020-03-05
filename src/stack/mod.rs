@@ -3,6 +3,8 @@
 
 #[cfg(feature = "bearer")]
 pub mod bearer;
+#[cfg(feature = "bearer")]
+pub mod bearers;
 pub mod element;
 #[cfg(feature = "full_stack")]
 pub mod full;
@@ -17,26 +19,24 @@ pub mod segments;
 
 use crate::address::{Address, UnicastAddress, VirtualAddress, VirtualAddressHash};
 
-use crate::crypto::materials::{ApplicationSecurityMaterials, NetKeyMap};
+use crate::crypto::materials::{ApplicationSecurityMaterials, NetKeyMap, NetworkSecurityMaterials};
 use crate::crypto::nonce::{AppNonceParts, DeviceNonceParts};
 use crate::device_state::{DeviceState, SeqCounter};
 use crate::lower::SegO;
 use crate::mesh::{
     AppKeyIndex, ElementCount, ElementIndex, IVIndex, IVUpdateFlag, NetKeyIndex, TTL,
 };
-use crate::reassembler::ReassembleError;
+use crate::net::OwnedEncryptedPDU;
 use crate::segmenter::EncryptedNetworkPDUIterator;
 use crate::stack::element::ElementRef;
 use crate::stack::messages::{
-    EncryptedIncomingMessage, IncomingMessage, MessageKeys, OutgoingMessage,
-    OutgoingUpperTransportMessage,
+    EncryptedIncomingMessage, IncomingMessage, MessageKeys, OutgoingLowerTransportMessage,
+    OutgoingMessage, OutgoingUpperTransportMessage,
 };
 use crate::stack::segments::ReassemblyError;
 use crate::upper;
 use crate::upper::{AppPayload, SecurityMaterials, SecurityMaterialsIterator};
 use crate::{device_state, net};
-use core::convert::TryFrom;
-
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub struct NetworkHeader {
     pub src: UnicastAddress,
@@ -71,6 +71,7 @@ pub enum SendError {
     InvalidNetKeyIndex,
     InvalidDestination,
     InvalidSourceElement,
+    NetEncryptError,
     OutOfSeq,
     AckTimeout,
 }
@@ -324,20 +325,6 @@ impl StackInternals {
             iv_index,
         })
     }
-    /// Check if the given `unicast_address` is owned by this node. Ex: If this node has 5 elements
-    /// and its primary unicast address is `0x0002`, then it owns the range `[0x0002..0x0007]`.
-    /// If `unicast_address` is not in that range, this returns `None`.
-    pub fn owns_unicast_address(&self, unicast_address: UnicastAddress) -> Option<ElementIndex> {
-        let range = self.device_state.unicast_range();
-        if range.contains(&unicast_address) {
-            Some(ElementIndex(
-                u8::try_from(u16::from(range.start) - u16::from(unicast_address))
-                    .expect("too many elements"),
-            ))
-        } else {
-            None
-        }
-    }
     /// Returns the default `TTL`.
     pub fn default_ttl(&self) -> TTL {
         self.device_state.default_ttl()
@@ -388,7 +375,7 @@ impl StackInternals {
             .unwrap_or(false)
     }
     /// Encrypts a chain of Network PDUs. Useful for encrypting Lower Segmented PDUs all at once.
-    fn encrypted_network_pdus<I: Iterator<Item = net::PDU>>(
+    pub fn encrypted_network_pdus<I: Iterator<Item = net::PDU>>(
         &self,
         network_pdus: I,
         net_key_index: NetKeyIndex,
@@ -407,6 +394,60 @@ impl StackInternals {
             iv_index,
             net_keys: net_sm.network_keys(),
         })
+    }
+    pub fn lower_to_net(
+        &self,
+        msg: &OutgoingLowerTransportMessage,
+    ) -> Result<(net::PDU, &NetworkSecurityMaterials), SendError> {
+        if !self.is_valid_iv_index(msg.iv_index) {
+            return Err(SendError::InvalidIVIndex);
+        }
+        let index = self
+            .device_state
+            .element_index(msg.src)
+            .ok_or(SendError::InvalidSourceElement)?;
+        let net_sm = self
+            .net_keys()
+            .get_keys(msg.net_key_index)
+            .ok_or(SendError::InvalidNetKeyIndex)?
+            .tx_key();
+        let seq = match msg.seq {
+            Some(seq) => seq,
+            None => self
+                .device_state()
+                .seq_counter(index)
+                .inc_seq(1)
+                .ok_or(SendError::OutOfSeq)?,
+        };
+        Ok((
+            msg.net_pdu(
+                net_sm.network_keys().nid(),
+                seq,
+                msg.ttl.unwrap_or(self.device_state.default_ttl()),
+            ),
+            net_sm,
+        ))
+    }
+    /// Encrypt a single [`net::PDU`]. Use `Self::encrypted_network_pdus` instead if you have
+    /// more than one Network PDU.
+    pub fn encrypt_network_pdu(
+        &self,
+        pdu: net::PDU,
+        net_key_index: NetKeyIndex,
+        iv_index: IVIndex,
+    ) -> Result<OwnedEncryptedPDU, SendError> {
+        if !self.is_valid_iv_index(iv_index) {
+            return Err(SendError::InvalidIVIndex);
+        }
+        pdu.encrypt(
+            self.net_keys()
+                .get_keys(net_key_index)
+                .ok_or(SendError::InvalidNetKeyIndex)?
+                .tx_key()
+                .network_keys(),
+            iv_index,
+        )
+        .map_err(|_| SendError::NetEncryptError)
     }
 }
 
