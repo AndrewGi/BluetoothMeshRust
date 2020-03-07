@@ -36,8 +36,8 @@ pub enum OutgoingMessage {
     Network(OutgoingEncryptedNetworkPDU),
 }
 impl From<&OutgoingMessage> for OutgoingAdvertisement {
-    fn from(o: &OutgoingMessage) -> Self {
-        unimplemented!()
+    fn from(_: &OutgoingMessage) -> Self {
+        todo!("implement outgoing messages")
     }
 }
 impl From<OutgoingMessage> for OutgoingAdvertisement {

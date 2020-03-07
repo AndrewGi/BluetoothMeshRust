@@ -12,11 +12,10 @@ use crate::stack::outgoing::Outgoing;
 use futures_core::Stream;
 use futures_sink::Sink;
 use std::ops::{Deref, DerefMut};
-use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex, RwLock};
 
-pub struct FullStack<'a> {
+pub struct FullStack {
     replay_cache: Arc<Mutex<replay::Cache>>,
     internals: Arc<RwLock<StackInternals>>,
     incoming: incoming::Incoming,
@@ -27,7 +26,7 @@ pub enum FullStackError {
     RecvError(RecvError),
 }
 pub const CONTROL_CHANNEL_SIZE: usize = 5;
-impl FullStack<'_> {
+impl FullStack {
     /// Create a new `FullStack` based on `StackInternals` and `replay::Cache`.
     /// `StackInternals` holds the `device_state::State` which should be save persistently for the
     /// entire time a node is in a Mesh Network. If you lose the `StackInternals`, the node will
@@ -52,9 +51,7 @@ impl FullStack<'_> {
         let replay_cache = Arc::new(Mutex::new(replay_cache));
         let outgoing_bearer = tokio::spawn(async move {
             // move out_bearer
-            let mut out_bearer_storage = out_bearer;
-            // Safe because we don't move `out_bearer_storage` after pinning it.
-            let mut out_bearer = unsafe { Pin::new_unchecked(&mut out_bearer_storage) };
+            futures_util::pin_mut!(out_bearer);
             while let Some(msg) = rx_bearer.recv().await {
                 bearer::send_message(out_bearer.as_mut(), msg).await?;
             }
@@ -64,7 +61,7 @@ impl FullStack<'_> {
         // Encrypted Incoming Network PDU Handler.
 
         Self {
-            internals,
+            internals: internals.clone(),
             incoming: Incoming::new(
                 internals.clone(),
                 replay_cache.clone(),
@@ -76,7 +73,7 @@ impl FullStack<'_> {
                 channel_size,
             ),
             replay_cache,
-            outgoing: Outgoing::new(internals.clone(), rx_ack, tx_bearer),
+            outgoing: Outgoing::new(internals, rx_ack, tx_bearer),
         }
     }
 

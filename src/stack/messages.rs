@@ -1,5 +1,5 @@
 //! Bluetooth Mesh stack message definitions. Each layer of the stack has different amounts of
-//! contexts known to the message. Ex: [`crate::bearer::IncomingEncryptedNetworkPDU`] only knows the `NID`
+//! contexts known to the message. Ex: [`crate::stack::bearer::IncomingEncryptedNetworkPDU`] only knows the `NID`
 //! and `IVI` without decrypting while an [`OutgoingLowerTransportMessage`] is one layer away and
 //! has the `IVIndex`, `NetKeyIndex`, `dst`, `src`, etc. Instead of passing this extra data as
 //! parameters for every function, we just wrap the PDUs.

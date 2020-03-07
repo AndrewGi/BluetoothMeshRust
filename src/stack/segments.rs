@@ -140,8 +140,8 @@ impl IncomingSegments {
                 net_key_index: self.net_key_index,
                 ttl: None,
                 rssi: None,
-                src: self.src,
-                dst: self.dst,
+                src: self.segs_src,
+                dst: self.segs_dst,
             })
         }
     }
@@ -281,9 +281,6 @@ impl<Storage: AsRef<[u8]> + AsMut<[u8]> + Send + 'static> Segments<Storage> {
     }
 }
 
-pub struct ReassemblerContext {
-    sender: mpsc::Sender<IncomingPDU<lower::SegmentedPDU>>,
-}
 pub struct ReassemblerHandle {
     pub src: UnicastAddress,
     pub seq_zero: SeqZero,
@@ -291,9 +288,10 @@ pub struct ReassemblerHandle {
     pub handle: JoinHandle<Result<IncomingTransportPDU<Box<[u8]>>, ReassemblyError>>,
 }
 pub struct Reassembler {
-    incoming_channels: BTreeMap<(UnicastAddress, lower::SeqZero), ReassemblerContext>,
+    incoming_channels: BTreeMap<(UnicastAddress, lower::SeqZero), ReassemblerHandle>,
     outgoing_pdus: mpsc::Sender<OutgoingLowerTransportMessage>,
 }
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub enum ReassemblyError {
     Canceled,
     Timeout,
@@ -309,47 +307,29 @@ impl Reassembler {
             outgoing_pdus,
         }
     }
-    pub fn reassemble(
-        &mut self,
-        first_seg: IncomingPDU<lower::SegmentedPDU>,
-    ) -> Option<ReassemblerHandle> {
-        let src = (first_seg.src, first_seg.pdu.seq_zero());
-        let entry = self.incoming_channels.entry(src);
-        match entry {
-            Entry::Vacant(v) => {
-                let (tx, rx) = mpsc::channel(REASSEMBLER_CHANNEL_LEN);
-                let handle = tokio::spawn(Self::reassemble_segs(
-                    first_seg,
-                    self.outgoing_pdus.clone(),
-                    rx,
-                ));
-                v.insert(ReassemblerContext { sender: tx.clone() });
-                Some(ReassemblerHandle {
-                    src: src.0,
-                    seq_zero: src.1,
-                    sender: tx,
-                    handle,
-                })
-            }
-            Entry::Occupied(_) => None,
-        }
-    }
     pub async fn feed_pdu(
         &mut self,
         pdu: IncomingPDU<lower::SegmentedPDU>,
-    ) -> Result<Option<ReassemblerHandle>, ReassemblyError> {
-        match self
-            .incoming_channels
-            .get_mut(&(pdu.src, pdu.pdu.seq_zero()))
-        {
-            Some(context) => match context.sender.send(pdu).await {
-                Ok(_) => Ok(None),
-                Err(_) => Err(ReassemblyError::ChannelClosed),
-            },
-            None => Ok(Some(
-                self.reassemble(pdu)
-                    .expect("guaranteed for the handle to not exists yet"),
-            )),
+    ) -> Result<(), ReassemblyError> {
+        match self.incoming_channels.entry((pdu.src, pdu.pdu.seq_zero())) {
+            Entry::Occupied(mut o) => o
+                .get_mut()
+                .sender
+                .send(pdu)
+                .await
+                .map_err(|_| ReassemblyError::ChannelClosed),
+            Entry::Vacant(v) => {
+                let (tx, rx) = mpsc::channel(REASSEMBLER_CHANNEL_LEN);
+                let handle =
+                    tokio::spawn(Self::reassemble_segs(pdu, self.outgoing_pdus.clone(), rx));
+                v.insert(ReassemblerHandle {
+                    src: pdu.src,
+                    seq_zero: pdu.pdu.seq_zero(),
+                    sender: tx,
+                    handle,
+                });
+                Ok(())
+            }
         }
     }
     async fn send_ack(
@@ -399,7 +379,7 @@ impl Reassembler {
                 .map_err(|_| ReassemblyError::Timeout)?
                 .ok_or(ReassemblyError::ChannelClosed)?;
             if !segments.seq_auth.valid_seq(next.seq) {
-                // cancel
+                // bad sequence number for segment.
                 Self::cancel_ack(&segments, &mut outgoing).await?;
                 return Err(ReassemblyError::Canceled);
             }

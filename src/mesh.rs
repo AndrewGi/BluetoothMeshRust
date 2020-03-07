@@ -256,7 +256,7 @@ impl ToFromBytesEndian for U24 {
     #[must_use]
     fn to_bytes_be(&self) -> Self::AsBytesType {
         let b = self.0.to_be_bytes();
-        [b[2], b[1], b[0]]
+        [b[1], b[2], b[3]]
     }
 
     #[must_use]
@@ -271,7 +271,7 @@ impl ToFromBytesEndian for U24 {
     #[must_use]
     fn from_bytes_be(bytes: &[u8]) -> Option<Self> {
         if bytes.len() == 3 {
-            Some(U24(u32::from_be_bytes([0, bytes[2], bytes[1], bytes[0]])))
+            Some(U24(u32::from_be_bytes([0, bytes[0], bytes[1], bytes[2]])))
         } else {
             None
         }

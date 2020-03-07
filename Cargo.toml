@@ -16,12 +16,15 @@ authors = ["Andrew Gilbrough <andrew@gilbrough.com>"]
 edition = "2018"
 readme = "README.md"
 
+[badges]
+maintenance = {status ="actively-developed"}
+
 [features]
 default = ["full_stack"]
 full_stack = ["std", "tokio", "futures-core", "futures-util", "bearer"]
 bearer = ["futures-sink"]
 serde-1 = ["serde"]
-std = ["serde/std"]
+std = ["serde/std", "rand/std"]
 
 [dependencies]
 btle = {version = "0.1.1", path = "btle", default-features = false}
@@ -29,7 +32,7 @@ tokio = {version = "0.2.12", optional=true, default-features = false, features=[
 futures-core = {version = "0.3.4", optional=true}
 futures-util = {version = "0.3.4", optional=true, default-features = false, features=["alloc"]}
 futures-sink = {version = "0.3.4", optional=true, default-features = false, features=["alloc"]}
-rand = "0.7"
+rand = {version ="0.7", default-features = false}
 aes = "0.3.2"
 aead = "0.2.0"
 dbl = "0.2.1"

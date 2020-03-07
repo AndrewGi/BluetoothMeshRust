@@ -170,22 +170,22 @@ impl AppNonceParts {
     pub fn to_nonce(&self) -> AppNonce {
         let seq = self.seq.to_bytes_be();
         let src = self.src.to_bytes_be();
-        let dst = u16::from(&self.dst).to_bytes_be();
+        let dst = self.dst.to_bytes_be();
         let iv = self.iv_index.to_bytes_be();
         AppNonce::new_bytes([
             NonceType::Application.as_u8(),
             (self.aszmic as u8) << 7,
-            seq[2],
-            seq[1],
             seq[0],
-            src[1],
+            seq[1],
+            seq[2],
             src[0],
-            dst[1],
+            src[1],
             dst[0],
-            iv[3],
-            iv[2],
-            iv[1],
+            dst[1],
             iv[0],
+            iv[1],
+            iv[2],
+            iv[3],
         ])
     }
 }

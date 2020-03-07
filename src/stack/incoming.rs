@@ -110,7 +110,15 @@ impl Incoming {
         if let Ok(seg_event) = segments::SegmentEvent::try_from(&incoming) {
             match seg_event {
                 SegmentEvent::IncomingSegment(seg) => {
-                    if let Ok(handle) = reassembler.lock().await.feed_pdu(seg).await {}
+                    match reassembler.lock().await.feed_pdu(seg).await {
+                        Ok(_) => {
+                            // ok seg
+                        }
+                        Err(_) => {
+                            // bad seg
+                            todo!("handle bad segment?")
+                        }
+                    }
                     Some(())
                 }
                 SegmentEvent::IncomingAck(ack) => {
@@ -222,7 +230,7 @@ impl Incoming {
                     .relay_state
                     .is_enabled()
             {
-                if let Some(mut relay_tx) = outgoing_relay {
+                if let Some(relay_tx) = outgoing_relay {
                     relay_tx
                         .send(RelayPDU {
                             pdu,

@@ -82,12 +82,20 @@ impl VirtualAddressHash {
     /// # Panics
     /// Panics if `address > VIRTUAL_ADDRESS_HASH_MAX`.
     pub fn new(address: u16) -> VirtualAddressHash {
-        assert!(address <= VIRTUAL_ADDRESS_HASH_MAX);
+        assert_eq!(
+            address & VIRTUAL_MASK,
+            VIRTUAL_BIT,
+            "non virtual hash address '{}'",
+            address
+        );
         VirtualAddressHash(address)
     }
     /// Creates a 14 bit `VirtualAddressHash` by masking a u16 to a u14.
     pub fn new_masked(address: u16) -> VirtualAddressHash {
-        VirtualAddressHash(address & VIRTUAL_ADDRESS_HASH_MAX)
+        VirtualAddressHash((address & VIRTUAL_ADDRESS_HASH_MAX) | VIRTUAL_BIT)
+    }
+    pub fn just_hash(self) -> u16 {
+        self.0 & VIRTUAL_ADDRESS_HASH_MAX
     }
 }
 /// Stores the 14-bit hash and full 128 bit virtual UUID. Only the 14-bit hash is sent with
@@ -101,7 +109,7 @@ impl VirtualAddress {
     /// Creates a Virtual Address by calculate the hash of the UUID (using AES CMAC).
     pub fn hash_uuid(uuid: &UUID) -> VirtualAddressHash {
         let k = AESCipher::from(VTAD).cmac(uuid.as_ref());
-        VirtualAddressHash::new_masked(u16::from_be_bytes([k.as_ref()[15], k.as_ref()[14]]))
+        VirtualAddressHash::new_masked(u16::from_be_bytes([k.as_ref()[14], k.as_ref()[15]]))
     }
     pub fn new(uuid: &UUID) -> VirtualAddress {
         VirtualAddress(Self::hash_uuid(uuid), uuid.clone())
@@ -132,7 +140,11 @@ impl UnicastAddress {
     /// Panics if the `u16` is not a valid `UnicastAddress`. (Panics if `u16==0 || u16&UNICAST_BIT!=0`)
     #[must_use]
     pub fn new(v: u16) -> UnicastAddress {
-        assert!((v & UNICAST_BIT) != 0 || v == 0, "non unicast address");
+        assert!(
+            (v & UNICAST_BIT) == 0 || v == 0,
+            "non unicast address '{}'",
+            v
+        );
         UnicastAddress(v)
     }
     /// Creates a Unicast address by masking any u16 into it.

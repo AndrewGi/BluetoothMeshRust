@@ -1,3 +1,4 @@
+//! Transport Layer Segmenter.
 use crate::crypto::MIC;
 use crate::lower::{BlockAck, SegN, SegO, SegmentHeader, SegmentedAccessPDU, SeqAuth};
 

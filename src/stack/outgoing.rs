@@ -32,7 +32,7 @@ impl Outgoing {
     }
     pub async fn send_upper_transport<Storage: AsRef<[u8]>>(
         &self,
-        msg: OutgoingUpperTransportMessage<Storage>,
+        _msg: OutgoingUpperTransportMessage<Storage>,
     ) -> Result<(), SendError> {
         todo!("implement sending upper transport PDU")
     }
@@ -71,7 +71,6 @@ impl Outgoing {
         let (pdu, net_sm) = internals.lower_to_net(&msg)?;
         let transmit_parameters = internals.device_state.config_states().network_transmit.0;
         // Release the lock on StackInternals.
-        core::mem::drop(internals);
         self.send_encrypted_network_pdu(OutgoingEncryptedNetworkPDU {
             transmit_parameters,
             pdu: pdu
@@ -131,7 +130,7 @@ impl Outgoing {
         }
         time::timeout(self.send_timeout(), async {
             loop {
-                let first_ack = Self::next_ack(&msg, &mut ack_rx).await?;
+                let _first_ack = Self::next_ack(&msg, &mut ack_rx).await?;
 
                 // Check for a valid ack
                 todo!()

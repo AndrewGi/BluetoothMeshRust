@@ -166,7 +166,7 @@ impl StackInternals {
             }
             None => match msg.dst {
                 Address::Unicast(unicast) => {
-                    if let Some(element_index) = self.owns_unicast_address(unicast) {
+                    if let Some(element_index) = self.device_state().element_index(unicast) {
                         if !element_index.is_primary() {
                             return Err(RecvError::InvalidDestination);
                         }
@@ -417,7 +417,8 @@ impl StackInternals {
                 .device_state()
                 .seq_counter(index)
                 .inc_seq(1)
-                .ok_or(SendError::OutOfSeq)?,
+                .ok_or(SendError::OutOfSeq)?
+                .start(),
         };
         Ok((
             msg.net_pdu(
