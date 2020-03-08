@@ -237,7 +237,8 @@ impl Incoming {
                             iv_index,
                             net_key_index,
                         })
-                        .await;
+                        .await
+                        .map_err(|_| RecvError::ChannelClosed)?;
                 }
             }
             if is_old_seq_zero {

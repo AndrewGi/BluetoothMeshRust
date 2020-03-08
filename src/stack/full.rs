@@ -36,20 +36,20 @@ impl FullStack {
         InBearer: Stream<Item = IncomingMessage>,
     >(
         out_bearer: OutBearer,
-        in_bearer: InBearer,
+        _in_bearer: InBearer,
         internals: StackInternals,
         replay_cache: replay::Cache,
         channel_size: usize,
     ) -> Self {
         let (tx_bearer, mut rx_bearer) = mpsc::channel(2);
-        let (tx_incoming_encrypted_net, rx_incoming_encrypted_net) = mpsc::channel(channel_size);
-        let (tx_outgoing_transport, rx_outgoing_transport) = mpsc::channel(channel_size);
-        let (tx_control, rx_control) = mpsc::channel(CONTROL_CHANNEL_SIZE);
-        let (tx_access, rx_access) = mpsc::channel(channel_size);
+        let (_tx_incoming_encrypted_net, rx_incoming_encrypted_net) = mpsc::channel(channel_size);
+        let (tx_outgoing_transport, _rx_outgoing_transport) = mpsc::channel(channel_size);
+        let (tx_control, _rx_control) = mpsc::channel(CONTROL_CHANNEL_SIZE);
+        let (tx_access, _rx_access) = mpsc::channel(channel_size);
         let (tx_ack, rx_ack) = mpsc::channel(channel_size);
         let internals = Arc::new(RwLock::new(internals));
         let replay_cache = Arc::new(Mutex::new(replay_cache));
-        let outgoing_bearer = tokio::spawn(async move {
+        let _outgoing_bearer = tokio::spawn(async move {
             // move out_bearer
             futures_util::pin_mut!(out_bearer);
             while let Some(msg) = rx_bearer.recv().await {

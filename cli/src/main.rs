@@ -2,7 +2,7 @@ use slog::Drain;
 #[macro_use]
 extern crate slog;
 
-use std::convert::{TryFrom};
+use std::convert::TryFrom;
 
 pub mod commands;
 pub mod helper;
@@ -11,8 +11,10 @@ pub enum CLIError {
     IOError(String, std::io::Error),
     Clap(clap::Error),
     SerdeJSON(serde_json::Error),
-    Other(String),
+    OtherMessage(String),
+    Other(Box<dyn std::error::Error>),
 }
+
 fn main() {
     let app = clap::App::new("Bluetooth Mesh CLI")
         .version(clap::crate_version!())
@@ -94,7 +96,8 @@ fn main() {
             CLIError::PermissionDenied => {
                 eprintln!("permission denied error! (are you running as sudo/admin)?")
             }
-            CLIError::Other(msg) => eprintln!("error: {}", &msg),
+            CLIError::OtherMessage(msg) => eprintln!("error: {}", &msg),
+            CLIError::Other(e) => eprintln!("error: {}", e)
         };
         std::process::exit(0);
     }

@@ -1,7 +1,6 @@
 use crate::helper;
 use crate::CLIError;
-use btle::hci::event::StatusReturn;
-use btle::hci::stream::HCIReader;
+use std::pin::Pin;
 
 pub fn sub_command() -> clap::App<'static, 'static> {
     clap::SubCommand::with_name("dump")
@@ -42,30 +41,31 @@ pub fn dump_matches(
 }
 #[cfg(not(unix))]
 pub fn dump_bluez(_: u16, _: &slog::Logger) -> Result<(), CLIError> {
-    Err(CLIError::Other(
+    Err(CLIError::OtherMessage(
         "bluez only supported on unix systems".to_owned(),
     ))
 }
 #[cfg(unix)]
 pub fn dump_bluez(adapter_id: u16, parent_logger: &slog::Logger) -> Result<(), CLIError> {
-    use btle::hci::le::SetScanEnable;
     use btle::hci::socket;
     use core::convert::TryFrom;
     let map_hci_socket_err = |err: socket::HCISocketError| match err {
-        socket::HCISocketError::BadData => CLIError::Other("hci socket bad data".to_owned()),
+        socket::HCISocketError::BadData => CLIError::OtherMessage("hci socket bad data".to_owned()),
         socket::HCISocketError::PermissionDenied => CLIError::PermissionDenied,
         socket::HCISocketError::IO(io) => CLIError::IOError("hci socket IO error".to_owned(), io),
         socket::HCISocketError::DeviceNotFound => {
-            CLIError::Other("hci socket device not found".to_owned())
+            CLIError::OtherMessage("hci socket device not found".to_owned())
         }
         socket::HCISocketError::NotConnected => {
-            CLIError::Other("hci socket not connected".to_owned())
+            CLIError::OtherMessage("hci socket not connected".to_owned())
         }
-        socket::HCISocketError::Busy => CLIError::Other("hci device busy".to_owned()),
+        socket::HCISocketError::Busy => CLIError::OtherMessage("hci device busy".to_owned()),
         socket::HCISocketError::Other(errno) => {
-            CLIError::Other(format!("hci socket errno error `{}`", errno))
+            CLIError::OtherMessage(format!("hci socket errno error `{}`", errno))
         }
-        socket::HCISocketError::Unsupported => CLIError::Other("hci supported error".to_owned()),
+        socket::HCISocketError::Unsupported => {
+            CLIError::OtherMessage("hci supported error".to_owned())
+        }
     };
     let logger = parent_logger.new(o!("adapter_id" => adapter_id));
     debug!(logger, "dump_bluez");
@@ -80,27 +80,27 @@ pub fn dump_bluez(adapter_id: u16, parent_logger: &slog::Logger) -> Result<(), C
         .enable_all()
         .build()
         .expect("can't make async runtime");
-    info!(logger, "starting async loop");
+
     runtime.block_on(async move {
         let async_socket = socket::AsyncHCISocket::try_from(socket)
             .map_err(|e| map_hci_socket_err(socket::HCISocketError::IO(e)))?;
-        let stream = btle::hci::stream::ByteStream::new(async_socket);
-        let stream = btle::hci::stream::Stream::new(stream);
-        futures_util::pin_mut!(stream);
-        info!(logger, "send_command");
-        stream
-            .as_mut()
-            .send_command::<SetScanEnable, StatusReturn>(SetScanEnable {
-                is_enabled: false,
-                filter_duplicates: false,
-            })
+        let stream = btle::hci::stream::Stream::new(async_socket);
+        let adapter = btle::hci::adapters::Adapter::new(stream);
+        dump_adapter(adapter, &logger)
             .await
-            .expect("io_error");
-        info!(logger, "sent_enable");
-        loop {
-            let next = stream.as_mut().read_event().await;
-            println!("got something");
-        }
-        Ok(())
+            .map_err(|e| CLIError::Other(Box::new(btle::error::STDError(e))))
     })
+}
+pub async fn dump_adapter<S: btle::hci::stream::HCIStreamable>(
+    mut adapter: btle::hci::adapters::Adapter<S, Box<[u8]>>,
+    logger: &slog::Logger,
+) -> Result<(), btle::hci::adapters::Error> {
+    let mut adapter = unsafe { Pin::new_unchecked(&mut adapter) };
+    info!(logger, "scan_command");
+    adapter.as_mut().le().set_scan_enabled(true, false).await?;
+    info!(logger, "scan_enabled");
+    loop {
+        let _next = adapter.as_mut().read_event().await?;
+        println!("got something");
+    }
 }

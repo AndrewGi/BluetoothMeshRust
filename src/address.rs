@@ -94,6 +94,7 @@ impl VirtualAddressHash {
     pub fn new_masked(address: u16) -> VirtualAddressHash {
         VirtualAddressHash((address & VIRTUAL_ADDRESS_HASH_MAX) | VIRTUAL_BIT)
     }
+    /// Returns just the u14 hash.
     pub fn just_hash(self) -> u16 {
         self.0 & VIRTUAL_ADDRESS_HASH_MAX
     }

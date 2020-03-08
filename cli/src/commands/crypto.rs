@@ -174,14 +174,14 @@ pub fn crypto_matches(
                     info!(logger, "set_devkey"; "new_key" => new_key.to_owned());
                     let new_key_buf =
                         helper::hex_str_to_bytes::<[u8; 16]>(new_key).expect("validated by clap");
-                    *device_state.device_key_mut() =
+                    device_state.security_materials_mut().dev_key =
                         bluetooth_mesh::crypto::key::DevKey::new_bytes(new_key_buf);
                     helper::write_device_state(device_state_path, &device_state)?;
                     debug!(logger, "wrote_devkey");
                 }
                 None => (),
             }
-            println!("device key: {:X}", device_state.device_key().key());
+            println!("device key: {:X}", device_state.security_materials().dev_key.key());
         }
         ("netkeys", Some(netkeys_matches)) => {
             // netkeys
