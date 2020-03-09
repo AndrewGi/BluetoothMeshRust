@@ -1,6 +1,7 @@
 use crate::helper;
 use crate::CLIError;
 use std::pin::Pin;
+use btle::hci::le;
 
 pub fn sub_command() -> clap::App<'static, 'static> {
     clap::SubCommand::with_name("dump")
@@ -96,7 +97,11 @@ pub async fn dump_adapter<S: btle::hci::stream::HCIStreamable>(
     logger: &slog::Logger,
 ) -> Result<(), btle::hci::adapters::Error> {
     let mut adapter = unsafe { Pin::new_unchecked(&mut adapter) };
+    //adapter.as_mut().le().set_scan_enabled(false, false).await?;
+    info!(logger, "scan_parameters");
+    adapter.as_mut().le().set_scan_parameters(le::SetScanParameters::DEFAULT).await?;
     info!(logger, "scan_command");
+
     adapter.as_mut().le().set_scan_enabled(true, false).await?;
     info!(logger, "scan_enabled");
     loop {
