@@ -14,31 +14,43 @@ pub enum CLIError {
     OtherMessage(String),
     Other(Box<dyn std::error::Error>),
 }
-
-fn main() {
-    let app = clap::App::new("Bluetooth Mesh CLI")
-        .version(clap::crate_version!())
-        .author("Andrew Gilbrough <andrew@gilbrough.com>")
-        .about("Bluetooth Mesh Command Line Interface tool to interact with the Mesh")
-        .arg(
-            clap::Arg::with_name("verbose")
-                .short("v")
-                .long("verbose")
-                .multiple(true)
-                .max_values(5)
-                .help("Set the amount of logging from level 0 up to level 5"),
-        )
-        .arg(
-            clap::Arg::with_name("device_state")
-                .short("s")
-                .long("device_state")
-                .value_name("FILE")
-                .help("Specifies device state .json file"),
-        )
-        .subcommand(commands::state::sub_command())
+#[cfg(feature = "mesh")]
+fn add_mesh_subcommands<'a, 'b>(app: clap::App<'a, 'b>) -> clap::App<'a, 'b> {
+    app.subcommand(commands::state::sub_command())
         .subcommand(commands::provisioner::sub_command())
         .subcommand(commands::crypto::sub_command())
-        .subcommand(commands::ble::sub_command());
+}
+#[cfg(not(feature = "mesh"))]
+fn add_mesh_subcommands<'a, 'b>(app: clap::App<'a, 'b>) -> clap::App<'a, 'b> {
+    // `mesh` feature not enabled. Don't do anything.
+    app
+}
+fn add_subcommands<'a, 'b>(app: clap::App<'a, 'b>) -> clap::App<'a, 'b> {
+    add_mesh_subcommands(app.subcommand(commands::ble::sub_command()))
+}
+fn main() {
+    let app = add_subcommands(
+        clap::App::new("Bluetooth Mesh CLI")
+            .version(clap::crate_version!())
+            .author("Andrew Gilbrough <andrew@gilbrough.com>")
+            .about("Bluetooth Mesh Command Line Interface tool to interact with the Mesh")
+            .arg(
+                clap::Arg::with_name("verbose")
+                    .short("v")
+                    .long("verbose")
+                    .multiple(true)
+                    .max_values(5)
+                    .help("Set the amount of logging from level 0 up to level 5"),
+            )
+            .arg(
+                clap::Arg::with_name("device_state")
+                    .short("s")
+                    .long("device_state")
+                    .value_name("FILE")
+                    .help("Specifies device state .json file"),
+            ),
+    );
+
     let matches = app.get_matches();
 
     let _log_level = slog::Level::from_usize(
@@ -56,6 +68,7 @@ fn main() {
     */
     trace!(root, "main");
     let sub_cmd = matches.subcommand().0;
+    #[cfg(feature = "mesh")]
     let get_device_state_path = || -> &str {
         match matches.value_of("device_state") {
             Some(path) => path,
@@ -70,12 +83,15 @@ fn main() {
     if let Err(e) = (|| -> Result<(), CLIError> {
         match matches.subcommand() {
             ("", None) => error!(root, "no command given"),
+            #[cfg(feature = "mesh")]
             ("state", Some(gen_matches)) => {
                 commands::state::state_matches(&root, get_device_state_path(), gen_matches)?
             }
+            #[cfg(feature = "mesh")]
             ("crypto", Some(crypto_matches)) => {
                 commands::crypto::crypto_matches(&root, get_device_state_path(), crypto_matches)?
             }
+            #[cfg(feature = "mesh")]
             ("provisioner", Some(prov_matches)) => commands::provisioner::provisioner_matches(
                 &root,
                 get_device_state_path(),
@@ -97,7 +113,7 @@ fn main() {
                 eprintln!("permission denied error! (are you running as sudo/admin)?")
             }
             CLIError::OtherMessage(msg) => eprintln!("error: {}", &msg),
-            CLIError::Other(e) => eprintln!("error: {}", e)
+            CLIError::Other(e) => eprintln!("error: {}", e),
         };
         std::process::exit(0);
     }

@@ -1,4 +1,5 @@
 use crate::CLIError;
+#[cfg(feature = "mesh")]
 use bluetooth_mesh::{device_state, mesh};
 use std::convert::TryFrom;
 use std::fmt::{Error, Formatter};
@@ -40,6 +41,7 @@ pub fn is_128_bit_hex_str_validator(input: String) -> Result<(), String> {
         Err(format!("'{}' is not a 128-bit hex string", &input))
     }
 }
+#[cfg(feature = "mesh")]
 pub fn is_ttl(input: String) -> Result<(), String> {
     let error_msg = || Err(format!("`{}` is not a valid TTL", &input));
     match u8::from_str(&input) {
@@ -62,6 +64,7 @@ pub fn is_u16_validator(input: String) -> Result<(), String> {
         Err(_) => Err(format!("'{}' is not a 16-bit unsigned integer", &input)),
     }
 }
+#[cfg(feature = "mesh")]
 pub fn is_u24_validator(input: String) -> Result<(), String> {
     match u32::from_str(&input)
         .ok()
@@ -107,9 +110,11 @@ pub fn load_file(path: &str, writeable: bool, create: bool) -> Result<std::fs::F
         .open(path)
         .map_err(|e| CLIError::IOError(path.to_owned(), e))
 }
+#[cfg(feature = "mesh")]
 pub fn load_device_state(path: &str) -> Result<device_state::DeviceState, CLIError> {
     serde_json::from_reader(load_file(path, false, false)?).map_err(CLIError::SerdeJSON)
 }
+#[cfg(feature = "mesh")]
 pub fn write_device_state(
     path: &str,
     device_state: &device_state::DeviceState,

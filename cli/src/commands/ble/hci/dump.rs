@@ -1,7 +1,9 @@
 use crate::helper;
 use crate::CLIError;
-use std::pin::Pin;
+use btle::hci::event::EventCode;
 use btle::hci::le;
+use btle::hci::packet::{PacketType, RawPacket};
+use std::pin::Pin;
 
 pub fn sub_command() -> clap::App<'static, 'static> {
     clap::SubCommand::with_name("dump")
@@ -93,19 +95,32 @@ pub fn dump_bluez(adapter_id: u16, parent_logger: &slog::Logger) -> Result<(), C
     })
 }
 pub async fn dump_adapter<S: btle::hci::stream::HCIStreamable>(
-    mut adapter: btle::hci::adapters::Adapter<S, Box<[u8]>>,
+    mut adapter: btle::hci::adapters::Adapter<S>,
     logger: &slog::Logger,
 ) -> Result<(), btle::hci::adapters::Error> {
     let mut adapter = unsafe { Pin::new_unchecked(&mut adapter) };
     //adapter.as_mut().le().set_scan_enabled(false, false).await?;
     info!(logger, "scan_parameters");
-    adapter.as_mut().le().set_scan_parameters(le::SetScanParameters::DEFAULT).await?;
+    adapter
+        .as_mut()
+        .le()
+        .set_scan_parameters(le::SetScanParameters::DEFAULT)
+        .await?;
     info!(logger, "scan_command");
 
     adapter.as_mut().le().set_scan_enabled(true, false).await?;
     info!(logger, "scan_enabled");
+
+    let mut filter = btle::hci::stream::Filter::default();
+    filter.enable_type(PacketType::Event);
+    filter.enable_event(EventCode::LEMeta);
+    adapter
+        .as_mut()
+        .stream_pinned()
+        .stream_pinned()
+        .set_filter(&filter)?;
     loop {
-        let _next = adapter.as_mut().read_event().await?;
-        println!("got something");
+        let next: RawPacket<Box<[u8]>> = adapter.as_mut().read_packet().await?;
+        println!("{:?} {:?}", next.packet_type, next.buf);
     }
 }

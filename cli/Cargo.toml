@@ -10,8 +10,11 @@ maintenance = {status ="actively-developed"}
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+mesh = ["bluetooth_mesh"]
+
 [dependencies]
-bluetooth_mesh = {path = "../", features=["full_stack", "serde-1"]}
+bluetooth_mesh = {path = "../", features=["full_stack", "serde-1"], optional = true}
 clap = "2.33.0"
 serde_json = "1.0.45"
 slog = "2.5.2"
