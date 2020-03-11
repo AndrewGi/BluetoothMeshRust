@@ -1,8 +1,11 @@
 use crate::helper;
 use crate::CLIError;
+use btle::hci::adapters::le::AdvertisementStream;
 use btle::hci::event::EventCode;
 use btle::hci::le;
-use btle::hci::packet::{PacketType, RawPacket};
+use btle::hci::le::report::ReportInfo;
+use btle::hci::packet::PacketType;
+use futures_util::StreamExt;
 use std::pin::Pin;
 
 pub fn sub_command() -> clap::App<'static, 'static> {
@@ -51,7 +54,7 @@ pub fn dump_bluez(_: u16, _: &slog::Logger) -> Result<(), CLIError> {
 #[cfg(unix)]
 pub fn dump_bluez(adapter_id: u16, parent_logger: &slog::Logger) -> Result<(), CLIError> {
     use btle::hci::socket;
-    use core::convert::TryFrom;
+    use std::convert::TryFrom;
     let map_hci_socket_err = |err: socket::HCISocketError| match err {
         socket::HCISocketError::BadData => CLIError::OtherMessage("hci socket bad data".to_owned()),
         socket::HCISocketError::PermissionDenied => CLIError::PermissionDenied,
@@ -100,27 +103,27 @@ pub async fn dump_adapter<S: btle::hci::stream::HCIStreamable>(
 ) -> Result<(), btle::hci::adapters::Error> {
     let mut adapter = unsafe { Pin::new_unchecked(&mut adapter) };
     //adapter.as_mut().le().set_scan_enabled(false, false).await?;
+    let mut le = adapter.as_mut().le();
     info!(logger, "scan_parameters");
-    adapter
-        .as_mut()
-        .le()
-        .set_scan_parameters(le::SetScanParameters::DEFAULT)
+    le.set_scan_parameters(le::SetScanParameters::DEFAULT)
         .await?;
     info!(logger, "scan_command");
 
-    adapter.as_mut().le().set_scan_enabled(true, false).await?;
+    le.set_scan_enabled(true, false).await?;
     info!(logger, "scan_enabled");
 
     let mut filter = btle::hci::stream::Filter::default();
     filter.enable_type(PacketType::Event);
     filter.enable_event(EventCode::LEMeta);
-    adapter
-        .as_mut()
+    le.adapter_mut()
         .stream_pinned()
         .stream_pinned()
         .set_filter(&filter)?;
+    let mut stream: AdvertisementStream<S, Box<[ReportInfo]>> = le.advertisement_stream();
+    let mut stream = Pin::new(&mut stream);
     loop {
-        let next: RawPacket<Box<[u8]>> = adapter.as_mut().read_packet().await?;
-        println!("{:?} {:?}", next.packet_type, next.buf);
+        while let Some(report) = StreamExt::next(&mut stream).await {
+            println!("report: {:?}", &report);
+        }
     }
 }
