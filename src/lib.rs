@@ -32,6 +32,9 @@ pub mod random;
 pub mod timestamp;
 pub mod uuid;
 
+#[cfg(feature = "asyncs")]
+pub mod asyncs;
+
 pub mod access;
 pub mod address;
 pub mod beacon;

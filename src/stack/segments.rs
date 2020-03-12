@@ -1,5 +1,6 @@
 //! PDU Segmenter with header context and auto retransmitting.
 use crate::address::{Address, UnicastAddress};
+use crate::asyncs::sync::mpsc;
 use crate::control::ControlMessage;
 use crate::lower::{BlockAck, SegmentedPDU, SeqAuth, SeqZero};
 use crate::mesh::{IVIndex, NetKeyIndex, SequenceNumber, TTL};
@@ -15,7 +16,6 @@ use alloc::collections::BTreeMap;
 use core::convert::{TryFrom, TryInto};
 use core::fmt::{Debug, Error, Formatter};
 use core::time::Duration;
-use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 #[derive(Copy, Clone, PartialOrd, PartialEq, Ord, Eq, Hash, Debug)]

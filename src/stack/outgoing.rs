@@ -1,4 +1,5 @@
 //! Outgoing PDU handler.
+use crate::asyncs::sync::{mpsc, Mutex, RwLock};
 use crate::device_state::SeqRange;
 use crate::mesh::{SequenceNumber, CTL};
 use crate::net::Header;
@@ -7,10 +8,9 @@ use crate::stack::messages::{OutgoingLowerTransportMessage, OutgoingUpperTranspo
 use crate::stack::segments::{IncomingPDU, OutgoingSegments};
 use crate::stack::{segments, SendError, StackInternals};
 use crate::{control, net};
+use core::time::Duration;
 use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio::time;
-use tokio::time::Duration;
 
 pub struct Outgoing {
     pub outgoing_network: Mutex<mpsc::Sender<OutgoingMessage>>,

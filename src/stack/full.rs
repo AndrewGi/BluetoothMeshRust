@@ -6,6 +6,7 @@ use crate::stack::bearer;
 use crate::replay;
 use crate::stack::{incoming, outgoing, RecvError, SendError, StackInternals};
 
+use crate::asyncs::sync::{mpsc, Mutex, RwLock};
 use crate::stack::bearer::{BearerError, IncomingMessage, OutgoingMessage};
 use crate::stack::incoming::Incoming;
 use crate::stack::outgoing::Outgoing;
@@ -13,7 +14,6 @@ use alloc::sync::Arc;
 use core::ops::{Deref, DerefMut};
 use futures_core::Stream;
 use futures_sink::Sink;
-use tokio::sync::{mpsc, Mutex, RwLock};
 
 pub struct FullStack {
     replay_cache: Arc<Mutex<replay::Cache>>,

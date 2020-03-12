@@ -1,4 +1,5 @@
 //! Incoming PDU message handler.
+use crate::asyncs::sync::{mpsc, Mutex, RwLock};
 use crate::control;
 use crate::relay::RelayPDU;
 use crate::stack::bearer::IncomingEncryptedNetworkPDU;
@@ -11,7 +12,6 @@ use crate::stack::{segments, RecvError, StackInternals};
 use crate::{lower, replay};
 use alloc::sync::Arc;
 use core::convert::TryFrom;
-use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio::task::JoinHandle;
 
 /// Asynchronous incoming message handler stack. Input Encrypted Network PDUs and it Outputs Acks,
