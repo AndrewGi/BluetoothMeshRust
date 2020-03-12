@@ -4,9 +4,9 @@ use crate::mesh::TransmitInterval;
 use crate::{beacon, net};
 use btle::advertisement::OutgoingAdvertisement;
 use btle::advertiser::AdvertiserError;
+use btle::poll_function::poll_fn;
 use core::pin::Pin;
 use futures_sink::Sink;
-
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub enum BearerError {
     ReadyError,
@@ -52,7 +52,7 @@ pub async fn send_message<Bearer: Sink<OutgoingMessage, Error = BearerError>>(
     mut bearer: Pin<&mut Bearer>,
     msg: OutgoingMessage,
 ) -> Result<(), BearerError> {
-    futures_util::future::poll_fn(|cx| bearer.as_mut().poll_ready(cx))
+    poll_fn(|cx| bearer.as_mut().poll_ready(cx))
         .await
         .ok()
         .ok_or(BearerError::ReadyError)?;

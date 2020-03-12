@@ -9,10 +9,10 @@ use crate::stack::{incoming, outgoing, RecvError, SendError, StackInternals};
 use crate::stack::bearer::{BearerError, IncomingMessage, OutgoingMessage};
 use crate::stack::incoming::Incoming;
 use crate::stack::outgoing::Outgoing;
+use alloc::sync::Arc;
+use core::ops::{Deref, DerefMut};
 use futures_core::Stream;
 use futures_sink::Sink;
-use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex, RwLock};
 
 pub struct FullStack {

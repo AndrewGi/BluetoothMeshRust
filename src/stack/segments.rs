@@ -10,11 +10,11 @@ use crate::stack::messages::{
     OutgoingUpperTransportMessage,
 };
 use crate::{control, lower, segmenter};
+use alloc::collections::btree_map::Entry;
 use alloc::collections::BTreeMap;
-use std::collections::btree_map::Entry;
-use std::convert::{TryFrom, TryInto};
-use std::fmt::{Debug, Error, Formatter};
-use std::time::Duration;
+use core::convert::{TryFrom, TryInto};
+use core::fmt::{Debug, Error, Formatter};
+use core::time::Duration;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 

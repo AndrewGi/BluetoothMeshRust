@@ -1,10 +1,10 @@
 //! Common Bluetooth Mesh Objects/Structures.
 use crate::bytes::ToFromBytesEndian;
 use core::convert::{TryFrom, TryInto};
-use core::fmt::{Display, Error, Formatter};
+use core::fmt::{Display, Formatter};
+use core::ops::{Add, Sub};
 use core::str::FromStr;
 use core::time;
-use std::ops::{Add, Sub};
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
@@ -124,7 +124,7 @@ impl From<TTL> for u8 {
 }
 
 impl Display for TTL {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(f, "TTL({})", self.0)
     }
 }
@@ -134,7 +134,7 @@ impl Display for TTL {
 pub struct NID(u8);
 
 impl Display for NID {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", self.0)
     }
 }
@@ -177,7 +177,7 @@ impl From<NID> for u8 {
 pub struct U24(u32);
 const U24_MAX: u32 = (1_u32 << 24) - 1; // 2**24 - 1
 impl Display for U24 {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(f, "U24({})", self.0)
     }
 }
@@ -318,7 +318,7 @@ impl IVIndex {
 }
 
 impl Display for IVIndex {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(f, "IVIndex({})", self.0)
     }
 }
@@ -370,7 +370,7 @@ impl Sub<SequenceNumber> for SequenceNumber {
     }
 }
 impl Display for SequenceNumber {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(f, "SequenceNumber({})", (self.0).value())
     }
 }

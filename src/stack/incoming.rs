@@ -9,8 +9,8 @@ use crate::stack::messages::{
 use crate::stack::segments::SegmentEvent;
 use crate::stack::{segments, RecvError, StackInternals};
 use crate::{lower, replay};
-use std::convert::TryFrom;
-use std::sync::Arc;
+use alloc::sync::Arc;
+use core::convert::TryFrom;
 use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio::task::JoinHandle;
 
