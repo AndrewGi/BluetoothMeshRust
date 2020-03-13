@@ -1,6 +1,6 @@
 //! PDU Segmenter with header context and auto retransmitting.
 use crate::address::{Address, UnicastAddress};
-use crate::asyncs::sync::mpsc;
+use crate::asyncs::{sync::mpsc, task, time};
 use crate::control::ControlMessage;
 use crate::lower::{BlockAck, SegmentedPDU, SeqAuth, SeqZero};
 use crate::mesh::{IVIndex, NetKeyIndex, SequenceNumber, TTL};
@@ -15,8 +15,6 @@ use alloc::collections::btree_map::Entry;
 use alloc::collections::BTreeMap;
 use core::convert::{TryFrom, TryInto};
 use core::fmt::{Debug, Error, Formatter};
-use core::time::Duration;
-use tokio::task::JoinHandle;
 
 #[derive(Copy, Clone, PartialOrd, PartialEq, Ord, Eq, Hash, Debug)]
 pub struct SegmentsConversionError(());
@@ -110,9 +108,9 @@ impl IncomingSegments {
             })
         }
     }
-    pub const fn recv_timeout(&self) -> Duration {
+    pub const fn recv_timeout(&self) -> time::Duration {
         // As Per the Bluetooth Mesh Spec.
-        Duration::from_secs(10)
+        time::Duration::from_secs(10)
     }
     pub fn is_control(&self) -> bool {
         !self.is_access()
@@ -223,7 +221,7 @@ pub enum SegmentEvent {
     IncomingAck(IncomingPDU<control::Ack>),
 }
 pub struct Segments<Storage: AsRef<[u8]> + AsMut<[u8]> + Send + 'static> {
-    send_task: tokio::task::JoinHandle<Result<(), SegmentError>>,
+    send_task: task::JoinHandle<Result<(), SegmentError>>,
     incoming_events_tx: mpsc::Sender<IncomingPDU<control::Ack>>,
     outgoing_queue: mpsc::Sender<OutgoingUpperTransportMessage<Storage>>,
 }
@@ -245,7 +243,7 @@ impl<Storage: AsRef<[u8]> + AsMut<[u8]> + Send + 'static> Segments<Storage> {
         let (ack_tx, ack_rx) = mpsc::channel(channel_capacity);
         let (queue_tx, queue_rx) = mpsc::channel(channel_capacity);
         Self {
-            send_task: tokio::task::spawn(Self::send_loop(ack_rx, queue_rx, outgoing_pdus)),
+            send_task: task::spawn(Self::send_loop(ack_rx, queue_rx, outgoing_pdus)),
             incoming_events_tx: ack_tx,
             outgoing_queue: queue_tx,
         }
@@ -285,7 +283,7 @@ pub struct ReassemblerHandle {
     pub src: UnicastAddress,
     pub seq_zero: SeqZero,
     pub sender: mpsc::Sender<IncomingPDU<lower::SegmentedPDU>>,
-    pub handle: JoinHandle<Result<IncomingTransportPDU<Box<[u8]>>, ReassemblyError>>,
+    pub handle: task::JoinHandle<Result<IncomingTransportPDU<Box<[u8]>>, ReassemblyError>>,
 }
 pub struct Reassembler {
     incoming_channels: BTreeMap<(UnicastAddress, lower::SeqZero), ReassemblerHandle>,
@@ -321,7 +319,7 @@ impl Reassembler {
             Entry::Vacant(v) => {
                 let (tx, rx) = mpsc::channel(REASSEMBLER_CHANNEL_LEN);
                 let handle =
-                    tokio::spawn(Self::reassemble_segs(pdu, self.outgoing_pdus.clone(), rx));
+                    task::spawn(Self::reassemble_segs(pdu, self.outgoing_pdus.clone(), rx));
                 v.insert(ReassemblerHandle {
                     src: pdu.src,
                     seq_zero: pdu.pdu.seq_zero(),
@@ -374,7 +372,7 @@ impl Reassembler {
             IncomingSegments::new(first_seg).ok_or(ReassemblyError::InvalidFirstSegment)?;
 
         while !segments.is_ready() {
-            let next = tokio::time::timeout(segments.recv_timeout(), rx.recv())
+            let next = time::timeout(segments.recv_timeout(), rx.recv())
                 .await
                 .map_err(|_| ReassemblyError::Timeout)?
                 .ok_or(ReassemblyError::ChannelClosed)?;

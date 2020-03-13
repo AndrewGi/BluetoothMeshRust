@@ -105,8 +105,7 @@ pub async fn dump_adapter<S: btle::hci::stream::HCIStreamable>(
     //adapter.as_mut().le().set_scan_enabled(false, false).await?;
     let mut le = adapter.as_mut().le();
     info!(logger, "scan_parameters");
-    le.set_scan_parameters(le::SetScanParameters::DEFAULT)
-        .await?;
+    le.set_scan_parameters(le::commands::SetScanParameters::DEFAULT).await?;
     info!(logger, "scan_command");
 
     le.set_scan_enabled(true, false).await?;

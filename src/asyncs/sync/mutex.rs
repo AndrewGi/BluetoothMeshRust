@@ -7,7 +7,7 @@ pub mod mutex_impl {
 
     pub type ActualMutex<T> = tokio::sync::Mutex<T>;
     pub type ActualMutexGuard<'a, T> = tokio::sync::MutexGuard<'a, T>;
-
+    #[derive(Debug)]
     pub struct MutexImpl<T>(ActualMutex<T>);
     impl<T> MutexImpl<T> {
         pub fn new(t: T) -> Self {
@@ -41,7 +41,7 @@ pub mod mutex_impl {
         }
     }
 }
-
+#[derive(Debug)]
 pub struct Mutex<T>(mutex_impl::MutexImpl<T>);
 
 impl<T> Mutex<T> {

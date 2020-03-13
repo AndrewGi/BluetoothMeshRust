@@ -1,5 +1,8 @@
 //! Incoming PDU message handler.
-use crate::asyncs::sync::{mpsc, Mutex, RwLock};
+use crate::asyncs::{
+    sync::{mpsc, Mutex, RwLock},
+    task,
+};
 use crate::control;
 use crate::relay::RelayPDU;
 use crate::stack::bearer::IncomingEncryptedNetworkPDU;
@@ -12,15 +15,14 @@ use crate::stack::{segments, RecvError, StackInternals};
 use crate::{lower, replay};
 use alloc::sync::Arc;
 use core::convert::TryFrom;
-use tokio::task::JoinHandle;
 
 /// Asynchronous incoming message handler stack. Input Encrypted Network PDUs and it Outputs Acks,
 /// Control and Encrypted Access PDUs. This will only mutate a `replay::Cache` state but it does
 /// not mutate `StackInternals`.
 pub struct Incoming {
-    net_handler: JoinHandle<Result<(), RecvError>>,
-    encrypted_net_handler: JoinHandle<Result<(), RecvError>>,
-    encrypted_access_handler: JoinHandle<Result<(), RecvError>>,
+    net_handler: task::JoinHandle<Result<(), RecvError>>,
+    encrypted_net_handler: task::JoinHandle<Result<(), RecvError>>,
+    encrypted_access_handler: task::JoinHandle<Result<(), RecvError>>,
 }
 impl Incoming {
     pub fn new(
@@ -37,21 +39,21 @@ impl Incoming {
         let (tx_encrypted_access, rx_encrypted_access) = mpsc::channel(channel_size);
         let reassembler = Arc::new(Mutex::new(segments::Reassembler::new(outgoing_transport)));
         Self {
-            encrypted_net_handler: tokio::task::spawn(Self::handle_encrypted_net_pdu_loop(
+            encrypted_net_handler: task::spawn(Self::handle_encrypted_net_pdu_loop(
                 internals.clone(),
                 replay_cache,
                 None,
                 incoming_net,
                 tx_incoming_net,
             )),
-            net_handler: tokio::task::spawn(Self::handle_net_loop(
+            net_handler: task::spawn(Self::handle_net_loop(
                 reassembler,
                 tx_ack,
                 tx_control.clone(),
                 tx_encrypted_access.clone(),
                 rx_incoming_net,
             )),
-            encrypted_access_handler: tokio::task::spawn(Self::handle_encrypted_access_loop(
+            encrypted_access_handler: task::spawn(Self::handle_encrypted_access_loop(
                 internals,
                 rx_encrypted_access,
                 tx_access,

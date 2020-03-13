@@ -1,8 +1,8 @@
 use crate::stack::bearer::{BearerError, OutgoingMessage};
 use btle::advertiser::Advertiser;
 use core::pin::Pin;
+use core::task::{Context, Poll};
 use futures_sink::Sink;
-use futures_util::task::{Context, Poll};
 
 pub struct AdvertiserSink<A: Advertiser>(A);
 impl<A: Advertiser> AdvertiserSink<A> {

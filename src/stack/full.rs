@@ -6,7 +6,10 @@ use crate::stack::bearer;
 use crate::replay;
 use crate::stack::{incoming, outgoing, RecvError, SendError, StackInternals};
 
-use crate::asyncs::sync::{mpsc, Mutex, RwLock};
+use crate::asyncs::{
+    sync::{mpsc, Mutex, RwLock},
+    task,
+};
 use crate::stack::bearer::{BearerError, IncomingMessage, OutgoingMessage};
 use crate::stack::incoming::Incoming;
 use crate::stack::outgoing::Outgoing;
@@ -49,7 +52,7 @@ impl FullStack {
         let (tx_ack, rx_ack) = mpsc::channel(channel_size);
         let internals = Arc::new(RwLock::new(internals));
         let replay_cache = Arc::new(Mutex::new(replay_cache));
-        let _outgoing_bearer = tokio::spawn(async move {
+        let _outgoing_bearer = task::spawn(async move {
             // move out_bearer
             futures_util::pin_mut!(out_bearer);
             while let Some(msg) = rx_bearer.recv().await {

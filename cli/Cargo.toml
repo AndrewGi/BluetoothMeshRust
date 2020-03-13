@@ -25,7 +25,7 @@ futures-io = {version = "0.3.4", default_features = false}
 futures-util = {version = "0.3.4", default_features = false}
 structopt = {version ="0.3.11"}
 [target.'cfg(unix)'.dependencies]
-btle = {path = "../btle", features= ["bluez_async"]}
+btle = {path = "../btle", features= ["bluez"]}
 
 [target.'cfg(not(unix))'.dependencies]
-btle = {path = "../btle", features= ["async"]}
+btle = {path = "../btle", features= []}
