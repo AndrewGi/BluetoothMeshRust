@@ -21,25 +21,25 @@ pub enum LowerHeader {
     AID(Option<AID>),
 }
 impl LowerHeader {
-    pub fn is_control(&self) -> bool {
+    pub fn is_control(self) -> bool {
         match self {
             LowerHeader::ControlOpcode(_) => true,
             LowerHeader::AID(_) => false,
         }
     }
-    pub fn is_access(&self) -> bool {
+    pub fn is_access(self) -> bool {
         !self.is_control()
     }
-    pub fn opcode(&self) -> Option<ControlOpcode> {
+    pub fn opcode(self) -> Option<ControlOpcode> {
         match self {
-            LowerHeader::ControlOpcode(opcode) => Some(*opcode),
+            LowerHeader::ControlOpcode(opcode) => Some(opcode),
             LowerHeader::AID(_) => None,
         }
     }
-    pub fn aid(&self) -> Option<AID> {
+    pub fn aid(self) -> Option<AID> {
         match self {
             LowerHeader::ControlOpcode(_) => None,
-            LowerHeader::AID(aid) => *aid,
+            LowerHeader::AID(aid) => aid,
         }
     }
 }
@@ -56,7 +56,7 @@ impl ContextHeader {
             lower_header,
             seg_o,
             flag,
-            block_ack: Default::default(),
+            block_ack: BlockAck::ZERO,
         }
     }
     #[must_use]
@@ -69,7 +69,7 @@ impl ContextHeader {
     }
     #[must_use]
     pub fn seg_count(&self) -> usize {
-        usize::from(u8::from(self.seg_o)) + 1usize
+        usize::from(u8::from(self.seg_o)) + 1_usize
     }
     #[must_use]
     pub const fn block_ack(&self) -> BlockAck {
@@ -114,7 +114,7 @@ impl ContextHeader {
     }
     #[must_use]
     pub fn mic_size_bytes(&self) -> usize {
-        self.mic_size().map(MicSize::byte_size).unwrap_or(0)
+        self.mic_size().map_or(0, MicSize::byte_size)
     }
 }
 #[derive(Clone, Debug)]
@@ -176,9 +176,7 @@ impl Context {
     }
 
     pub fn finish(mut self) -> Result<upper::PDU<Box<[u8]>>, Context> {
-        if !self.is_ready() {
-            Err(self)
-        } else {
+        if self.is_ready() {
             let len = self.data_len;
             self.storage.truncate(len);
             let mic = self.mic();
@@ -195,6 +193,8 @@ impl Context {
                     aid,
                 })),
             }
+        } else {
+            Err(self)
         }
     }
 }

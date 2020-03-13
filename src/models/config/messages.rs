@@ -259,9 +259,7 @@ pub mod relay {
         }
 
         fn unpack_from(buffer: &[u8]) -> Result<Self, MessagePackError> {
-            if buffer.len() != 2 {
-                Err(MessagePackError::BadLength)
-            } else {
+            if buffer.len() == 2 {
                 Ok(Set(
                     buffer[0]
                         .try_into()
@@ -272,6 +270,8 @@ pub mod relay {
                             .map_err(|_| MessagePackError::BadBytes)?,
                     ),
                 ))
+            } else {
+                Err(MessagePackError::BadLength)
             }
         }
     }
@@ -297,9 +297,7 @@ pub mod relay {
         }
 
         fn unpack_from(buffer: &[u8]) -> Result<Self, MessagePackError> {
-            if buffer.len() != 2 {
-                Err(MessagePackError::BadLength)
-            } else {
+            if buffer.len() == 2 {
                 Ok(Status(
                     buffer[0]
                         .try_into()
@@ -310,6 +308,8 @@ pub mod relay {
                             .map_err(|_| MessagePackError::BadBytes)?,
                     ),
                 ))
+            } else {
+                Err(MessagePackError::BadLength)
             }
         }
     }

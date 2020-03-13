@@ -9,7 +9,7 @@ impl LinkID {
     pub fn new(link_id: u32) -> LinkID {
         LinkID(link_id)
     }
-    pub fn value(&self) -> u32 {
+    pub fn value(self) -> u32 {
         self.0
     }
 }
@@ -21,10 +21,10 @@ const PROVISIONER_END: u8 = 0x7F;
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub struct TransactionNumber(pub u8);
 impl TransactionNumber {
-    pub fn new(trans_num: u8) -> TransactionNumber {
+    pub const fn new(trans_num: u8) -> TransactionNumber {
         TransactionNumber(trans_num)
     }
-    pub fn value(&self) -> u8 {
+    pub fn value(self) -> u8 {
         self.0
     }
     pub fn new_provisionee() -> TransactionNumber {
@@ -33,13 +33,13 @@ impl TransactionNumber {
     pub fn new_provisioner() -> TransactionNumber {
         Self::new(PROVISIONER_START)
     }
-    pub fn is_provisionee(&self) -> bool {
+    pub fn is_provisionee(self) -> bool {
         self.0 >= PROVISIONEE_START && self.0 <= PROVISIONEE_END
     }
-    pub fn is_provisioner(&self) -> bool {
+    pub fn is_provisioner(self) -> bool {
         self.0 >= PROVISIONER_START && self.0 <= PROVISIONER_END
     }
-    pub fn next(&self) -> TransactionNumber {
+    pub fn next(self) -> TransactionNumber {
         // Provisionee 0x80-0xFF
         // Provisioner 0x00-0x7F
         // Check if were at the end of the range and we have to wrap to the start
@@ -47,10 +47,8 @@ impl TransactionNumber {
             if self.0 == PROVISIONEE_END {
                 return Self::new(PROVISIONEE_START);
             }
-        } else {
-            if self.0 == PROVISIONER_END {
-                return Self::new(PROVISIONER_START);
-            }
+        } else if self.0 == PROVISIONER_END {
+            return Self::new(PROVISIONER_START);
         }
         Self::new(self.0 + 1)
     }

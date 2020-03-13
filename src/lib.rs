@@ -15,7 +15,9 @@
     clippy::cast_possible_truncation,
     clippy::use_self,
     clippy::doc_markdown,
-    clippy::module_name_repetitions
+    clippy::module_name_repetitions,
+    clippy::must_use_candidate,
+    clippy::missing_errors_doc
 )]
 
 #[cfg(feature = "std")]

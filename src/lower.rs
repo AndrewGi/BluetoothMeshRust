@@ -23,7 +23,7 @@ impl From<bool> for SZMIC {
         SZMIC(b)
     }
 }
-pub const SEQ_ZERO_MAX: u16 = (1u16 << 13) - 1;
+pub const SEQ_ZERO_MAX: u16 = (1_u16 << 13) - 1;
 ///13 Bits SeqZero. Derived from `SeqAuth`
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
@@ -123,11 +123,12 @@ impl From<SegN> for u8 {
 #[derive(Copy, Clone, Hash, Debug, Ord, PartialOrd, Eq, PartialEq, Default)]
 pub struct BlockAck(pub u32);
 impl BlockAck {
+    pub const ZERO: BlockAck = BlockAck(0);
     pub const fn new() -> Self {
         Self(0)
     }
     pub fn new_all_acked(seg_o: SegO) -> Self {
-        Self((1 << u32::from(u8::from(seg_o) + 1u8)) - 1)
+        Self((1 << u32::from(u8::from(seg_o) + 1_u8)) - 1)
     }
     /// Sets the `bit` bit to 1. Does nothing if bit > 32
     pub fn set(&mut self, bit: u8) {
@@ -224,7 +225,7 @@ impl SegmentHeader {
     }
     #[must_use]
     pub fn pack_into_u24(&self) -> U24 {
-        let mut out = 0u32;
+        let mut out = 0_u32;
         out |= u32::from(u8::from(self.seg_n));
         out |= u32::from(u8::from(self.seg_o) << 5);
         out |= u32::from(u16::from(self.seq_zero) << 10);

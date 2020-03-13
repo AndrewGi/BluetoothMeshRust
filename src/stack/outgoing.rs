@@ -102,7 +102,7 @@ impl Outgoing {
         let nid = net_sm.network_keys().nid();
         let ctl = CTL(msg.segments.upper_pdu.is_control());
         let transmit_parameters = internals.device_state().config_states().network_transmit.0;
-        let ttl = msg.ttl.unwrap_or(internals.default_ttl());
+        let ttl = msg.ttl.unwrap_or_else(|| internals.default_ttl());
         let mut ack_rx = self.ack_rx.lock().await;
         let make_net_header = |seq: SequenceNumber| Header {
             ivi,

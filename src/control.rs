@@ -227,9 +227,7 @@ impl ControlMessage for Ack {
     }
 
     fn unpack(buf: &[u8]) -> Result<Self, ControlMessageError> {
-        if buf.len() != ACK_SIZE {
-            Err(ControlMessageError::BadLength)
-        } else {
+        if buf.len() == ACK_SIZE {
             let seq = u16::from_bytes_le(&buf[..2]).expect("seq_zero is always here");
             let seq_zero = SeqZero::new((seq >> 2) & SEQ_ZERO_MAX);
             let obo = seq & 0x8000 != 0;
@@ -240,6 +238,8 @@ impl ControlMessage for Ack {
                 seq_zero,
                 block_ack,
             })
+        } else {
+            Err(ControlMessageError::BadLength)
         }
     }
 

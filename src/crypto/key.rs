@@ -152,8 +152,9 @@ impl IdentityKey {
 }
 impl From<&NetKey> for IdentityKey {
     fn from(k: &NetKey) -> Self {
-        let salt = s1("nkik");
         const P: &str = "id128\x01";
+        let salt = s1("nkik");
+
         k1(k.key(), salt, P.as_bytes()).into()
     }
 }
@@ -193,8 +194,8 @@ impl BeaconKey {
 }
 impl From<&NetKey> for BeaconKey {
     fn from(k: &NetKey) -> Self {
-        let salt = s1("nkbk");
         const P: &str = "id128\x01";
+        let salt = s1("nkbk");
         k1(k.key(), salt, P.as_bytes()).into()
     }
 }

@@ -89,7 +89,7 @@ impl ElementComposition {
         buf[0..2].copy_from_slice(&self.location.to_bytes_le());
         buf[2] = self.num_s();
         buf[3] = self.num_v();
-        let mut position = 0usize;
+        let mut position = 0_usize;
         for model in self.sig_models.iter() {
             // This could be change to a debug_assert.
             assert!(model.is_sig(), "non SIG model in sig_models");
@@ -246,7 +246,7 @@ impl ElementsComposition {
     pub fn pack_into(&self, buf: &mut [u8]) {
         assert!(buf.len() >= self.byte_len());
         let buf = &mut buf[..self.byte_len()];
-        let mut position = 0usize;
+        let mut position = 0_usize;
         for element in self.0.iter() {
             element.pack_into(&mut buf[position..position + element.byte_len()]);
             position += element.byte_len();

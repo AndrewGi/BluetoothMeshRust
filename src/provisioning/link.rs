@@ -5,7 +5,7 @@ use core::sync::atomic::Ordering;
 #[derive(Debug)]
 pub struct AtomicTransactionNumber(core::sync::atomic::AtomicU8);
 impl AtomicTransactionNumber {
-    pub fn new(num: TransactionNumber) -> Self {
+    pub const fn new(num: TransactionNumber) -> Self {
         Self(core::sync::atomic::AtomicU8::new(num.0))
     }
     pub fn get(&self) -> TransactionNumber {

@@ -557,7 +557,11 @@ pub struct PrivateHeader<'a> {
     deobfuscated: &'a DeobfuscatedHeader,
 }
 impl<'a> PrivateHeader<'a> {
-    pub fn new(ivi: IVI, nid: NID, deobfuscated_header: &'a DeobfuscatedHeader) -> PrivateHeader {
+    pub const fn new(
+        ivi: IVI,
+        nid: NID,
+        deobfuscated_header: &'a DeobfuscatedHeader,
+    ) -> PrivateHeader {
         PrivateHeader {
             ivi,
             nid,
@@ -608,17 +612,17 @@ impl DeobfuscatedHeader {
     pub fn new(ctl: CTL, ttl: TTL, seq: SequenceNumber, src: UnicastAddress) -> Self {
         Self { ctl, ttl, seq, src }
     }
-    pub fn ctl(&self) -> CTL {
+    pub const fn ctl(&self) -> CTL {
         self.ctl
     }
-    pub fn seq(&self) -> SequenceNumber {
+    pub const fn seq(&self) -> SequenceNumber {
         self.seq
     }
-    pub fn src(&self) -> UnicastAddress {
+    pub const fn src(&self) -> UnicastAddress {
         self.src
     }
-    pub fn private_header(&self, ivi: IVI, nid: NID) -> PrivateHeader<'_> {
-        PrivateHeader::new(ivi, nid, &self)
+    pub const fn private_header(&self, ivi: IVI, nid: NID) -> PrivateHeader<'_> {
+        PrivateHeader::new(ivi, nid, self)
     }
     /// Returns un-obfuscated plaintext header packed into bytes.
     pub fn pack(&self) -> [u8; OBFUSCATED_LEN] {
@@ -653,13 +657,13 @@ const PECB_LEN: usize = 6;
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Debug)]
 pub struct PECB([u8; PECB_LEN]);
 impl PECB {
-    pub fn new_bytes(bytes: [u8; PECB_LEN]) -> Self {
+    pub const fn new_bytes(bytes: [u8; PECB_LEN]) -> Self {
         Self(bytes)
     }
     /// XOR PECB with `bytes` in-place.
     /// # Panics
     /// Panics if `bytes.len() != PECB_LEN` (6)
-    pub fn xor(&self, bytes: &mut [u8]) {
+    pub fn xor(self, bytes: &mut [u8]) {
         assert_eq!(bytes.len(), PECB_LEN);
         for (b1, b2) in bytes.iter_mut().zip(self.0.as_ref()) {
             *b1 ^= *b2
@@ -684,7 +688,7 @@ impl PrivacyRandom<'_> {
     pub fn pack_with_iv(&self, iv_index: IVIndex) -> PackedPrivacy {
         let mut out = [0_u8; PACKED_PRIVACY_LEN];
         out[5..9].copy_from_slice(&iv_index.to_bytes_be());
-        out[9..].copy_from_slice(&self.0);
+        out[9..].copy_from_slice(self.0);
         PackedPrivacy::new_bytes(out)
     }
 }
@@ -699,7 +703,7 @@ const PACKED_PRIVACY_LEN: usize = 5 + 4 + PRIVACY_RANDOM_LEN;
 pub struct PackedPrivacy([u8; PACKED_PRIVACY_LEN]);
 
 impl PackedPrivacy {
-    pub fn new_bytes(bytes: [u8; PACKED_PRIVACY_LEN]) -> Self {
+    pub const fn new_bytes(bytes: [u8; PACKED_PRIVACY_LEN]) -> Self {
         Self(bytes)
     }
     pub fn encrypt_with(mut self, key: &PrivacyKey) -> PECB {

@@ -113,9 +113,7 @@ impl TryFrom<Opcode> for ConfigOpcode {
                     _ => Err(OpcodeConversationError(())),
                 },
                 DoubleOctet(d) => {
-                    if d & 0xFF00 != 0x8000 {
-                        Err(OpcodeConversationError(()))
-                    } else {
+                    if d & 0xFF00 == 0x8000 {
                         match d & 0x00FF {
                             0x00 => Ok(ConfigOpcode::AppKeyDelete),
                             0x01 => Ok(ConfigOpcode::AppKeyGet),
@@ -155,7 +153,7 @@ impl TryFrom<Opcode> for ConfigOpcode {
                             0x27 => Ok(ConfigOpcode::RelaySet),
                             0x28 => Ok(ConfigOpcode::RelayStatus),
                             0x29 => Ok(ConfigOpcode::SIGModelSubscriptionGet),
-                            0x2A => Ok(ConfigOpcode::SIGModelSubscriptionGet),
+                            0x2A => Ok(ConfigOpcode::SIGModelSubscriptionList),
                             0x2B => Ok(ConfigOpcode::VendorModelSubscriptionGet),
                             0x2C => Ok(ConfigOpcode::VendorModelSubscriptionList),
                             0x2D => Ok(ConfigOpcode::LowPowerNodePollTimeoutGet),
@@ -185,6 +183,8 @@ impl TryFrom<Opcode> for ConfigOpcode {
                             0x4E => Ok(ConfigOpcode::VendorModelAppList),
                             _ => Err(OpcodeConversationError(())),
                         }
+                    } else {
+                        Err(OpcodeConversationError(()))
                     }
                 }
             }
@@ -220,8 +220,8 @@ impl From<ConfigOpcode> for Opcode {
             ConfigOpcode::HeartbeatPublicationSet => DoubleOctet(0x8039).into(),
             ConfigOpcode::HeartbeatPublicationStatus => SingleOctet(0x06).into(),
             ConfigOpcode::HeartbeatSubscriptionGet => DoubleOctet(0x803A).into(),
-            ConfigOpcode::HeartbeatSubscriptionSet => DoubleOctet(0x801B).into(),
-            ConfigOpcode::HeartbeatSubscriptionStatus => DoubleOctet(0x801C).into(),
+            ConfigOpcode::HeartbeatSubscriptionSet => DoubleOctet(0x803B).into(),
+            ConfigOpcode::HeartbeatSubscriptionStatus => DoubleOctet(0x803C).into(),
             ConfigOpcode::KeyRefreshPhaseGet => DoubleOctet(0x8015).into(),
             ConfigOpcode::KeyRefreshPhaseSet => DoubleOctet(0x8016).into(),
             ConfigOpcode::KeyRefreshPhaseStatus => DoubleOctet(0x8017).into(),

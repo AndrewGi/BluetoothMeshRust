@@ -38,7 +38,7 @@ impl From<SigOpcode> for Opcode {
         Opcode::SIG(opcode)
     }
 }
-const VENDOR_OPCODE_MAX: u8 = (1u8 << 6) - 1;
+const VENDOR_OPCODE_MAX: u8 = (1_u8 << 6) - 1;
 /// 6 bit Vendor Opcode
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]

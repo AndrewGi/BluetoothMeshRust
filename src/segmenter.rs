@@ -65,8 +65,7 @@ impl<'a, Storage: AsRef<[u8]>> SegmentIterator<'a, Storage> {
             .segmenter
             .upper_pdu
             .mic()
-            .map(|mic| mic.is_big())
-            .unwrap_or(false);
+            .map_or(false, |mic| mic.is_big());
         SegmentHeader::new(
             flag,
             self.segmenter.seq_auth.seq_zero(),
@@ -97,7 +96,18 @@ impl<'a, Storage: AsRef<[u8]>> Iterator for SegmentIterator<'a, Storage> {
                     Some(lower::SegmentedPDU::Control(out))
                 }
                 upper::PDU::Access(access) => {
-                    if segment_data.len() != SegmentedAccessPDU::max_seg_len() {
+                    if segment_data.len() == SegmentedAccessPDU::max_seg_len() {
+                        let out = lower::SegmentedAccessPDU::new(
+                            access.aid(),
+                            access.mic().is_big().into(),
+                            self.segmenter.seq_auth.seq_zero(),
+                            self.segmenter.seg_o,
+                            seg_n_out,
+                            segment_data,
+                        );
+                        self.seg_n += 1;
+                        Some(lower::SegmentedPDU::Access(out))
+                    } else {
                         let mic = access.mic();
                         let seg_len = segment_data.len();
                         let mut buf = [0_u8; SegmentedAccessPDU::max_seg_len() + MIC::big_size()];
@@ -113,17 +123,6 @@ impl<'a, Storage: AsRef<[u8]>> Iterator for SegmentIterator<'a, Storage> {
                                 seg_len + mic.byte_size(),
                                 SegmentedAccessPDU::max_seg_len(),
                             )],
-                        );
-                        self.seg_n += 1;
-                        Some(lower::SegmentedPDU::Access(out))
-                    } else {
-                        let out = lower::SegmentedAccessPDU::new(
-                            access.aid(),
-                            access.mic().is_big().into(),
-                            self.segmenter.seq_auth.seq_zero(),
-                            self.segmenter.seg_o,
-                            seg_n_out,
-                            segment_data,
                         );
                         self.seg_n += 1;
                         Some(lower::SegmentedPDU::Access(out))

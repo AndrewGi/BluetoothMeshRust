@@ -105,8 +105,8 @@ where
         // The byte FLAGS is composed by the following 8 bits:
         //   0-2 bits: used to represent the value of q-1
         //   3-7 bits: always 0's
-        let mut b = [0u8; AES_BLOCK_SIZE];
-        let mut tag = [0u8; AES_BLOCK_SIZE];
+        let mut b = [0_u8; AES_BLOCK_SIZE];
+        let mut tag = [0_u8; AES_BLOCK_SIZE];
 
         // Generating the authentication tag ----------------------------------
 
@@ -181,8 +181,8 @@ where
         //   3-5 bits: MAC length (encoded as: (mlen-2)/2)
         //   6: Adata (0 if alen == 0, and 1 otherwise)
         //   7: always 0
-        let mut b = [0u8; AES_BLOCK_SIZE];
-        let mut t = [0u8; AES_BLOCK_SIZE];
+        let mut b = [0_u8; AES_BLOCK_SIZE];
+        let mut t = [0_u8; AES_BLOCK_SIZE];
 
         // Decryption ---------------------------------------------------------
 
@@ -267,8 +267,8 @@ fn ccm_cbc_mac(t: &mut [u8; 16], data: &[u8], flag: bool, cipher: &Aes128) {
 fn ccm_ctr_mode(payload: &mut [u8], ctr: &mut [u8], cipher: &Aes128) {
     let plen = payload.len();
 
-    let mut buffer = [0u8; AES_BLOCK_SIZE];
-    let mut nonce = [0u8; AES_BLOCK_SIZE];
+    let mut buffer = [0_u8; AES_BLOCK_SIZE];
+    let mut nonce = [0_u8; AES_BLOCK_SIZE];
     // Copy the counter to the nonce
     nonce.copy_from_slice(ctr);
 

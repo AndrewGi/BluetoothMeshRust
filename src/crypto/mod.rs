@@ -7,9 +7,7 @@ use core::convert::TryFrom;
 /// Helper function to convert a 16 byte (32 character) hex string to 16 byte array.
 /// Returns `None` if `hex.len() != 32` or if `hex` contains non-hex characters.
 pub fn hex_16_to_array(hex: &str) -> Option<[u8; 16]> {
-    if hex.len() != 32 {
-        None
-    } else {
+    if hex.len() == 32 {
         let mut out = [0_u8; 16];
         for (pos, c) in hex.chars().enumerate() {
             let value = u8::try_from(c.to_digit(16)?).ok()?;
@@ -21,6 +19,8 @@ pub fn hex_16_to_array(hex: &str) -> Option<[u8; 16]> {
             }
         }
         Some(out)
+    } else {
+        None
     }
 }
 
@@ -201,12 +201,12 @@ impl TryFrom<&[u8]> for Salt {
     type Error = TryFromBlockError;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        if value.len() != SALT_LEN {
-            Err(TryFromBlockError(()))
-        } else {
+        if value.len() == SALT_LEN {
             let mut buf = Salt([0_u8; SALT_LEN]);
             buf.0.copy_from_slice(value);
             Ok(buf)
+        } else {
+            Err(TryFromBlockError(()))
         }
     }
 }

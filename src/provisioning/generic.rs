@@ -29,7 +29,7 @@ pub enum GPCF {
     BearerControl = 0b11,
 }
 impl GPCF {
-    pub fn pack_with(self, six_bits: u8) -> u8 {
+    pub const fn pack_with(self, six_bits: u8) -> u8 {
         // Mask u8 into a u6.
         let bits = six_bits & 0x3F;
         (bits << 2) | (self as u8)
@@ -152,7 +152,7 @@ impl TransactionContinuationPDU {
     pub fn new(seg_i: SegmentIndex) -> Self {
         Self { seg_i }
     }
-    pub fn as_u8(&self) -> u8 {
+    pub fn as_u8(self) -> u8 {
         GPCF::TransactionContinuation.pack_with(self.seg_i.0)
     }
 }

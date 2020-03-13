@@ -1,10 +1,10 @@
 //! Bluetooth Mesh Bearers.
-use crate::btle::RSSI;
 use crate::mesh::TransmitInterval;
 use crate::{beacon, net};
 use btle::advertisement::OutgoingAdvertisement;
 use btle::advertiser::AdvertiserError;
 use btle::poll_function::poll_fn;
+use btle::RSSI;
 use core::pin::Pin;
 use futures_sink::Sink;
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]

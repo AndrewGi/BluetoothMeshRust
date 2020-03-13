@@ -43,7 +43,7 @@ impl<Storage: AsRef<[u8]>> OutgoingSegments<Storage> {
             Err(AckError::BadIVIndex)
         } else if !ack.pdu.block_ack.valid_for(self.segments.seg_o()) {
             Err(AckError::BadBlockAck)
-        } else if !ack.dst.unicast().map(|u| u == self.src).unwrap_or(false) {
+        } else if !ack.dst.unicast().map_or(false, |u| u == self.src) {
             Err(AckError::BadDst)
         } else {
             Ok(self.block_ack.is_new(ack.pdu.block_ack))
@@ -79,9 +79,7 @@ pub struct IncomingSegments {
 impl IncomingSegments {
     pub fn new(first_seg: IncomingPDU<lower::SegmentedPDU>) -> Option<Self> {
         let seg_header = first_seg.pdu.segment_header();
-        if u8::from(seg_header.seg_n) != 0 {
-            None
-        } else {
+        if u8::from(seg_header.seg_n) == 0 {
             let lower_header = match first_seg.pdu {
                 SegmentedPDU::Access(a) => LowerHeader::AID(a.aid()),
                 SegmentedPDU::Control(c) => LowerHeader::ControlOpcode(c.opcode()),
@@ -100,12 +98,14 @@ impl IncomingSegments {
                     first_seg.iv_index,
                 ),
                 net_key_index: first_seg.net_key_index,
-                ack_ttl: if u8::from(first_seg.ttl) == 0u8 {
+                ack_ttl: if u8::from(first_seg.ttl) == 0_u8 {
                     Some(TTL::new(0))
                 } else {
                     None
                 },
             })
+        } else {
+            None
         }
     }
     pub const fn recv_timeout(&self) -> time::Duration {
@@ -126,9 +126,7 @@ impl IncomingSegments {
         self.seq_auth
     }
     pub fn finish(self) -> Result<IncomingTransportPDU<Box<[u8]>>, Self> {
-        if !self.is_ready() {
-            Err(self)
-        } else {
+        if self.is_ready() {
             let seq_auth = self.seq_auth();
             Ok(IncomingTransportPDU {
                 upper_pdu: self.context.finish().expect("context is ensured ready"),
@@ -141,6 +139,8 @@ impl IncomingSegments {
                 src: self.segs_src,
                 dst: self.segs_dst,
             })
+        } else {
+            Err(self)
         }
     }
 }

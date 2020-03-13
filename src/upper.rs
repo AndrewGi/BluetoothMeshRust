@@ -37,10 +37,10 @@ impl<Storage: AsRef<[u8]>> PDU<Storage> {
         let l = self.total_len();
         let n = l / self.max_seg_len();
         SegO::new(
-            u8::try_from(if n * self.max_seg_len() != l {
-                n + 1
-            } else {
+            u8::try_from(if n * self.max_seg_len() == l {
                 n
+            } else {
+                n + 1
             })
             .expect("can't send this much data"),
         )
@@ -81,7 +81,7 @@ impl<Storage: AsRef<[u8]>> PDU<Storage> {
         }
     }
     pub fn total_len(&self) -> usize {
-        self.payload_len() + self.mic().map(|mic| mic.byte_size()).unwrap_or(0)
+        self.payload_len() + self.mic().map_or(0, |mic| mic.byte_size())
     }
 }
 impl<Storage: Clone + AsRef<[u8]>> Clone for PDU<Storage> {
@@ -98,6 +98,7 @@ impl From<lower::UnsegmentedAccessPDU> for EncryptedAppPayload<Box<[u8]>> {
     }
 }
 /// Application Security Materials used to encrypt and decrypt at the application layer.
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub enum SecurityMaterials<'a> {
     VirtualAddress(AppNonce, &'a AppKey, AID, &'a VirtualAddress),
     App(AppNonce, &'a AppKey, AID),
@@ -120,7 +121,7 @@ impl SecurityMaterials<'_> {
         let (nonce, key, aad) = self.unpack();
         AESCipher::new(*key).ccm_encrypt(nonce, aad, payload, mic_size)
     }
-    #[must_use]
+
     pub fn decrypt(&self, payload: &mut [u8], mic: MIC) -> Result<(), Error> {
         let (nonce, key, aad) = self.unpack();
         AESCipher::new(*key).ccm_decrypt(nonce, aad, payload, mic)
@@ -132,8 +133,9 @@ impl SecurityMaterials<'_> {
     #[must_use]
     pub fn aid(&self) -> Option<AID> {
         match self {
-            SecurityMaterials::VirtualAddress(_, _, aid, _) => Some(*aid),
-            SecurityMaterials::App(_, _, aid) => Some(*aid),
+            SecurityMaterials::VirtualAddress(_, _, aid, _) | SecurityMaterials::App(_, _, aid) => {
+                Some(*aid)
+            }
             SecurityMaterials::Device(_, _) => None,
         }
     }
@@ -278,7 +280,7 @@ impl<'a, Storage: AsRef<[u8]>> AppPayload<Storage> {
 pub fn calculate_seg_o(data_len: usize, pdu_size: usize) -> SegO {
     let l = data_len;
     let n = data_len / pdu_size;
-    let n = if n * pdu_size * n != l { n + 1 } else { n };
+    let n = if n * pdu_size * n == l { n } else { n + 1 };
     SegO::new(u8::try_from(n).expect("data_len longer than ENCRYPTED_APP_PAYLOAD_MAX_LEN"))
 }
 pub struct EncryptedAppPayload<Storage: AsRef<[u8]>> {
@@ -313,7 +315,6 @@ impl<Storage: AsRef<[u8]>> EncryptedAppPayload<Storage> {
     pub fn mic(&self) -> MIC {
         self.mic
     }
-    #[must_use]
     pub fn decrypt(self, sm: SecurityMaterials) -> Result<AppPayload<Storage>, Error>
     where
         Storage: AsMut<[u8]>,
@@ -336,10 +337,10 @@ impl<Storage: AsRef<[u8]>> EncryptedAppPayload<Storage> {
         self.len() > UnsegmentedAccessPDU::max_len()
     }
     pub fn as_unsegmented(&self) -> Option<UnsegmentedAccessPDU> {
-        if !self.should_segment() {
-            None
-        } else {
+        if self.should_segment() {
             Some(UnsegmentedAccessPDU::new(self.aid(), self.data()))
+        } else {
+            None
         }
     }
     pub fn into_storage(self) -> Storage {

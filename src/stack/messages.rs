@@ -5,15 +5,15 @@
 //! parameters for every function, we just wrap the PDUs.
 
 use crate::address::{Address, UnicastAddress};
-use crate::btle::RSSI;
 use crate::crypto::aes::MicSize;
 use crate::crypto::nonce::{AppNonce, AppNonceParts, DeviceNonce, DeviceNonceParts};
 use crate::device_state::SeqRange;
-use crate::lower::{SegO, SeqAuth};
+use crate::lower::{BlockAck, SegO, SeqAuth};
 use crate::mesh::{AppKeyIndex, ElementIndex, IVIndex, NetKeyIndex, SequenceNumber, NID, TTL};
 use crate::stack::segments;
 use crate::upper::{AppPayload, EncryptedAppPayload};
 use crate::{control, lower, net, segmenter, upper};
+use btle::RSSI;
 
 pub enum MessageKeys {
     Device(NetKeyIndex),
@@ -67,13 +67,13 @@ impl<Storage: AsRef<[u8]>> OutgoingMessage<Storage> {
         self.force_segment || self.app_payload.should_segment(self.mic_size)
     }
     pub fn seg_o(&self) -> Option<SegO> {
-        if !self.should_segment() {
-            None
-        } else {
+        if self.should_segment() {
             Some(upper::calculate_seg_o(
                 self.data_with_mic_len(),
                 lower::SegmentedAccessPDU::max_seg_len(),
             ))
+        } else {
+            None
         }
     }
 }
@@ -103,7 +103,7 @@ impl<Storage: AsRef<[u8]>> OutgoingUpperTransportMessage<Storage> {
                 seg_o: self.seg_count,
                 seq_auth: SeqAuth::new(self.seq.start(), self.iv_index),
             },
-            block_ack: Default::default(),
+            block_ack: BlockAck::ZERO,
             net_key_index: self.net_key_index,
             src: self.src,
             dst: self.dst,

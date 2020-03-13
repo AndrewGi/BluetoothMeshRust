@@ -173,11 +173,12 @@ impl StackInternals {
                         let nonce = msg.device_nonce();
                         let mic = msg.encrypted_app_payload.mic();
                         let mut storage: Storage = msg.encrypted_app_payload.into_storage();
-                        if let Ok(_) = SecurityMaterials::Device(
+                        if SecurityMaterials::Device(
                             nonce,
                             &self.device_state.security_materials().dev_key,
                         )
                         .decrypt(&mut storage.as_mut()[..], mic)
+                        .is_ok()
                         {
                             Ok(IncomingMessage {
                                 payload: storage,
@@ -220,7 +221,7 @@ impl StackInternals {
             Some(address) => address,
         };
         let aszmic = msg.should_segment();
-        let seg_count = u8::from(msg.seg_o().unwrap_or(SegO::new(0))) + 1;
+        let seg_count = u8::from(msg.seg_o().unwrap_or_else(|| SegO::new(0))) + 1;
         let (sm, net_key_index, seq) = match msg.encryption_key {
             MessageKeys::Device(net_key_index) => {
                 // Check for a valid net_key
@@ -312,7 +313,7 @@ impl StackInternals {
                 )
             }
         };
-        let ttl = msg.ttl.unwrap_or(self.default_ttl());
+        let ttl = msg.ttl.unwrap_or_else(|| self.default_ttl());
         let encrypted = msg.app_payload.encrypt(&sm, msg.mic_size);
         Ok(OutgoingUpperTransportMessage {
             upper_pdu: upper::PDU::Access(encrypted),
@@ -371,8 +372,7 @@ impl StackInternals {
     fn is_valid_iv_index(&self, iv_index: IVIndex) -> bool {
         self.device_state
             .rx_iv_index(iv_index.ivi())
-            .map(|iv| iv == iv_index)
-            .unwrap_or(false)
+            .map_or(false, |iv| iv == iv_index)
     }
     /// Encrypts a chain of Network PDUs. Useful for encrypting Lower Segmented PDUs all at once.
     pub fn encrypted_network_pdus<I: Iterator<Item = net::PDU>>(
@@ -424,7 +424,7 @@ impl StackInternals {
             msg.net_pdu(
                 net_sm.network_keys().nid(),
                 seq,
-                msg.ttl.unwrap_or(self.device_state.default_ttl()),
+                msg.ttl.unwrap_or_else(|| self.device_state.default_ttl()),
             ),
             net_sm,
         ))

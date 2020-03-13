@@ -307,12 +307,10 @@ impl IVIndex {
     pub fn matching_flags(&self, ivi: IVI, update: IVUpdateFlag) -> Option<IVIndex> {
         if self.ivi() == ivi {
             Some(*self)
+        } else if bool::from(update) {
+            self.next()
         } else {
-            if bool::from(update) {
-                self.next()
-            } else {
-                self.prev()
-            }
+            self.prev()
         }
     }
 }
@@ -539,7 +537,7 @@ impl From<TransmitCount> for u8 {
         count.0
     }
 }
-const STEPS_MAX: u8 = (1u8 << 5) - 1;
+const STEPS_MAX: u8 = (1_u8 << 5) - 1;
 /// 5-bit Transmit Interval Steps
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]

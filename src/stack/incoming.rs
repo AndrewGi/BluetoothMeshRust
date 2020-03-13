@@ -49,8 +49,8 @@ impl Incoming {
             net_handler: task::spawn(Self::handle_net_loop(
                 reassembler,
                 tx_ack,
-                tx_control.clone(),
-                tx_encrypted_access.clone(),
+                tx_control,
+                tx_encrypted_access,
                 rx_incoming_net,
             )),
             encrypted_access_handler: task::spawn(Self::handle_encrypted_access_loop(
@@ -87,7 +87,7 @@ impl Incoming {
         mut incoming: mpsc::Receiver<IncomingNetworkPDU>,
     ) -> Result<(), RecvError> {
         loop {
-            match Self::handle_net(
+            if let Err(RecvError::ChannelClosed) = Self::handle_net(
                 &reassembler,
                 &mut tx_ack,
                 &mut tx_control,
@@ -96,9 +96,7 @@ impl Incoming {
             )
             .await
             {
-                Err(RecvError::ChannelClosed) => return Err(RecvError::ChannelClosed),
-                // Ignore handle_net errors.
-                _ => (),
+                return Err(RecvError::ChannelClosed);
             }
         }
     }
@@ -139,7 +137,7 @@ impl Incoming {
             lower::PDU::UnsegmentedAccess(unseg_access) => tx_access
                 .send(EncryptedIncomingMessage {
                     encrypted_app_payload: unseg_access.into(),
-                    seq: incoming.pdu.header.seq.into(),
+                    seq: incoming.pdu.header.seq,
                     seg_count: 0,
                     iv_index: incoming.iv_index,
                     net_key_index: incoming.net_key_index,

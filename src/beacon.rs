@@ -47,11 +47,11 @@ impl From<OOBFlags> for u16 {
 pub struct OOBInformation(pub u16);
 impl OOBInformation {
     pub fn set(mut self, flag: OOBFlags) -> Self {
-        self.0 |= 1u16 << u16::from(flag);
+        self.0 |= 1_u16 << u16::from(flag);
         self
     }
     pub fn get(self, flag: OOBFlags) -> bool {
-        self.0 & (1u16 << u16::from(flag)) != 0
+        self.0 & (1_u16 << u16::from(flag)) != 0
     }
 }
 #[derive(Copy, Clone, PartialOrd, PartialEq, Ord, Eq, Debug, Hash)]
@@ -89,9 +89,7 @@ impl Beacon for UnprovisionedDeviceBeacon {
     const BEACON_TYPE: BeaconType = BeaconType::Unprovisioned;
 
     fn pack_into(&self, buf: &mut [u8]) -> Result<(), BeaconError> {
-        if buf.len() != self.byte_len() {
-            Err(BeaconError::BadLength)
-        } else {
+        if buf.len() == self.byte_len() {
             buf[..16].copy_from_slice(self.uuid.as_ref());
             buf[16..18].copy_from_slice(&self.oob_information.0.to_be_bytes());
             match self.uri_hash {
@@ -99,6 +97,8 @@ impl Beacon for UnprovisionedDeviceBeacon {
                 None => (),
             }
             Ok(())
+        } else {
+            Err(BeaconError::BadLength)
         }
     }
 
