@@ -21,15 +21,13 @@ maintenance = {status ="actively-developed"}
 
 [features]
 default = ["full_stack"]
-full_stack = ["std", "tokio", "futures-core", "futures-util", "bearer", "asyncs"]
+full_stack = ["std", "btle/tokio_asyncs", "futures-core", "futures-util", "bearer"]
 bearer = ["futures-sink"]
-asyncs = []
 serde-1 = ["serde"]
-std = ["serde/std", "rand/std"]
+std = ["serde/std", "rand/std", "btle/std"]
 
 [dependencies]
 btle = {version = "0.1.2", path = "btle", default-features = false}
-tokio = {version = "0.2.12", optional=true, default-features = false, features=["sync", "rt-core", "time"]}
 futures-core = {version = "0.3.4", optional=true}
 futures-util = {version = "0.3.4", optional=true, default-features = false, features=["alloc"]}
 futures-sink = {version = "0.3.4", optional=true, default-features = false, features=["alloc"]}

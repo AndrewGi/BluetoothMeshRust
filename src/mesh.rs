@@ -178,7 +178,7 @@ pub struct U24(u32);
 const U24_MAX: u32 = (1_u32 << 24) - 1; // 2**24 - 1
 impl Display for U24 {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        write!(f, "U24({})", self.0)
+        write!(f, "{}", self.0)
     }
 }
 impl U24 {

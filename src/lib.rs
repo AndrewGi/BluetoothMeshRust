@@ -29,13 +29,11 @@ extern crate serde;
 
 extern crate alloc;
 extern crate btle;
-pub use btle::bytes;
+pub use btle::{asyncs, bytes};
+
 pub mod random;
 pub mod timestamp;
 pub mod uuid;
-
-#[cfg(feature = "asyncs")]
-pub mod asyncs;
 
 pub mod access;
 pub mod address;

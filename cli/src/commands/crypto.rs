@@ -1,7 +1,7 @@
 use crate::helper::write_device_state;
 use crate::{helper, CLIError};
 use bluetooth_mesh::crypto::key::{AppKey, NetKey};
-use bluetooth_mesh::crypto::materials::{KeyPhase};
+use bluetooth_mesh::crypto::materials::KeyPhase;
 use bluetooth_mesh::mesh::{
     AppKeyIndex, ElementIndex, IVIndex, IVUpdateFlag, KeyIndex, NetKeyIndex, SequenceNumber,
 };
@@ -13,8 +13,7 @@ fn is_key_index(index: String) -> Result<(), String> {
     if u16::from_str(&index)
         .ok()
         .map(KeyIndex::try_from)
-        .map(|r| r.is_ok())
-        .unwrap_or(false)
+        .map_or(false, |r| r.is_ok())
     {
         Ok(())
     } else {
@@ -181,7 +180,10 @@ pub fn crypto_matches(
                 }
                 None => (),
             }
-            println!("device key: {:X}", device_state.security_materials().dev_key.key());
+            println!(
+                "device key: {:X}",
+                device_state.security_materials().dev_key.key()
+            );
         }
         ("netkeys", Some(netkeys_matches)) => {
             // netkeys
