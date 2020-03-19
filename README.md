@@ -1,8 +1,7 @@
 # Bluetooth Mesh Rust
+[![crates.io](https://img.shields.io/crates/v/bluetooth_mesh)](https://crates.io/crates/bluetooth_mesh)
+[![docs.rs](https://docs.rs/bluetooth_mesh/badge.svg)](https://docs.rs/bluetooth_mesh)
 
-[Docs](https://docs.rs/bluetooth_mesh/)
-
-[Crates.io](https://crates.io/crates/bluetooth_mesh) 
 
 !! WIP and API not stable until version 1.0 !!
 
