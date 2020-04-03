@@ -1,7 +1,6 @@
 //! Full Bluetooth Mesh Stack. Takes `IncomingEncryptedNetworkPDU`s and `OutgoingMessages` and takes
 //! care of all the stack layer between them.
 //use crate::interface::{InputInterfaces, InterfaceSink, OutputInterfaces};
-use crate::stack::bearer;
 
 use crate::replay;
 use crate::stack::{incoming, outgoing, RecvError, SendError, StackInternals};
@@ -16,7 +15,6 @@ use crate::stack::incoming::Incoming;
 use crate::stack::outgoing::Outgoing;
 use alloc::sync::Arc;
 use core::ops::{Deref, DerefMut};
-use core::pin::Pin;
 use futures_sink::Sink;
 
 pub struct FullStack {
@@ -39,8 +37,8 @@ impl FullStack {
         OutBearer: Sink<OutgoingMessage, Error = BearerError> + Send + 'static,
         InBearer: Stream<Item = Result<IncomingMessage, BearerError>> + Send + 'static,
     >(
-        out_bearer: OutBearer,
-        mut in_bearer: InBearer,
+        _out_bearer: OutBearer,
+        in_bearer: InBearer,
         internals: StackInternals,
         replay_cache: replay::Cache,
         channel_size: usize,
@@ -56,7 +54,7 @@ impl FullStack {
         let replay_cache = Arc::new(Mutex::new(replay_cache));
         let _outgoing_bearer = task::spawn(async move {
             // move out_bearer
-            futures_util::pin_mut!(out_bearer);
+            futures_util::pin_mut!(_out_bearer);
             while let Some(_msg) = rx_bearer.recv().await {
                 //bearer::send_message(out_bearer.as_mut(), msg).await?;
             }
@@ -73,7 +71,7 @@ impl FullStack {
                         .map_err(|_| RecvError::ChannelClosed)?,
                 }
             }
-            Result::<(), RecvError>::Ok((()))
+            Result::<(), RecvError>::Ok(())
         });
         // Encrypted Incoming Network PDU Handler.
 
