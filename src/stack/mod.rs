@@ -79,6 +79,7 @@ pub enum SendError {
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub enum RecvError {
     ReassemblerError(ReassemblyError),
+    BearerError(bearer::BearerError),
     NoMatchingNetKey,
     NoMatchingAppKey,
     InvalidDeviceKey,

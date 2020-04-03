@@ -395,41 +395,7 @@ impl ToFromBytesEndian for SequenceNumber {
         Some(SequenceNumber(U24::from_bytes_be(bytes)?))
     }
 }
-
-/// 16-bit Bluetooth Company Identifier. Companies are assigned unique Company Identifiers to
-/// Bluetooth SIG members requesting them. [See here for more](https://www.bluetooth.com/specifications/assigned-numbers/company-identifiers/)
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
-#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
-pub struct CompanyID(pub u16);
-impl CompanyID {
-    /// Return the length in bytes of `CompanyID` (2-bytes, 16-bits)
-    pub const fn byte_len() -> usize {
-        2
-    }
-}
-impl ToFromBytesEndian for CompanyID {
-    type AsBytesType = [u8; 2];
-
-    #[must_use]
-    fn to_bytes_le(&self) -> Self::AsBytesType {
-        (self.0).to_bytes_le()
-    }
-
-    #[must_use]
-    fn to_bytes_be(&self) -> Self::AsBytesType {
-        (self.0).to_bytes_be()
-    }
-
-    #[must_use]
-    fn from_bytes_le(bytes: &[u8]) -> Option<Self> {
-        Some(CompanyID(u16::from_bytes_le(bytes)?))
-    }
-
-    #[must_use]
-    fn from_bytes_be(bytes: &[u8]) -> Option<Self> {
-        Some(CompanyID(u16::from_bytes_be(bytes)?))
-    }
-}
+pub use btle::CompanyID;
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash, Ord, PartialOrd)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct ModelID(pub u16);

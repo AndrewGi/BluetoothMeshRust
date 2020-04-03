@@ -7,6 +7,7 @@ use crate::replay;
 use crate::stack::{incoming, outgoing, RecvError, SendError, StackInternals};
 
 use crate::asyncs::{
+    stream::{Stream, StreamExt},
     sync::{mpsc, Mutex, RwLock},
     task,
 };
@@ -15,7 +16,7 @@ use crate::stack::incoming::Incoming;
 use crate::stack::outgoing::Outgoing;
 use alloc::sync::Arc;
 use core::ops::{Deref, DerefMut};
-use futures_core::Stream;
+use core::pin::Pin;
 use futures_sink::Sink;
 
 pub struct FullStack {
@@ -36,16 +37,17 @@ impl FullStack {
     /// have to be reprovisioned as a new nodes and the old allocated Unicast Addresses are lost.
     pub fn new<
         OutBearer: Sink<OutgoingMessage, Error = BearerError> + Send + 'static,
-        InBearer: Stream<Item = IncomingMessage>,
+        InBearer: Stream<Item = Result<IncomingMessage, BearerError>> + Send + 'static,
     >(
         out_bearer: OutBearer,
-        _in_bearer: InBearer,
+        mut in_bearer: InBearer,
         internals: StackInternals,
         replay_cache: replay::Cache,
         channel_size: usize,
     ) -> Self {
         let (tx_bearer, mut rx_bearer) = mpsc::channel(2);
-        let (_tx_incoming_encrypted_net, rx_incoming_encrypted_net) = mpsc::channel(channel_size);
+        let (mut tx_incoming_encrypted_net, rx_incoming_encrypted_net) =
+            mpsc::channel(channel_size);
         let (tx_outgoing_transport, _rx_outgoing_transport) = mpsc::channel(channel_size);
         let (tx_control, _rx_control) = mpsc::channel(CONTROL_CHANNEL_SIZE);
         let (tx_access, _rx_access) = mpsc::channel(channel_size);
@@ -55,11 +57,23 @@ impl FullStack {
         let _outgoing_bearer = task::spawn(async move {
             // move out_bearer
             futures_util::pin_mut!(out_bearer);
-            while let Some(msg) = rx_bearer.recv().await {
-                bearer::send_message(out_bearer.as_mut(), msg).await?;
+            while let Some(_msg) = rx_bearer.recv().await {
+                //bearer::send_message(out_bearer.as_mut(), msg).await?;
             }
-            #[allow(unreachable_code)]
             Result::<(), BearerError>::Ok(())
+        });
+        let _incoming_bearer = task::spawn(async move {
+            futures_util::pin_mut!(in_bearer);
+            while let Some(msg) = in_bearer.as_mut().next().await {
+                let msg: IncomingMessage = msg.map_err(RecvError::BearerError)?;
+                match msg {
+                    IncomingMessage::Network(n) => tx_incoming_encrypted_net
+                        .send(n)
+                        .await
+                        .map_err(|_| RecvError::ChannelClosed)?,
+                }
+            }
+            Result::<(), RecvError>::Ok((()))
         });
         // Encrypted Incoming Network PDU Handler.
 

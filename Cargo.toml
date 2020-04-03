@@ -23,7 +23,7 @@ maintenance = {status ="actively-developed"}
 default = ["full_stack"]
 full_stack = ["std", "btle/tokio_asyncs", "futures-core", "futures-util", "bearer"]
 bearer = ["futures-sink"]
-serde-1 = ["serde"]
+serde-1 = ["serde", "btle/serde-1"]
 std = ["serde/std", "rand/std", "btle/std"]
 
 [dependencies]

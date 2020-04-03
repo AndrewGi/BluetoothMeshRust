@@ -255,7 +255,7 @@ impl SeqRange {
         SequenceNumber(U24::new(self.0.end))
     }
     pub fn seqs_lefts(&self) -> u32 {
-        (self.0.end - self.0.start)
+        self.0.end - self.0.start
     }
     pub fn is_empty(&self) -> bool {
         self.0.start >= self.0.end
