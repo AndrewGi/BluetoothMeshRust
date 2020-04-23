@@ -29,8 +29,8 @@ extern crate serde;
 
 extern crate alloc;
 extern crate btle;
-pub use btle::{asyncs, bytes};
-
+pub use btle::bytes;
+pub use driver_async::asyncs;
 pub mod random;
 pub mod timestamp;
 pub mod uuid;

@@ -21,16 +21,14 @@ maintenance = {status ="actively-developed"}
 
 [features]
 default = ["full_stack"]
-full_stack = ["std", "btle/tokio_asyncs", "futures-core", "futures-util", "bearer"]
-bearer = ["futures-sink"]
+full_stack = ["std", "driver_async/tokio_asyncs", "futures-util"]
 serde-1 = ["serde", "btle/serde-1"]
 std = ["serde/std", "rand/std", "btle/std"]
 
 [dependencies]
-btle = {version = "0.1.2", path = "btle", default-features = false}
-futures-core = {version = "0.3.4", optional=true}
+btle = {version = "0.1.4", path = "btle", default-features = false}
+driver_async = {version = "0.0.2", path="async_driver", default-features = false}
 futures-util = {version = "0.3.4", optional=true, default-features = false, features=["alloc"]}
-futures-sink = {version = "0.3.4", optional=true, default-features = false, features=["alloc"]}
 rand = {version ="0.7", default-features = false}
 aes = "0.3.2"
 aead = "0.2.0"

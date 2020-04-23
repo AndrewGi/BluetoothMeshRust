@@ -6,7 +6,6 @@ use crate::replay;
 use crate::stack::{incoming, outgoing, RecvError, SendError, StackInternals};
 
 use crate::asyncs::{
-    stream::{Stream, StreamExt},
     sync::{mpsc, Mutex, RwLock},
     task,
 };
@@ -15,8 +14,7 @@ use crate::stack::incoming::Incoming;
 use crate::stack::outgoing::Outgoing;
 use alloc::sync::Arc;
 use core::ops::{Deref, DerefMut};
-use futures_sink::Sink;
-
+use futures_util::stream::{Stream, StreamExt};
 pub struct FullStack {
     replay_cache: Arc<Mutex<replay::Cache>>,
     internals: Arc<RwLock<StackInternals>>,
@@ -34,7 +32,7 @@ impl FullStack {
     /// entire time a node is in a Mesh Network. If you lose the `StackInternals`, the node will
     /// have to be reprovisioned as a new nodes and the old allocated Unicast Addresses are lost.
     pub fn new<
-        OutBearer: Sink<OutgoingMessage, Error = BearerError> + Send + 'static,
+        OutBearer: Fn(OutgoingMessage) -> Result<(), BearerError> + Send + 'static,
         InBearer: Stream<Item = Result<IncomingMessage, BearerError>> + Send + 'static,
     >(
         _out_bearer: OutBearer,

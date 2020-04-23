@@ -1,9 +1,7 @@
 //! Bluetooth Mesh Stack that connects all the layers together.
 //! See ['StackInternals'] for more.
 
-#[cfg(feature = "bearer")]
 pub mod bearer;
-#[cfg(feature = "bearer")]
 pub mod bearers;
 pub mod element;
 #[cfg(feature = "full_stack")]

@@ -1,16 +1,13 @@
 //! Bluetooth Mesh Bearers.
 use crate::mesh::TransmitInterval;
 use crate::{beacon, net};
-use btle::le::adapter;
 use btle::le::advertisement::OutgoingAdvertisement;
 use btle::RSSI;
-
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub enum BearerError {
     ReadyError,
     SendError,
     FlushError,
-    AdapterError(adapter::Error),
 }
 
 #[derive(Copy, Clone)]
