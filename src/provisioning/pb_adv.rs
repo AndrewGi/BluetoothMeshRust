@@ -1,11 +1,15 @@
 //! PB-ADV Provisioning bearer for Bluetooth Mesh
 use super::generic;
-use alloc::boxed::Box;
+use crate::provisioning::generic::GENERIC_PDU_MAX_LEN;
+use btle::bytes::StaticBuf;
+use btle::{PackError, RSSI};
+use std::convert::TryInto;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub struct LinkID(u32);
 
 impl LinkID {
+    pub const BYTE_LEN: usize = 4;
     pub fn new(link_id: u32) -> LinkID {
         LinkID(link_id)
     }
@@ -21,6 +25,7 @@ const PROVISIONER_END: u8 = 0x7F;
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub struct TransactionNumber(pub u8);
 impl TransactionNumber {
+    pub const BYTE_LEN: usize = 1;
     pub const fn new(trans_num: u8) -> TransactionNumber {
         TransactionNumber(trans_num)
     }
@@ -69,10 +74,43 @@ impl From<TransactionNumber> for u8 {
         num.0
     }
 }
+#[derive(Copy, Clone, Debug)]
 pub struct PDU {
     pub link_id: LinkID,
     pub transaction_number: TransactionNumber,
-    pub generic_pdu: generic::PDU<Box<[u8]>>,
+    pub generic_pdu: generic::PDU<StaticBuf<u8, [u8; GENERIC_PDU_MAX_LEN]>>,
+}
+impl PDU {
+    pub const HEADER_BYTE_LEN: usize = LinkID::BYTE_LEN + TransactionNumber::BYTE_LEN;
+    pub const MIN_BYTE_LEN: usize = Self::HEADER_BYTE_LEN + 1;
+    pub const MAX_BYTE_LEN: usize = Self::HEADER_BYTE_LEN + GENERIC_PDU_MAX_LEN;
+    pub fn byte_len(&self) -> usize {
+        LinkID::BYTE_LEN + TransactionNumber::BYTE_LEN + self.generic_pdu.byte_len()
+    }
+    pub fn pack_into(&self, buf: &mut [u8]) -> Result<(), PackError> {
+        PackError::expect_length(self.byte_len(), buf)?;
+        self.generic_pdu
+            .pack_into(&mut buf[LinkID::BYTE_LEN + TransactionNumber::BYTE_LEN..])?;
+        buf[..LinkID::BYTE_LEN].copy_from_slice(self.link_id.0.to_be_bytes().as_ref());
+        buf[LinkID::BYTE_LEN] = self.transaction_number.0;
+        Ok(())
+    }
+    pub fn unpack_from(buf: &[u8]) -> Result<Self, PackError> {
+        PackError::atleast_length(Self::MIN_BYTE_LEN, buf)?;
+        Ok(PDU {
+            generic_pdu: generic::PDU::unpack_from(&buf[Self::HEADER_BYTE_LEN..])?,
+            link_id: LinkID(u32::from_be_bytes(
+                (&buf[..LinkID::BYTE_LEN])
+                    .try_into()
+                    .expect("array checked above"),
+            )),
+            transaction_number: TransactionNumber(buf[LinkID::BYTE_LEN]),
+        })
+    }
+}
+pub struct IncomingPDU {
+    pub pdu: PDU,
+    pub rssi: Option<RSSI>,
 }
 pub struct PackedPDU {}
 impl AsRef<[u8]> for PackedPDU {

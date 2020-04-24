@@ -10,7 +10,9 @@ use crate::crypto::nonce::{NetworkNonce, NetworkNonceParts};
 use crate::crypto::MIC;
 use crate::lower;
 use crate::mesh::{IVIndex, SequenceNumber, CTL, IVI, NID, TTL};
-use core::convert::TryInto;
+use btle::le::advertisement::{AdType, RawAdStructureBuffer};
+use btle::ConversionError;
+use core::convert::{TryFrom, TryInto};
 use core::fmt;
 
 pub struct DecryptedData {
@@ -332,6 +334,17 @@ impl OwnedEncryptedPDU {
     pub fn as_ref(&self) -> EncryptedPDU {
         EncryptedPDU {
             data: &self.pdu_buffer[..self.length],
+        }
+    }
+}
+
+impl TryFrom<RawAdStructureBuffer<&[u8]>> for OwnedEncryptedPDU {
+    type Error = ConversionError;
+    fn try_from(ad_struct: RawAdStructureBuffer<&[u8]>) -> Result<Self, Self::Error> {
+        if ad_struct.ad_type == AdType::MeshPDU {
+            Ok(OwnedEncryptedPDU::new(ad_struct.buf).ok_or(ConversionError(()))?)
+        } else {
+            Err(ConversionError(()))
         }
     }
 }

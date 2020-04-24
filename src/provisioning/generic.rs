@@ -1,5 +1,9 @@
 use super::bearer_control;
+
+use btle::bytes::Storage;
+use btle::PackError;
 use core::convert::TryFrom;
+use std::convert::TryInto;
 
 /// 6 bit Segment Number
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
@@ -55,11 +59,30 @@ impl From<GPCF> for u8 {
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash, Default)]
 pub struct TransactionAcknowledgmentPDU {}
 impl TransactionAcknowledgmentPDU {
+    pub const BYTE_LEN: usize = ACK_PDU_HEADER_SIZE as usize;
     pub const fn new() -> Self {
         Self {}
     }
     pub const fn as_u8(self) -> u8 {
         GPCF::TransactionAcknowledgment as u8
+    }
+
+    pub fn pack_into(self, buf: &mut [u8]) -> Result<(), PackError> {
+        PackError::expect_length(Self::BYTE_LEN, buf)?;
+        buf[0] = self.as_u8();
+        Ok(())
+    }
+    pub fn unpack_from(buf: &[u8]) -> Result<Self, PackError> {
+        PackError::expect_length(Self::BYTE_LEN, buf)?;
+        let (gpcf, padding) = GPCF::unpack_with(buf[0]);
+        if gpcf != GPCF::TransactionAcknowledgment {
+            return Err(PackError::BadOpcode);
+        }
+        // According to Mesh Core Spec 5.3.1.2, all other values besides 0 are prohibited for padding.
+        if padding != 0 {
+            return Err(PackError::InvalidFields);
+        }
+        Ok(Self::new())
     }
     pub const fn is_transaction_ack(b: u8) -> bool {
         Self::new().as_u8() == b
@@ -115,6 +138,7 @@ const START_PDU_HEADER_SIZE: u16 = 4;
 const ACK_PDU_HEADER_SIZE: u16 = 1;
 const CONTINUATION_PDU_SIZE: u16 = 1;
 impl TransactionStartPDU {
+    pub const BYTE_LEN: usize = START_PDU_HEADER_SIZE as usize;
     pub fn calculate_seg_n(data_len: u16, max_mtu: MTU) -> SegmentIndex {
         let mtu = u16::from(max_mtu.0);
         let total_len = data_len + START_PDU_HEADER_SIZE + ACK_PDU_HEADER_SIZE;
@@ -143,17 +167,48 @@ impl TransactionStartPDU {
             fcs_calc(data),
         )
     }
+    pub fn pack_into(self, buf: &mut [u8]) -> Result<(), PackError> {
+        PackError::expect_length(Self::BYTE_LEN, buf)?;
+        buf[0] = GPCF::TransactionStart.pack_with(self.seg_n.0);
+        buf[1..3].copy_from_slice(self.total_length.to_be_bytes().as_ref());
+        buf[3] = self.fcs.0;
+        Ok(())
+    }
+    pub fn unpack_from(buf: &[u8]) -> Result<Self, PackError> {
+        PackError::expect_length(Self::BYTE_LEN, buf)?;
+        let (gpcf, seg_n) = GPCF::unpack_with(buf[0]);
+        if gpcf != GPCF::TransactionStart {
+            return Err(PackError::BadOpcode);
+        }
+        let total_len = u16::from_be_bytes((&buf[1..3]).try_into().expect("array checked above"));
+        let fcs = buf[3];
+        Ok(Self::new(SegmentIndex::new(seg_n), total_len, FCS(fcs)))
+    }
 }
 #[derive(Copy, Clone, PartialOrd, PartialEq, Ord, Eq, Debug, Hash)]
 pub struct TransactionContinuationPDU {
     pub seg_i: SegmentIndex,
 }
 impl TransactionContinuationPDU {
+    pub const BYTE_LEN: usize = CONTINUATION_PDU_SIZE as usize;
     pub fn new(seg_i: SegmentIndex) -> Self {
         Self { seg_i }
     }
     pub fn as_u8(self) -> u8 {
         GPCF::TransactionContinuation.pack_with(self.seg_i.0)
+    }
+    pub fn pack_into(self, buf: &mut [u8]) -> Result<(), PackError> {
+        PackError::expect_length(Self::BYTE_LEN, buf)?;
+        buf[0] = self.as_u8();
+        Ok(())
+    }
+    pub fn unpack_from(buf: &[u8]) -> Result<Self, PackError> {
+        PackError::expect_length(Self::BYTE_LEN, buf)?;
+        let (gpcf, seg_i) = GPCF::unpack_with(buf[0]);
+        if gpcf != GPCF::TransactionContinuation {
+            return Err(PackError::BadOpcode);
+        }
+        Ok(TransactionContinuationPDU::new(SegmentIndex::new(seg_i)))
     }
 }
 #[derive(Copy, Clone, PartialOrd, PartialEq, Ord, Eq, Debug, Hash)]
@@ -163,16 +218,116 @@ pub enum Control {
     TransactionAcknowledgement(TransactionAcknowledgmentPDU),
     BearerControl(bearer_control::PDU),
 }
-pub struct PDU<Storage: AsRef<[u8]>> {
-    control: Control,
-    payload: Option<Storage>,
-}
-impl<Storage: AsRef<[u8]> + Clone> Clone for PDU<Storage> {
-    fn clone(&self) -> Self {
-        Self {
-            control: self.control,
-            payload: self.payload.clone(),
+impl Control {
+    pub fn byte_len(&self) -> usize {
+        match self {
+            Control::TransactionStart(_) => TransactionStartPDU::BYTE_LEN,
+            Control::TransactionContinuation(_) => TransactionContinuationPDU::BYTE_LEN,
+            Control::TransactionAcknowledgement(_) => TransactionAcknowledgmentPDU::BYTE_LEN,
+            Control::BearerControl(pdu) => pdu.byte_len(),
         }
+    }
+    pub fn pack_into(&self, buf: &mut [u8]) -> Result<(), PackError> {
+        match self {
+            Control::TransactionStart(p) => p.pack_into(buf),
+            Control::TransactionContinuation(p) => p.pack_into(buf),
+            Control::TransactionAcknowledgement(p) => p.pack_into(buf),
+            Control::BearerControl(p) => p.pack_into(buf),
+        }
+    }
+    pub fn unpack_from(buf: &[u8]) -> Result<Self, PackError> {
+        PackError::atleast_length(1, buf)?;
+        let (gpcf, _) = GPCF::unpack_with(buf[0]);
+        match gpcf {
+            GPCF::TransactionStart => Ok(Control::TransactionStart(
+                TransactionStartPDU::unpack_from(buf)?,
+            )),
+            GPCF::TransactionAcknowledgment => Ok(Control::TransactionAcknowledgement(
+                TransactionAcknowledgmentPDU::unpack_from(buf)?,
+            )),
+            GPCF::TransactionContinuation => Ok(Control::TransactionContinuation(
+                TransactionContinuationPDU::unpack_from(buf)?,
+            )),
+            GPCF::BearerControl => Ok(Control::BearerControl(bearer_control::PDU::unpack_from(
+                buf,
+            )?)),
+        }
+    }
+}
+pub const GENERIC_PDU_MAX_LEN: usize = 24;
+pub const PAYLOAD_MAX_LEN: usize = 64;
+#[derive(Copy, Clone)]
+pub struct PDU<Buf> {
+    pub control: Control,
+    pub payload: Option<Buf>,
+}
+impl<Buf: AsRef<[u8]>> PDU<Buf> {
+    pub fn byte_len(&self) -> usize {
+        self.control.byte_len() + self.payload_len()
+    }
+    pub fn payload_len(&self) -> usize {
+        self.payload.as_ref().map(|l| l.as_ref().len()).unwrap_or(0)
+    }
+    pub fn pack_into(&self, buf: &mut [u8]) -> Result<(), PackError> {
+        let control_len = self.control.byte_len();
+        let payload_len = self.payload_len();
+        PackError::expect_length(control_len + payload_len, buf)?;
+        self.control.pack_into(&mut buf[..control_len])?;
+        if let Some(payload) = self.payload.as_ref() {
+            if payload_len != 0 {
+                buf[control_len..].copy_from_slice(payload.as_ref());
+            }
+        }
+        Ok(())
+    }
+    pub fn unpack_from(buf: &[u8]) -> Result<Self, PackError>
+    where
+        Buf: Storage<u8>,
+    {
+        PackError::atleast_length(1, buf)?;
+        let (gpcf, _) = GPCF::unpack_with(buf[0]);
+        match gpcf {
+            GPCF::TransactionStart => Ok(PDU {
+                control: Control::TransactionStart(TransactionStartPDU::unpack_from(
+                    &buf[..TransactionStartPDU::BYTE_LEN],
+                )?),
+                payload: if buf.len() > TransactionStartPDU::BYTE_LEN {
+                    Some(Buf::from_slice(&buf[TransactionStartPDU::BYTE_LEN..]))
+                } else {
+                    None
+                },
+            }),
+            GPCF::TransactionAcknowledgment => Ok(PDU {
+                control: Control::TransactionAcknowledgement(
+                    TransactionAcknowledgmentPDU::unpack_from(buf)?,
+                ),
+                payload: None,
+            }),
+            GPCF::TransactionContinuation => Ok(PDU {
+                control: Control::TransactionContinuation(TransactionContinuationPDU::unpack_from(
+                    &buf[..TransactionContinuationPDU::BYTE_LEN],
+                )?),
+                payload: if buf.len() > TransactionContinuationPDU::BYTE_LEN {
+                    Some(Buf::from_slice(
+                        &buf[TransactionContinuationPDU::BYTE_LEN..],
+                    ))
+                } else {
+                    None
+                },
+            }),
+            GPCF::BearerControl => Ok(PDU {
+                control: Control::BearerControl(bearer_control::PDU::unpack_from(buf)?),
+                payload: None,
+            }),
+        }
+    }
+}
+impl<T: AsRef<[u8]>> core::fmt::Debug for PDU<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("PDU")
+            .field("control", &self.control)
+            .field("payload", &self.payload.as_ref().map(AsRef::<[u8]>::as_ref))
+            .finish()
     }
 }
 pub struct SegmentGenerator<'a> {

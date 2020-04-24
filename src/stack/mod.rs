@@ -74,7 +74,7 @@ pub enum SendError {
     AckTimeout,
 }
 /// Returned when an incoming message can't be received for some reason.
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
+#[derive(Debug)]
 pub enum RecvError {
     ReassemblerError(ReassemblyError),
     BearerError(bearer::BearerError),

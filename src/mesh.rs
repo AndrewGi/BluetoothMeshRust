@@ -286,6 +286,7 @@ impl From<U24> for u32 {
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct IVIndex(pub u32);
 impl IVIndex {
+    pub const BYTE_LEN: usize = 4;
     pub fn ivi(&self) -> IVI {
         IVI(self.0 & 1 == 1)
     }

@@ -67,6 +67,7 @@ impl FullStack {
                         .send(n)
                         .await
                         .map_err(|_| RecvError::ChannelClosed)?,
+                    _ => todo!("implement other message types"),
                 }
             }
             Result::<(), RecvError>::Ok(())

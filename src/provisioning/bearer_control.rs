@@ -1,6 +1,9 @@
 use crate::provisioning::generic::GPCF;
 use crate::uuid::UUID;
+use btle::{ConversionError, PackError};
+use core::convert::TryFrom;
 use core::fmt::{Display, Error, Formatter};
+use std::convert::TryInto;
 
 /// Bearer Control Opcodes (8-bits).
 /// 0x03-0xFF is RFU
@@ -32,10 +35,23 @@ impl From<Opcode> for u8 {
         opcode as u8
     }
 }
+impl TryFrom<u8> for Opcode {
+    type Error = ConversionError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0x00 => Ok(Opcode::LinkOpen),
+            0x01 => Ok(Opcode::LinkAck),
+            0x02 => Ok(Opcode::LinkClose),
+            _ => Err(ConversionError(())),
+        }
+    }
+}
 #[derive(Clone, Copy, Eq, Hash, Ord, PartialOrd, PartialEq, Debug)]
 pub struct LinkOpen(pub UUID);
 
 impl LinkOpen {
+    pub const BYTE_LEN: usize = 16;
     pub fn new(uuid: UUID) -> LinkOpen {
         LinkOpen(uuid)
     }
@@ -44,6 +60,15 @@ impl LinkOpen {
     }
     pub const fn byte_len() -> usize {
         16
+    }
+    pub fn pack_into(&self, buf: &mut [u8]) -> Result<(), PackError> {
+        PackError::expect_length(16, buf)?;
+        buf.copy_from_slice(self.0.as_ref());
+        Ok(())
+    }
+    pub fn unpack_from(buf: &[u8]) -> Result<LinkOpen, PackError> {
+        PackError::expect_length(Self::BYTE_LEN, buf)?;
+        Ok(LinkOpen(buf.try_into().expect("length checked above")))
     }
 }
 impl Display for LinkOpen {
@@ -54,8 +79,17 @@ impl Display for LinkOpen {
 #[derive(Clone, Copy, Eq, Hash, Ord, PartialOrd, PartialEq, Debug)]
 pub struct LinkAck();
 impl LinkAck {
+    pub const BYTE_LEN: usize = 0;
     pub const fn byte_len() -> usize {
         0
+    }
+    pub fn pack_into(self, buf: &mut [u8]) -> Result<(), PackError> {
+        PackError::expect_length(Self::BYTE_LEN, buf)?;
+        Ok(())
+    }
+    pub fn unpack_from(buf: &[u8]) -> Result<LinkAck, PackError> {
+        PackError::expect_length(Self::BYTE_LEN, buf)?;
+        Ok(LinkAck())
     }
 }
 impl Display for LinkAck {
@@ -69,6 +103,23 @@ pub enum CloseReason {
     Timeout = 0x01,
     Fail = 0x02,
 }
+impl From<CloseReason> for u8 {
+    fn from(r: CloseReason) -> Self {
+        r as u8
+    }
+}
+impl TryFrom<u8> for CloseReason {
+    type Error = ConversionError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0x00 => Ok(CloseReason::Success),
+            0x01 => Ok(CloseReason::Timeout),
+            0x02 => Ok(CloseReason::Fail),
+            _ => Err(ConversionError(())),
+        }
+    }
+}
 impl Display for CloseReason {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         f.write_str(match self {
@@ -80,13 +131,25 @@ impl Display for CloseReason {
 }
 
 #[derive(Clone, Copy, Eq, Hash, Ord, PartialOrd, PartialEq, Debug)]
-pub struct LinkClose(CloseReason);
+pub struct LinkClose(pub CloseReason);
 impl LinkClose {
+    pub const BYTE_LEN: usize = 1;
     pub fn new(reason: CloseReason) -> LinkClose {
         Self(reason)
     }
     pub const fn byte_len() -> usize {
         1
+    }
+    pub fn pack_into(self, buf: &mut [u8]) -> Result<(), PackError> {
+        PackError::expect_length(Self::BYTE_LEN, buf)?;
+        buf[0] = self.0.into();
+        Ok(())
+    }
+    pub fn unpack_from(buf: &[u8]) -> Result<LinkClose, PackError> {
+        PackError::expect_length(Self::BYTE_LEN, buf)?;
+        Ok(LinkClose(
+            buf[0].try_into().map_err(|_| PackError::bad_index(0))?,
+        ))
     }
 }
 impl Display for LinkClose {
@@ -117,6 +180,39 @@ impl PDU {
             PDU::LinkOpen(_) => Opcode::LinkOpen,
             PDU::LinkAck(_) => Opcode::LinkAck,
             PDU::LinkClose(_) => Opcode::LinkClose,
+        }
+    }
+    pub fn byte_len(&self) -> usize {
+        match self {
+            PDU::LinkOpen(_) => LinkOpen::BYTE_LEN + 1,
+            PDU::LinkAck(_) => LinkAck::BYTE_LEN + 1,
+            PDU::LinkClose(_) => LinkClose::BYTE_LEN + 1,
+        }
+    }
+    pub fn pack_into(&self, buf: &mut [u8]) -> Result<(), PackError> {
+        let opcode = match self {
+            PDU::LinkOpen(o) => {
+                o.pack_into(&mut buf[1..])?;
+                Opcode::LinkOpen
+            }
+            PDU::LinkAck(a) => {
+                a.pack_into(&mut buf[1..])?;
+                Opcode::LinkAck
+            }
+            PDU::LinkClose(c) => {
+                c.pack_into(&mut buf[1..])?;
+                Opcode::LinkClose
+            }
+        };
+        buf[0] = opcode.into();
+        Ok(())
+    }
+    pub fn unpack_from(buf: &[u8]) -> Result<Self, PackError> {
+        PackError::atleast_length(1, buf)?;
+        match Opcode::try_from(buf[0]).map_err(|_| PackError::BadOpcode)? {
+            Opcode::LinkOpen => Ok(PDU::LinkOpen(LinkOpen::unpack_from(&buf[1..])?)),
+            Opcode::LinkAck => Ok(PDU::LinkAck(LinkAck::unpack_from(&buf[1..])?)),
+            Opcode::LinkClose => Ok(PDU::LinkClose(LinkClose::unpack_from(&buf[1..])?)),
         }
     }
 }

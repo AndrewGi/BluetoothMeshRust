@@ -6,7 +6,10 @@
 use alloc::string::ToString;
 
 use crate::mesh;
+use btle::ConversionError;
+use core::convert::TryFrom;
 use core::fmt::{Display, Error, Formatter};
+use std::convert::TryInto;
 
 type UUIDBytes = [u8; 16];
 
@@ -61,6 +64,13 @@ impl UUID {
     #[must_use]
     pub fn uuid_bytes_from_str(s: &str) -> Option<UUIDBytes> {
         Some(mesh::bytes_str_to_buf(s)?)
+    }
+}
+impl TryFrom<&[u8]> for UUID {
+    type Error = ConversionError;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        Ok(UUID(value.try_into().map_err(|_| ConversionError(()))?))
     }
 }
 impl AsRef<[u8]> for UUID {

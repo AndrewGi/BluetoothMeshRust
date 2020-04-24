@@ -1,10 +1,7 @@
 use crate::helper;
 use crate::CLIError;
-use btle::hci::adapters::le::AdvertisementStream;
-use btle::hci::event::EventCode;
-use btle::hci::le;
-use btle::hci::le::report::ReportInfo;
-use btle::hci::packet::PacketType;
+use btle::error::IOError;
+use btle::le::report::ReportInfo;
 use futures_util::StreamExt;
 use std::pin::Pin;
 
@@ -41,10 +38,58 @@ pub fn dump_matches(
         .parse()
         .expect("validated by clap");
     match dump_matches.subcommand() {
-        ("", _) => dump_bluez(adapter_id, &logger),
+        ("", _) => dump(adapter_id, &logger).map_err(CLIError::Other),
         _ => unreachable!("unhandled subcommand"),
     }
 }
+pub fn dump(_: u16, _: &slog::Logger) -> Result<(), Box<dyn std::error::Error>> {
+    let mut runtime = tokio::runtime::Builder::new()
+        .enable_all()
+        .build()
+        .expect("can't make async runtime");
+    runtime.block_on(async move {
+        #[cfg(unix)]
+        return dump_bluez(
+            std::env::args()
+                .skip(1)
+                .next()
+                .unwrap_or("0".to_owned())
+                .parse()
+                .expect("invalid adapter id"),
+        )
+        .await;
+        return Ok(dump_usb().await?);
+    })
+}
+
+pub fn dump_not_supported() -> Result<(), Box<dyn std::error::Error>> {
+    eprintln!("no known support adapter for this platform. (When this example was written)");
+    Ok(())
+}
+#[cfg(unix)]
+pub fn dump_bluez(adapter_id: u16) -> Result<(), Box<dyn std::error::Error>> {
+    use btle::error::StdError;
+    let manager = btle::hci::socket::Manager::new().map_err(StdError)?;
+    let socket = match manager.get_adapter_socket(btle::hci::socket::AdapterID(adapter_id)) {
+        Ok(socket) => socket,
+        Err(btle::hci::socket::HCISocketError::PermissionDenied) => {
+            eprintln!("Permission denied error when opening the HCI socket. Maybe run as sudo?");
+            return Err(btle::hci::socket::HCISocketError::PermissionDenied)
+                .map_err(StdError)
+                .map_err(Into::into);
+        }
+        Err(e) => return Err(StdError(e).into()),
+    };
+
+    let async_socket = btle::hci::socket::AsyncHCISocket::try_from(socket)?;
+    let stream = btle::hci::stream::Stream::new(async_socket);
+    let adapter = btle::hci::adapters::Adapter::new(stream);
+    dump_adapter(adapter)
+        .await
+        .map_err(|e| Box::new(btle::error::StdError(e)))?;
+    Result::<(), Box<dyn std::error::Error>>::Ok(())
+}
+
 #[cfg(not(unix))]
 pub fn dump_bluez(_: u16, _: &slog::Logger) -> Result<(), CLIError> {
     Err(CLIError::OtherMessage(
@@ -97,31 +142,43 @@ pub fn dump_bluez(adapter_id: u16, parent_logger: &slog::Logger) -> Result<(), C
             .map_err(|e| CLIError::Other(Box::new(btle::error::STDError(e))))
     })
 }
-pub async fn dump_adapter<S: btle::hci::stream::HCIStreamable>(
-    mut adapter: btle::hci::adapters::Adapter<S>,
-    logger: &slog::Logger,
-) -> Result<(), btle::hci::adapters::Error> {
-    let mut adapter = unsafe { Pin::new_unchecked(&mut adapter) };
-    //adapter.as_mut().le().set_scan_enabled(false, false).await?;
-    let mut le = adapter.as_mut().le();
-    info!(logger, "scan_parameters");
-    le.set_scan_parameters(le::commands::SetScanParameters::DEFAULT).await?;
-    info!(logger, "scan_command");
+pub async fn dump_usb() -> Result<(), btle::hci::adapter::Error> {
+    use btle::hci::usb;
+    let context = usb::manager::Manager::new()?;
+    println!("opening first device...");
+    let device: usb::device::Device = context
+        .devices()?
+        .bluetooth_adapters()
+        .next()
+        .ok_or(IOError::NotFound)??;
+    println!("using {:?}", device);
+    let mut adapter = device.open()?;
+    adapter.reset()?;
+    dump_adapter(adapter).await
+}
+pub async fn dump_adapter<A: btle::hci::adapter::Adapter>(
+    mut adapter: A,
+) -> Result<(), btle::hci::adapter::Error> {
+    let adapter = unsafe { Pin::new_unchecked(&mut adapter) };
+    let adapter = btle::hci::adapters::Adapter::new(adapter);
+    let mut le = adapter.le();
+    println!("resetting adapter...");
+    le.adapter_mut().reset().await?;
+    println!("settings scan parameters...");
+    // Set BLE Scan parameters (when to scan, how long, etc)
+    le.set_scan_parameters(btle::le::scan::ScanParameters::DEFAULT)
+        .await?;
+    // Enable scanning for advertisement packets.
+    le.set_scan_enable(true, false).await?;
 
-    le.set_scan_enabled(true, false).await?;
-    info!(logger, "scan_enabled");
-
-    let mut filter = btle::hci::stream::Filter::default();
-    filter.enable_type(PacketType::Event);
-    filter.enable_event(EventCode::LEMeta);
-    le.adapter_mut()
-        .stream_pinned()
-        .stream_pinned()
-        .set_filter(&filter)?;
-    let mut stream: AdvertisementStream<S, Box<[ReportInfo]>> = le.advertisement_stream();
-    let mut stream = Pin::new(&mut stream);
+    println!("waiting for advertisements...");
+    // Create the advertisement stream from the LEAdapter.
+    let mut stream = le.advertisement_stream::<Box<[ReportInfo]>>().await?;
+    // Pin it.
+    let mut stream = unsafe { Pin::new_unchecked(&mut stream) };
     loop {
-        while let Some(report) = StreamExt::next(&mut stream).await {
+        // Asynchronously iterate through the stream and print each advertisement report.
+        while let Some(report) = stream.next().await {
             println!("report: {:?}", &report);
         }
     }

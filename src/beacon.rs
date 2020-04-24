@@ -1,21 +1,17 @@
 //! Bluetooth Mesh Beacon Layer. Currently only supports `SecureNetworkBeacon`s and
 //! `UnprovisionedDeviceBeacon`s.
 use crate::bytes::ToFromBytesEndian;
-use crate::crypto::s1;
+use crate::crypto::{s1, NetworkID};
+use crate::mesh::IVIndex;
 use crate::uuid::UUID;
-use core::convert::TryInto;
-
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
-pub enum BeaconError {
-    BadBytes,
-    BadLength,
-}
+use btle::{ConversionError, PackError};
+use core::convert::{TryFrom, TryInto};
 
 pub trait Beacon: Sized {
     fn byte_len(&self) -> usize;
     const BEACON_TYPE: BeaconType;
-    fn pack_into(&self, buf: &mut [u8]) -> Result<(), BeaconError>;
-    fn unpack_from(buf: &[u8]) -> Result<Self, BeaconError>;
+    fn pack_into(&self, buf: &mut [u8]) -> Result<(), PackError>;
+    fn unpack_from(buf: &[u8]) -> Result<Self, PackError>;
 }
 
 #[repr(u16)]
@@ -88,21 +84,19 @@ impl Beacon for UnprovisionedDeviceBeacon {
     }
     const BEACON_TYPE: BeaconType = BeaconType::Unprovisioned;
 
-    fn pack_into(&self, buf: &mut [u8]) -> Result<(), BeaconError> {
-        if buf.len() == self.byte_len() {
-            buf[..16].copy_from_slice(self.uuid.as_ref());
-            buf[16..18].copy_from_slice(&self.oob_information.0.to_be_bytes());
-            match self.uri_hash {
-                Some(uri_hash) => buf[18..].copy_from_slice(&uri_hash.0.to_be_bytes()),
-                None => (),
-            }
-            Ok(())
-        } else {
-            Err(BeaconError::BadLength)
+    fn pack_into(&self, buf: &mut [u8]) -> Result<(), PackError> {
+        let our_len = self.byte_len();
+        PackError::expect_length(our_len, buf)?;
+        buf[..16].copy_from_slice(self.uuid.as_ref());
+        buf[16..18].copy_from_slice(&self.oob_information.0.to_be_bytes());
+        match self.uri_hash {
+            Some(uri_hash) => buf[18..].copy_from_slice(&uri_hash.0.to_be_bytes()),
+            None => (),
         }
+        Ok(())
     }
 
-    fn unpack_from(buf: &[u8]) -> Result<Self, BeaconError> {
+    fn unpack_from(buf: &[u8]) -> Result<Self, PackError> {
         if buf.len() == Self::min_len() {
             let uuid = UUID(
                 (&buf[..16])
@@ -133,11 +127,84 @@ impl Beacon for UnprovisionedDeviceBeacon {
                 uri_hash: Some(hash),
             })
         } else {
-            Err(BeaconError::BadLength)
+            Err(PackError::BadLength {
+                expected: Self::min_len(),
+                got: buf.len(),
+            })
         }
     }
 }
-pub struct SecureNetworkBeacon {}
+const SECURE_NETWORK_FLAGS_MAX: u8 = 0x03;
+pub struct SecureNetworkFlags(u8);
+impl From<SecureNetworkFlags> for u8 {
+    fn from(f: SecureNetworkFlags) -> Self {
+        f.0
+    }
+}
+impl TryFrom<u8> for SecureNetworkFlags {
+    type Error = ConversionError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        if value <= SECURE_NETWORK_FLAGS_MAX {
+            Ok(SecureNetworkFlags(value))
+        } else {
+            Err(ConversionError(()))
+        }
+    }
+}
+pub enum SecureNetworkFlag {
+    KeyRefresh = 0x00,
+    IVUpdate = 0x01,
+}
+pub const AUTHENTICATION_VALUE_LEN: usize = 8;
+pub struct AuthenticationValue(pub [u8; AUTHENTICATION_VALUE_LEN]);
+impl AuthenticationValue {
+    pub const BYTE_LEN: usize = AUTHENTICATION_VALUE_LEN;
+}
+pub struct SecureNetworkBeacon {
+    pub flags: SecureNetworkFlags,
+    pub network_id: NetworkID,
+    pub iv_index: IVIndex,
+    pub authentication_value: AuthenticationValue,
+}
+impl SecureNetworkBeacon {
+    pub const BYTE_LEN: usize =
+        1 + NetworkID::BYTE_LEN + IVIndex::BYTE_LEN + AuthenticationValue::BYTE_LEN;
+    pub fn unpack_from(buf: &[u8]) -> Result<SecureNetworkBeacon, PackError> {
+        PackError::expect_length(Self::BYTE_LEN, buf)?;
+        let flags = SecureNetworkFlags::try_from(buf[0]).map_err(|_| PackError::bad_index(0))?;
+        let network_id = NetworkID(u64::from_be_bytes(
+            (&buf[1..1 + NetworkID::BYTE_LEN])
+                .try_into()
+                .expect("length check above"),
+        ));
+        let iv_index = IVIndex::from_bytes_be(
+            &buf[1 + NetworkID::BYTE_LEN..1 + NetworkID::BYTE_LEN + IVIndex::BYTE_LEN],
+        )
+        .expect("length checked above");
+        let authentication_value = AuthenticationValue(
+            (&buf[1 + NetworkID::BYTE_LEN + IVIndex::BYTE_LEN..])
+                .try_into()
+                .expect("length checked above"),
+        );
+        Ok(SecureNetworkBeacon {
+            flags,
+            network_id,
+            iv_index,
+            authentication_value,
+        })
+    }
+    pub fn pack_into(&self, buf: &mut [u8]) -> Result<(), PackError> {
+        PackError::expect_length(Self::BYTE_LEN, buf)?;
+        buf[0] = self.flags.0;
+        buf[1..1 + NetworkID::BYTE_LEN].copy_from_slice(self.network_id.0.to_be_bytes().as_ref());
+        buf[1 + NetworkID::BYTE_LEN..1 + NetworkID::BYTE_LEN + IVIndex::BYTE_LEN]
+            .copy_from_slice(self.iv_index.to_bytes_be().as_ref());
+        buf[1 + NetworkID::BYTE_LEN + IVIndex::BYTE_LEN..]
+            .copy_from_slice(self.authentication_value.0.as_ref());
+        Ok(())
+    }
+}
 pub enum BeaconType {
     Unprovisioned = 0x00,
     SecureNetwork = 0x01,
@@ -145,6 +212,22 @@ pub enum BeaconType {
 pub enum BeaconPDU {
     Unprovisioned(UnprovisionedDeviceBeacon),
     SecureNetwork(SecureNetworkBeacon),
+}
+impl BeaconPDU {
+    pub fn unpack_from(buf: &[u8]) -> Result<Self, PackError> {
+        match buf.get(0).ok_or(PackError::BadLength {
+            expected: 1,
+            got: 0,
+        })? {
+            0x00 => Ok(BeaconPDU::Unprovisioned(
+                UnprovisionedDeviceBeacon::unpack_from(&buf[1..])?,
+            )),
+            0x01 => Ok(BeaconPDU::SecureNetwork(SecureNetworkBeacon::unpack_from(
+                &buf[1..],
+            )?)),
+            _ => Err(PackError::BadOpcode),
+        }
+    }
 }
 pub struct PackedBeacon {}
 impl AsRef<[u8]> for PackedBeacon {

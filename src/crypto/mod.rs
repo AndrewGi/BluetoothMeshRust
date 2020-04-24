@@ -241,10 +241,18 @@ impl AsRef<[u8]> for ECDHSecret {
 }
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
-pub struct NetworkID(u64);
+pub struct NetworkID(pub u64);
+impl NetworkID {
+    pub const BYTE_LEN: usize = 8;
+}
 impl From<&key::NetKey> for NetworkID {
     fn from(k: &NetKey) -> Self {
         NetworkID(k3(k.key()))
+    }
+}
+impl From<NetworkID> for u64 {
+    fn from(id: NetworkID) -> Self {
+        id.0
     }
 }
 impl Display for NetworkID {
