@@ -74,7 +74,7 @@ impl From<TransactionNumber> for u8 {
         num.0
     }
 }
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct PDU {
     pub link_id: LinkID,
     pub transaction_number: TransactionNumber,
@@ -108,7 +108,7 @@ impl PDU {
         })
     }
 }
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct IncomingPDU {
     pub pdu: PDU,
     pub rssi: Option<RSSI>,

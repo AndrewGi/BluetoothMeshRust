@@ -11,7 +11,7 @@ pub enum BearerError {
     Other(Box<dyn btle::error::Error + Send + 'static>),
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct IncomingEncryptedNetworkPDU {
     pub encrypted_pdu: net::OwnedEncryptedPDU,
     pub rssi: Option<RSSI>,
@@ -39,7 +39,7 @@ pub struct OutgoingEncryptedNetworkPDU {
     pub transmit_parameters: TransmitInterval,
     pub pdu: net::OwnedEncryptedPDU,
 }
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct IncomingBeacon {
     pub beacon: beacon::BeaconPDU,
     pub rssi: Option<RSSI>,
@@ -58,14 +58,14 @@ impl From<OutgoingMessage> for OutgoingAdvertisement {
         (&o).into()
     }
 }
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum IncomingMessage {
     Network(IncomingEncryptedNetworkPDU),
     Beacon(IncomingBeacon),
     PBAdv(pb_adv::IncomingPDU),
 }
 impl IncomingMessage {
-    pub fn from_report_info(report_info: ReportInfo) -> Option<IncomingMessage> {
+    pub fn from_report_info(report_info: ReportInfo<&[u8]>) -> Option<IncomingMessage> {
         if report_info.event_type == EventType::AdvNonconnInd {
             dbg!(&report_info);
             if let Some(ad_struct) = report_info.data.iter().next() {
@@ -94,5 +94,44 @@ impl IncomingMessage {
         } else {
             None
         }
+    }
+}
+#[cfg(test)]
+mod tests {
+    use crate::beacon::BeaconPDU::Unprovisioned;
+    use crate::beacon::{OOBInformation, URIHash, UnprovisionedDeviceBeacon};
+    use crate::stack::bearer::IncomingBeacon;
+    use crate::stack::bearer::IncomingMessage;
+    use crate::stack::bearer::IncomingMessage::Beacon;
+    use crate::uuid::UUID;
+    use btle::le::advertisement::RawAdvertisement;
+    use btle::le::report::AddressType::RandomDevice;
+    use btle::le::report::EventType::AdvNonconnInd;
+    use btle::le::report::ReportInfo;
+    use btle::{BTAddress, RSSI};
+
+    #[test]
+    pub fn test_beacon() {
+        assert_eq!(
+            IncomingMessage::from_report_info(ReportInfo {
+                event_type: AdvNonconnInd,
+                address_type: RandomDevice,
+                address: BTAddress([7, 63, 215, 62, 99, 46,],),
+                rssi: Some(RSSI::new(-60,),),
+                data: RawAdvertisement(&[
+                    24, 43, 0, 221, 221, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0,
+                    0,
+                ]),
+            })
+            .unwrap(),
+            Beacon(IncomingBeacon {
+                beacon: Unprovisioned(UnprovisionedDeviceBeacon {
+                    uuid: UUID([221, 221, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,],),
+                    oob_information: OOBInformation(32,),
+                    uri_hash: Some(URIHash(0,),),
+                },),
+                rssi: Some(RSSI::new(-60,),),
+            },)
+        );
     }
 }

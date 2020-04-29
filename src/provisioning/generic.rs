@@ -256,7 +256,7 @@ impl Control {
 }
 pub const GENERIC_PDU_MAX_LEN: usize = 24;
 pub const PAYLOAD_MAX_LEN: usize = 64;
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct PDU<Buf> {
     pub control: Control,
     pub payload: Option<Buf>,
