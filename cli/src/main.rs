@@ -6,6 +6,7 @@ use std::convert::TryFrom;
 
 pub mod commands;
 pub mod helper;
+#[derive(Debug)]
 pub enum CLIError {
     PermissionDenied,
     IOError(String, std::io::Error),
@@ -14,6 +15,7 @@ pub enum CLIError {
     OtherMessage(String),
     Other(Box<dyn std::error::Error>),
 }
+impl btle::error::Error for CLIError {}
 #[cfg(feature = "mesh")]
 fn add_mesh_subcommands<'a, 'b>(app: clap::App<'a, 'b>) -> clap::App<'a, 'b> {
     app.subcommand(commands::state::sub_command())

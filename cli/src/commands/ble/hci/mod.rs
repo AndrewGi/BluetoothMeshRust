@@ -1,7 +1,7 @@
 use crate::CLIError;
 
 pub mod dump;
-
+pub mod pcap;
 pub fn sub_command() -> clap::App<'static, 'static> {
     clap::SubCommand::with_name("hci")
         .about("interact with Bluetooth HCI (Host Controller Interface)")

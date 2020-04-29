@@ -135,6 +135,7 @@ impl Beacon for UnprovisionedDeviceBeacon {
     }
 }
 const SECURE_NETWORK_FLAGS_MAX: u8 = 0x03;
+#[derive(Copy, Clone, Debug)]
 pub struct SecureNetworkFlags(u8);
 impl From<SecureNetworkFlags> for u8 {
     fn from(f: SecureNetworkFlags) -> Self {
@@ -157,10 +158,12 @@ pub enum SecureNetworkFlag {
     IVUpdate = 0x01,
 }
 pub const AUTHENTICATION_VALUE_LEN: usize = 8;
+#[derive(Copy, Clone, Debug)]
 pub struct AuthenticationValue(pub [u8; AUTHENTICATION_VALUE_LEN]);
 impl AuthenticationValue {
     pub const BYTE_LEN: usize = AUTHENTICATION_VALUE_LEN;
 }
+#[derive(Copy, Clone, Debug)]
 pub struct SecureNetworkBeacon {
     pub flags: SecureNetworkFlags,
     pub network_id: NetworkID,
@@ -209,6 +212,7 @@ pub enum BeaconType {
     Unprovisioned = 0x00,
     SecureNetwork = 0x01,
 }
+#[derive(Copy, Clone, Debug)]
 pub enum BeaconPDU {
     Unprovisioned(UnprovisionedDeviceBeacon),
     SecureNetwork(SecureNetworkBeacon),

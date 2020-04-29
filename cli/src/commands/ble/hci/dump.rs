@@ -24,6 +24,13 @@ pub fn sub_command() -> clap::App<'static, 'static> {
                 .value_name("ADAPTER_ID")
                 .validator(helper::is_u16_validator),
         )
+        .arg(
+            clap::Arg::with_name("pcap")
+                .help("dump the BLE advertisements to a pcap file/pipe")
+                .short("p")
+                .long("pcap")
+                .value_name("PCAP_FILE"),
+        )
 }
 
 pub fn dump_matches(
@@ -37,17 +44,18 @@ pub fn dump_matches(
         .expect("has default value")
         .parse()
         .expect("validated by clap");
+    let pcap_file = dump_matches.value_of("pcap");
     match dump_matches.subcommand() {
-        ("", _) => dump(adapter_id, &logger).map_err(CLIError::Other),
+        ("", _) => dump(&logger, adapter_id, pcap_file).map_err(CLIError::Other),
         _ => unreachable!("unhandled subcommand"),
     }
 }
-pub fn dump(_: u16, _: &slog::Logger) -> Result<(), Box<dyn std::error::Error>> {
-    let mut runtime = tokio::runtime::Builder::new()
-        .enable_all()
-        .build()
-        .expect("can't make async runtime");
-    runtime.block_on(async move {
+pub fn dump(
+    _: &slog::Logger,
+    adapter_id: u16,
+    pcap_file: Option<&'_ str>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    crate::helper::tokio_runtime().block_on(async move {
         #[cfg(unix)]
         return dump_bluez(
             std::env::args()
@@ -58,7 +66,7 @@ pub fn dump(_: u16, _: &slog::Logger) -> Result<(), Box<dyn std::error::Error>> 
                 .expect("invalid adapter id"),
         )
         .await;
-        return Ok(dump_usb().await?);
+        return Ok(dump_usb(adapter_id, pcap_file).await?);
     })
 }
 
@@ -142,23 +150,29 @@ pub fn dump_bluez(adapter_id: u16, parent_logger: &slog::Logger) -> Result<(), C
             .map_err(|e| CLIError::Other(Box::new(btle::error::STDError(e))))
     })
 }
-pub async fn dump_usb() -> Result<(), btle::hci::adapter::Error> {
+pub async fn dump_usb(
+    adapter_id: u16,
+    pcap_file: Option<&'_ str>,
+) -> Result<(), Box<dyn btle::error::Error>> {
     use btle::hci::usb;
     let context = usb::manager::Manager::new()?;
     println!("opening first device...");
     let device: usb::device::Device = context
         .devices()?
         .bluetooth_adapters()
-        .next()
+        .nth(adapter_id.into())
         .ok_or(IOError::NotFound)??;
     println!("using {:?}", device);
     let mut adapter = device.open()?;
     adapter.reset()?;
-    dump_adapter(adapter).await
+    dump_adapter(adapter, pcap_file).await
 }
+
 pub async fn dump_adapter<A: btle::hci::adapter::Adapter>(
     mut adapter: A,
-) -> Result<(), btle::hci::adapter::Error> {
+    pcap_file: Option<&'_ str>,
+) -> Result<(), Box<dyn btle::error::Error>> {
+    let mut adapter = super::pcap::PcapAdapter::open(&mut adapter, pcap_file.unwrap())?;
     let adapter = unsafe { Pin::new_unchecked(&mut adapter) };
     let adapter = btle::hci::adapters::Adapter::new(adapter);
     let mut le = adapter.le();

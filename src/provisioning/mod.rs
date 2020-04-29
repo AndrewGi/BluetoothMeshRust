@@ -10,3 +10,4 @@ pub mod link;
 pub mod pb_adv;
 pub mod pb_gatt;
 pub mod protocol;
+pub mod provisioner;

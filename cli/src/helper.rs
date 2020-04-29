@@ -122,3 +122,27 @@ pub fn write_device_state(
     serde_json::to_writer_pretty(load_file(path, true, true)?, device_state)
         .map_err(CLIError::SerdeJSON)
 }
+pub fn tokio_runtime() -> tokio::runtime::Runtime {
+    tokio::runtime::Builder::new()
+        .basic_scheduler()
+        .enable_all()
+        .build()
+        .expect("can't make async runtime")
+}
+pub fn hci_adapter() -> (impl btle::hci::adapter::Adapter, &'static str) {
+    // TODO: Add Error handling and more adapters
+    // This was initially men't just to make prototyping faster but needs must improvement
+    (
+        btle::hci::usb::manager::Manager::new()
+            .expect("can't created libusb context")
+            .devices()
+            .expect("can't get usb device list")
+            .bluetooth_adapters()
+            .next()
+            .expect("no usb bluetooth adapters detected")
+            .expect("error getting adapter info")
+            .open()
+            .expect("can't open usb adapter"),
+        "usb",
+    )
+}

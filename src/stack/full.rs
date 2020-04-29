@@ -5,21 +5,20 @@
 use crate::replay;
 use crate::stack::{incoming, outgoing, RecvError, SendError, StackInternals};
 
-use crate::asyncs::{
-    sync::{mpsc, Mutex, RwLock},
-    task,
-};
-use crate::stack::bearer::{BearerError, IncomingMessage, OutgoingMessage};
+use crate::asyncs::sync::{mpsc, Mutex, RwLock};
+use crate::stack::bearer::{IncomingEncryptedNetworkPDU, OutgoingMessage};
 use crate::stack::incoming::Incoming;
 use crate::stack::outgoing::Outgoing;
 use alloc::sync::Arc;
 use core::ops::{Deref, DerefMut};
-use futures_util::stream::{Stream, StreamExt};
 pub struct FullStack {
-    replay_cache: Arc<Mutex<replay::Cache>>,
-    internals: Arc<RwLock<StackInternals>>,
-    incoming: incoming::Incoming,
-    outgoing: outgoing::Outgoing,
+    pub replay_cache: Arc<Mutex<replay::Cache>>,
+    pub internals: Arc<RwLock<StackInternals>>,
+    pub outgoing_bearer: mpsc::Receiver<OutgoingMessage>,
+    pub incoming_bearer: mpsc::Sender<IncomingEncryptedNetworkPDU>,
+    pub incoming: incoming::Incoming,
+    pub outgoing: outgoing::Outgoing,
+    _priv: (),
 }
 pub enum FullStackError {
     SendError(SendError),
@@ -31,51 +30,26 @@ impl FullStack {
     /// `StackInternals` holds the `device_state::State` which should be save persistently for the
     /// entire time a node is in a Mesh Network. If you lose the `StackInternals`, the node will
     /// have to be reprovisioned as a new nodes and the old allocated Unicast Addresses are lost.
-    pub fn new<
-        OutBearer: Fn(OutgoingMessage) -> Result<(), BearerError> + Send + 'static,
-        InBearer: Stream<Item = Result<IncomingMessage, BearerError>> + Send + 'static,
-    >(
-        _out_bearer: OutBearer,
-        in_bearer: InBearer,
+    pub fn new(
         internals: StackInternals,
         replay_cache: replay::Cache,
         channel_size: usize,
     ) -> Self {
-        let (tx_bearer, mut rx_bearer) = mpsc::channel(2);
-        let (mut tx_incoming_encrypted_net, rx_incoming_encrypted_net) =
-            mpsc::channel(channel_size);
+        let (tx_bearer, rx_bearer) = mpsc::channel(2);
+        let (tx_incoming_encrypted_net, rx_incoming_encrypted_net) = mpsc::channel(channel_size);
         let (tx_outgoing_transport, _rx_outgoing_transport) = mpsc::channel(channel_size);
         let (tx_control, _rx_control) = mpsc::channel(CONTROL_CHANNEL_SIZE);
         let (tx_access, _rx_access) = mpsc::channel(channel_size);
         let (tx_ack, rx_ack) = mpsc::channel(channel_size);
         let internals = Arc::new(RwLock::new(internals));
         let replay_cache = Arc::new(Mutex::new(replay_cache));
-        let _outgoing_bearer = task::spawn(async move {
-            // move out_bearer
-            futures_util::pin_mut!(_out_bearer);
-            while let Some(_msg) = rx_bearer.recv().await {
-                //bearer::send_message(out_bearer.as_mut(), msg).await?;
-            }
-            Result::<(), BearerError>::Ok(())
-        });
-        let _incoming_bearer = task::spawn(async move {
-            futures_util::pin_mut!(in_bearer);
-            while let Some(msg) = in_bearer.as_mut().next().await {
-                let msg: IncomingMessage = msg.map_err(RecvError::BearerError)?;
-                match msg {
-                    IncomingMessage::Network(n) => tx_incoming_encrypted_net
-                        .send(n)
-                        .await
-                        .map_err(|_| RecvError::ChannelClosed)?,
-                    _ => todo!("implement other message types"),
-                }
-            }
-            Result::<(), RecvError>::Ok(())
-        });
+
         // Encrypted Incoming Network PDU Handler.
 
         Self {
             internals: internals.clone(),
+            outgoing_bearer: rx_bearer,
+            incoming_bearer: tx_incoming_encrypted_net,
             incoming: Incoming::new(
                 internals.clone(),
                 replay_cache.clone(),
@@ -88,9 +62,18 @@ impl FullStack {
             ),
             replay_cache,
             outgoing: Outgoing::new(internals, rx_ack, tx_bearer),
+            _priv: (),
         }
     }
-
+    pub async fn feed_network_pdu(
+        &mut self,
+        pdu: IncomingEncryptedNetworkPDU,
+    ) -> Result<(), RecvError> {
+        self.incoming_bearer
+            .send(pdu)
+            .await
+            .map_err(|_| RecvError::ChannelClosed)
+    }
     pub async fn internals_with<R>(&self, func: impl FnOnce(&StackInternals) -> R) -> R {
         func(self.internals.read().await.deref())
     }

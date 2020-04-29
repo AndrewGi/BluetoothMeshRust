@@ -430,7 +430,12 @@ pub fn crypto_matches(
                 }
             }
         }
-        ("", _) => error!(logger, "no_subcommand"),
+        ("", None) => {
+            return Err(CLIError::Clap(clap::Error::with_description(
+                "missing crypto subcommand",
+                clap::ErrorKind::ArgumentNotFound,
+            )))
+        }
         _ => unreachable!("unhandled crypto subcommand"),
     }
     Ok(())

@@ -108,6 +108,7 @@ impl PDU {
         })
     }
 }
+#[derive(Copy, Clone, Debug)]
 pub struct IncomingPDU {
     pub pdu: PDU,
     pub rssi: Option<RSSI>,

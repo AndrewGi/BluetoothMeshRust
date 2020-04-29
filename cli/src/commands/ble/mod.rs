@@ -18,9 +18,9 @@ pub fn ble_matches(
     match ble_matches.subcommand() {
         ("hci", Some(hci_matches)) => hci::hci_matches(&logger, hci_matches),
         ("", None) => Err(CLIError::Clap(clap::Error::with_description(
-            "missing subcommand",
+            "missing ble subcommand",
             clap::ErrorKind::ArgumentNotFound,
         ))),
-        _ => unreachable!("unhandled ble subcommand")
+        _ => unreachable!("unhandled ble subcommand"),
     }
 }
