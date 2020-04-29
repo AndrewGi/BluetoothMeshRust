@@ -3,4 +3,4 @@
 	url = https://github.com/AndrewGi/btle.git
 [submodule "async_driver"]
 	path = async_driver
-	url = ./async_driver
+	url = https://github.com/AndrewGi/async_driver.git
