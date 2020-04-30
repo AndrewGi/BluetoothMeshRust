@@ -67,7 +67,6 @@ pub enum IncomingMessage {
 impl IncomingMessage {
     pub fn from_report_info(report_info: ReportInfo<&[u8]>) -> Option<IncomingMessage> {
         if report_info.event_type == EventType::AdvNonconnInd {
-            dbg!(&report_info);
             if let Some(ad_struct) = report_info.data.iter().next() {
                 dbg!(ad_struct.ad_type);
                 match ad_struct.ad_type {

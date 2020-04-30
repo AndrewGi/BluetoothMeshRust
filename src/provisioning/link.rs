@@ -1,7 +1,9 @@
 use crate::provisioning::pb_adv;
 use crate::provisioning::pb_adv::{LinkID, TransactionNumber};
+use crate::uuid::UUID;
 use alloc::collections::BTreeSet;
 use core::sync::atomic::Ordering;
+
 #[derive(Debug)]
 pub struct AtomicTransactionNumber(core::sync::atomic::AtomicU8);
 impl AtomicTransactionNumber {
@@ -36,24 +38,36 @@ impl Ord for AtomicTransactionNumber {
         self.get().cmp(&other.get())
     }
 }
+pub enum Link {
+    Open(OpenLink),
+    Pending(PendingLink),
+}
 pub struct Links {
     links: BTreeSet<Link>,
 }
 impl Links {
+    // C
+    pub fn open_uuid(&mut self, uuid: &UUID) -> Option<PendingLink> {
+        unimplemented!()
+    }
     pub fn handle_pb_adv_pdu(&mut self, _pdu: &pb_adv::PDU) {
         unimplemented!()
     }
 }
-pub enum LinkError {
-    Closed,
+#[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
+pub struct PendingLink {
+    link_id: LinkID,
+}
+impl PendingLink {
+    pub fn handle_pb_adv_pdu(&self, pdu: &pb_adv::PDU) {}
 }
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
-pub struct Link {
+pub struct OpenLink {
     link_id: LinkID,
     my_transaction_number: AtomicTransactionNumber,
     other_transaction_number: Option<AtomicTransactionNumber>,
 }
-impl Link {
+impl OpenLink {
     pub fn handle_pb_adv_pdu(&self, pdu: &pb_adv::PDU) {
         if pdu.link_id != self.link_id {
             return;

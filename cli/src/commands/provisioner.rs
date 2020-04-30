@@ -44,7 +44,7 @@ pub async fn provision(_logger: &slog::Logger, device_state_path: &str) -> Resul
         let cache = replay::Cache::new();
         let mut stack = FullStack::new(internals, cache, 5);
         while let Some(report_info) = incoming.next().await {
-            if let Some(new_msg) = IncomingMessage::from_report_info(report_info?) {
+            if let Some(new_msg) = IncomingMessage::from_report_info(report_info?.as_ref()) {
                 dbg!(&new_msg);
                 match new_msg {
                     IncomingMessage::Network(n) => {

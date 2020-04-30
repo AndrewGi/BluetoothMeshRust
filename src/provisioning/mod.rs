@@ -11,3 +11,7 @@ pub mod pb_adv;
 pub mod pb_gatt;
 pub mod protocol;
 pub mod provisioner;
+
+pub enum Error {
+    Closed(bearer_control::CloseReason),
+}
