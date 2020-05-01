@@ -3,7 +3,6 @@ use slog::Drain;
 extern crate slog;
 
 use std::convert::TryFrom;
-
 pub mod commands;
 pub mod helper;
 #[derive(Debug)]
@@ -13,9 +12,20 @@ pub enum CLIError {
     Clap(clap::Error),
     SerdeJSON(serde_json::Error),
     OtherMessage(String),
+    HCIAdapterError(btle::hci::adapter::Error),
     Other(Box<dyn std::error::Error>),
 }
 impl btle::error::Error for CLIError {}
+impl From<btle::hci::adapter::Error> for CLIError {
+    fn from(e: btle::hci::adapter::Error) -> Self {
+        CLIError::HCIAdapterError(e)
+    }
+}
+impl From<btle::hci::usb::Error> for CLIError {
+    fn from(e: btle::hci::usb::Error) -> Self {
+        CLIError::HCIAdapterError(e.into())
+    }
+}
 #[cfg(feature = "mesh")]
 fn add_mesh_subcommands<'a, 'b>(app: clap::App<'a, 'b>) -> clap::App<'a, 'b> {
     app.subcommand(commands::state::sub_command())
@@ -116,6 +126,7 @@ fn main() {
             }
             CLIError::OtherMessage(msg) => eprintln!("error: {}", &msg),
             CLIError::Other(e) => eprintln!("error: {}", e),
+            CLIError::HCIAdapterError(e) => eprintln!("hci adapter error: {}", e),
         };
         std::process::exit(0);
     }

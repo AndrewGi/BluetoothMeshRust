@@ -129,20 +129,38 @@ pub fn tokio_runtime() -> tokio::runtime::Runtime {
         .build()
         .expect("can't make async runtime")
 }
-pub fn hci_adapter() -> (impl btle::hci::adapter::Adapter, &'static str) {
-    // TODO: Add Error handling and more adapters
-    // This was initially men't just to make prototyping faster but needs must improvement
-    (
-        btle::hci::usb::manager::Manager::new()
-            .expect("can't created libusb context")
-            .devices()
-            .expect("can't get usb device list")
-            .bluetooth_adapters()
-            .next()
-            .expect("no usb bluetooth adapters detected")
-            .expect("error getting adapter info")
-            .open()
-            .expect("can't open usb adapter"),
-        "usb",
-    )
+pub fn usb_adapter(adapter_id: u16) -> Result<btle::hci::usb::adapter::Adapter, CLIError> {
+    Ok(btle::hci::usb::manager::Manager::new()?
+        .devices()?
+        .bluetooth_adapters()
+        .nth(adapter_id.into())
+        .ok_or_else(|| CLIError::OtherMessage("no usb bluetooth adapters found".to_owned()))??
+        .open()?)
+}
+#[cfg(not(all(unix, feature = "bluez")))]
+pub fn bluez_adapter(_: u16) -> Result<btle::hci::adapter::DummyAdapter, CLIError> {
+    Err(CLIError::OtherMessage(
+        "bluez either isn't enable or supported on this platform".to_owned(),
+    ))
+}
+#[cfg(all(unix, feature = "bluez"))]
+pub fn bluez_adapter(
+    adapter_id: u16,
+) -> Result<
+    btle::hci::stream::Stream<
+        btle::hci::bluez_socket::AsyncHCISocket,
+        Box<btle::hci::bluez_socket::AsyncHCISocket>,
+    >,
+    CLIError,
+> {
+    use btle::hci::bluez_socket;
+    use core::convert::TryInto;
+    let manager = bluez_socket::Manager::new()
+        .map_err(|e| CLIError::HCIAdapterError(btle::hci::adapter::Error::IOError(e)))?;
+    let socket = manager
+        .get_adapter_socket(bluez_socket::AdapterID(adapter_id))
+        .map_err(|e| CLIError::HCIAdapterError(btle::hci::adapter::Error::IOError(e)))?
+        .try_into()
+        .map_err(|e| CLIError::IOError("unable to turn the bluez socket -> async".to_owned(), e))?;
+    Ok(btle::hci::stream::Stream::new(Box::pin(socket)))
 }

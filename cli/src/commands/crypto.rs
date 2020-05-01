@@ -159,9 +159,11 @@ pub fn crypto_matches(
 ) -> Result<(), CLIError> {
     let logger = parent_logger.new(o!("device_state_path" => device_state_path.to_owned()));
     let get_device_state = || {
-        let out = helper::load_device_state(device_state_path)?;
-        debug!(logger, "loaded_device_state");
-        Ok(out)
+        let out = helper::load_device_state(device_state_path);
+        if out.is_ok() {
+            debug!(logger, "loaded_device_state");
+        }
+        out
     };
     debug!(logger, "crypto_sub_command");
     match crypto_matches.subcommand() {

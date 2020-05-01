@@ -12,6 +12,7 @@ maintenance = {status ="actively-developed"}
 
 [features]
 default = ["mesh", "pcap"]
+bluez = ["btle/bluez_socket"]
 mesh = ["bluetooth_mesh"]
 pcap = ["pcap-file"]
 [dependencies]
@@ -27,9 +28,4 @@ futures-util = {version = "0.3.4", default_features = false}
 structopt = {version ="0.3.11"}
 pcap-file =  {version = "1.1.1", optional = true}
 libc = "0.2.69"
-
-[target.'cfg(unix)'.dependencies]
-btle = {path = "../btle", features= ["bluez", "hci_usb"]}
-
-[target.'cfg(not(unix))'.dependencies]
-btle = {path = "../btle", features= ["hci_usb"]}
+btle = {path = "../btle", features= ["hci_usb", "std"]}

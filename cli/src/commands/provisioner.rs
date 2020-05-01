@@ -32,9 +32,7 @@ pub fn provisioner_matches(
 
 pub async fn provision(_logger: &slog::Logger, device_state_path: &str) -> Result<(), CLIError> {
     let dsm = crate::helper::load_device_state(device_state_path)?;
-    let (adapter, adapter_source) = crate::helper::hci_adapter();
-    println!("using hci adapter from '{}'", adapter_source);
-    futures_util::pin_mut!(adapter);
+    let adapter = crate::helper::usb_adapter(0)?;
     let adapter = btle::hci::adapters::Adapter::new(adapter);
     let mut le = adapter.le();
     async move {

@@ -47,7 +47,7 @@ pub struct Links {
 }
 impl Links {
     // C
-    pub fn open_uuid(&mut self, uuid: &UUID) -> Option<PendingLink> {
+    pub fn open_uuid(&mut self, _uuid: &UUID) -> Option<PendingLink> {
         unimplemented!()
     }
     pub fn handle_pb_adv_pdu(&mut self, _pdu: &pb_adv::PDU) {
@@ -59,7 +59,7 @@ pub struct PendingLink {
     link_id: LinkID,
 }
 impl PendingLink {
-    pub fn handle_pb_adv_pdu(&self, pdu: &pb_adv::PDU) {}
+    pub fn handle_pb_adv_pdu(&self, _pdu: &pb_adv::PDU) {}
 }
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
 pub struct OpenLink {
