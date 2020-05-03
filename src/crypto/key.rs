@@ -26,6 +26,9 @@ impl Key {
     pub fn as_salt(&self) -> Salt {
         Salt(self.0)
     }
+    pub fn array_ref(&self) -> &[u8; KEY_LEN] {
+        &self.0
+    }
 }
 impl random::Randomizable for Key {
     fn random_secure() -> Self {
@@ -155,7 +158,7 @@ impl From<&NetKey> for IdentityKey {
         const P: &str = "id128\x01";
         let salt = s1("nkik");
 
-        k1(k.key(), salt, P.as_bytes()).into()
+        k1(k.0.as_ref(), &salt, P.as_bytes()).into()
     }
 }
 impl TryFrom<&[u8]> for IdentityKey {
@@ -196,7 +199,7 @@ impl From<&NetKey> for BeaconKey {
     fn from(k: &NetKey) -> Self {
         const P: &str = "id128\x01";
         let salt = s1("nkbk");
-        k1(k.key(), salt, P.as_bytes()).into()
+        k1(k.0.as_ref(), &salt, P.as_bytes()).into()
     }
 }
 impl TryFrom<&[u8]> for BeaconKey {
@@ -297,8 +300,8 @@ impl DevKey {
         Some(Self::new_bytes(hex_16_to_array(hex)?))
     }
     #[must_use]
-    pub fn from_salt_and_secret(salt: ProvisioningSalt, secret: ECDHSecret) -> Self {
-        Self::new(super::k1(&salt.0.as_key(), secret.as_salt(), b"prdk"))
+    pub fn from_salt_and_secret(salt: &ProvisioningSalt, secret: &ECDHSecret) -> Self {
+        Self::new(super::k1(secret.as_ref(), salt.as_ref(), b"prdk"))
     }
     #[must_use]
     pub fn key(&self) -> Key {
@@ -357,7 +360,30 @@ impl AppKey {
         AKF(true)
     }
 }
-
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
+#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
+pub struct SessionKey(Key);
+impl SessionKey {
+    #[must_use]
+    pub fn new_bytes(key_bytes: [u8; KEY_LEN]) -> Self {
+        Self::new(Key(key_bytes))
+    }
+    #[must_use]
+    pub fn new(key: Key) -> Self {
+        Self(key)
+    }
+    #[must_use]
+    pub fn from_hex(hex: &str) -> Option<Self> {
+        Some(Self::new_bytes(hex_16_to_array(hex)?))
+    }
+    #[must_use]
+    pub const fn key(&self) -> Key {
+        self.0
+    }
+    pub fn from_secret_salt(secret: &ECDHSecret, salt: &ProvisioningSalt) -> SessionKey {
+        SessionKey(k1(secret.as_ref(), salt.as_ref(), b"prsk"))
+    }
+}
 impl TryFrom<&[u8]> for AppKey {
     type Error = core::array::TryFromSliceError;
 
@@ -444,6 +470,12 @@ impl AsRef<Key> for PrivacyKey {
     }
 }
 impl AsRef<Key> for EncryptionKey {
+    #[must_use]
+    fn as_ref(&self) -> &Key {
+        &self.0
+    }
+}
+impl AsRef<Key> for SessionKey {
     #[must_use]
     fn as_ref(&self) -> &Key {
         &self.0

@@ -444,6 +444,9 @@ impl KeyIndex {
             Err(_) => panic!("key index too high"),
         }
     }
+    pub fn new_maybe(key_index: u16) -> Option<Self> {
+        key_index.try_into().ok()
+    }
     pub fn new_masked(key_index: u16) -> Self {
         KeyIndex(key_index & KEY_INDEX_MAX)
     }
@@ -462,6 +465,29 @@ impl TryFrom<u16> for KeyIndex {
 impl From<KeyIndex> for u16 {
     fn from(i: KeyIndex) -> Self {
         i.0
+    }
+}
+impl ToFromBytesEndian for KeyIndex {
+    type AsBytesType = [u8; 2];
+
+    #[must_use]
+    fn to_bytes_le(&self) -> Self::AsBytesType {
+        self.0.to_le_bytes()
+    }
+
+    #[must_use]
+    fn to_bytes_be(&self) -> Self::AsBytesType {
+        self.0.to_be_bytes()
+    }
+
+    #[must_use]
+    fn from_bytes_le(bytes: &[u8]) -> Option<Self> {
+        KeyIndex::new_maybe(u16::from_bytes_le(bytes)?)
+    }
+
+    #[must_use]
+    fn from_bytes_be(bytes: &[u8]) -> Option<Self> {
+        KeyIndex::new_maybe(u16::from_bytes_be(bytes)?)
     }
 }
 /// 12-bit NetKeyIndex

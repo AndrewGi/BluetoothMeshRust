@@ -49,15 +49,22 @@ impl UnprovisionedBeacons {
             .iter()
             .filter_map(move |&s| s.filter(move |b| b.last_seen < oldest))
     }
-    pub fn insert(&mut self, beacon: BeaconSource) {
+    pub fn insert(&mut self, beacon: BeaconSource) -> bool {
+        for slot in self.beacons.iter_mut() {
+            if slot.map(|b| b.beacon == beacon.beacon).unwrap_or(true) {
+                *slot = Some(beacon);
+                return false;
+            }
+        }
         let oldest = self.oldest_instant();
         for slot in self.beacons.iter_mut() {
             if slot.map(|b| b.last_seen < oldest).unwrap_or(true) {
                 *slot = Some(beacon);
-                return;
+                return true;
             }
         }
         self.beacons.push(Some(beacon));
+        return true;
     }
     pub fn shrink_to_fit(&mut self) {
         let oldest = self.oldest_instant();

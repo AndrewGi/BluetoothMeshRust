@@ -1,10 +1,12 @@
-use crate::crypto::ecdh;
+use crate::crypto::{ecdh, ECDHSecret, ProvisioningSalt};
 use crate::foundation::state::AttentionTimer;
-use crate::provisioning::protocol;
+use crate::provisioning::confirmation::{AuthValue, ConfirmationKey, ConfirmationSalt};
+use crate::provisioning::data::SessionSecurityMaterials;
 use crate::provisioning::protocol::{
-    AuthenticationMethod, Capabilities, ErrorCode, Failed, Invite, PublicKey, PublicKeyType, Start,
-    PDU,
+    AuthenticationMethod, Capabilities, Confirmation, ErrorCode, Failed, InputOOBAction, Invite,
+    OOBSize, OutputOOBAction, PublicKey, PublicKeyType, Random, Start, PDU,
 };
+use crate::provisioning::{confirmation, protocol};
 use btle::PackError;
 use driver_async::asyncs::sync::mpsc;
 use driver_async::time::{Duration, Instant, InstantTrait};
@@ -15,6 +17,8 @@ pub enum ProvisionerError {
     Closed,
     TimedOut,
     PrivateKeyMissing,
+    OOBPublicKeyMissing,
+    DeviceConfirmationMismatch,
     ECDH(ecdh::Error),
     PackError(PackError),
     Failed(ErrorCode),
@@ -35,6 +39,7 @@ pub enum Stage {
     Invited {
         invite: Invite,
     },
+    /// OOB Public Key will be use if enable after this
     Capabilities {
         invite: Invite,
         capabilities: Capabilities,
@@ -43,6 +48,17 @@ pub enum Stage {
         invite: Invite,
         capabilities: Capabilities,
         start: Start,
+    },
+    StartedOOBPublicKey {
+        invite: Invite,
+        capabilities: Capabilities,
+        start: Start,
+    },
+    OOBPublicKey {
+        invite: Invite,
+        capabilities: Capabilities,
+        start: Start,
+        device_public_key: PublicKey,
     },
     PublicKeyProvisioner {
         invite: Invite,
@@ -58,6 +74,78 @@ pub enum Stage {
         private_key: Option<ecdh::PrivateKey>,
         provisioner_public_key: PublicKey,
         device_public_key: PublicKey,
+    },
+    /// OOB Information should be fed after this
+    Confirmation {
+        ecdh_secret: ECDHSecret,
+        confirmation_key: ConfirmationKey,
+        provisioner_random: Random,
+        confirmation_salt: ConfirmationSalt,
+        oob_type: AuthenticationMethod,
+    },
+    OutputOOB {
+        ecdh_secret: ECDHSecret,
+        confirmation_key: ConfirmationKey,
+        confirmation_salt: ConfirmationSalt,
+        provisioner_random: Random,
+        output_oob_action: OutputOOBAction,
+        output_oob_size: OOBSize,
+    },
+    InputOOB {
+        ecdh_secret: ECDHSecret,
+        confirmation_key: ConfirmationKey,
+        confirmation_salt: ConfirmationSalt,
+        provisioner_random: Random,
+        input_oob_action: InputOOBAction,
+        input_oob_size: OOBSize,
+    },
+    StaticOOB {
+        ecdh_secret: ECDHSecret,
+        confirmation_key: ConfirmationKey,
+        confirmation_salt: ConfirmationSalt,
+        provisioner_random: Random,
+    },
+    SendConfirmation {
+        ecdh_secret: ECDHSecret,
+        confirmation_key: ConfirmationKey,
+        confirmation_salt: ConfirmationSalt,
+        provisioner_random: Random,
+        auth_value: AuthValue,
+    },
+    WaitForDeviceConfirmation {
+        ecdh_secret: ECDHSecret,
+        confirmation_key: ConfirmationKey,
+        confirmation_salt: ConfirmationSalt,
+        provisioner_random: Random,
+        auth_value: AuthValue,
+    },
+    DeviceConfirmation {
+        ecdh_secret: ECDHSecret,
+        confirmation_key: ConfirmationKey,
+        confirmation_salt: ConfirmationSalt,
+        provisioner_random: Random,
+        auth_value: AuthValue,
+        device_confirmation: Confirmation,
+    },
+    WaitForDeviceRandom {
+        ecdh_secret: ECDHSecret,
+        confirmation_key: ConfirmationKey,
+        confirmation_salt: ConfirmationSalt,
+        provisioner_random: Random,
+        auth_value: AuthValue,
+        device_confirmation: Confirmation,
+    },
+    DeviceRandom {
+        ecdh_secret: ECDHSecret,
+        confirmation_key: ConfirmationKey,
+        confirmation_salt: ConfirmationSalt,
+        provisioner_random: Random,
+        auth_value: AuthValue,
+        device_confirmation: Confirmation,
+        device_random: Random,
+    },
+    Distribute {
+        security_materials: SessionSecurityMaterials,
     },
     Closed,
     Failed(Failed),
@@ -97,8 +185,10 @@ impl Bearer {
 pub struct Process {
     stage: Stage,
     last_message_time: Option<Instant>,
+    pub oob_public_key: Option<PublicKey>,
     pub attention_timer: AttentionTimer,
     pub authentication_method: AuthenticationMethod,
+    pub auth_value: AuthValue,
     pub public_key_type: PublicKeyType,
     pub bearer: Bearer,
 }
@@ -108,13 +198,16 @@ impl Process {
         bearer: Bearer,
         attention_timer: AttentionTimer,
         authentication_method: AuthenticationMethod,
+        auth_value: AuthValue,
         public_key_type: PublicKeyType,
     ) -> Process {
         Process {
             stage: Stage::Pending,
             last_message_time: None,
+            oob_public_key: None,
             attention_timer,
             authentication_method,
+            auth_value,
             public_key_type,
             bearer,
         }
@@ -124,6 +217,7 @@ impl Process {
             bearer,
             AttentionTimer::default(),
             AuthenticationMethod::NoOOB,
+            AuthValue::DEFAULT,
             PublicKeyType::NotAvailable,
         )
     }
@@ -228,10 +322,18 @@ impl Process {
                 let capabilities = *capabilities;
                 let start = self.start_pdu();
                 self.send(&PDU::Start(start)).await?;
-                self.stage = Stage::Started {
-                    invite,
-                    capabilities,
-                    start,
+                if start.public_key_type == PublicKeyType::NotAvailable {
+                    self.stage = Stage::Started {
+                        invite,
+                        capabilities,
+                        start,
+                    }
+                } else {
+                    self.stage = Stage::StartedOOBPublicKey {
+                        invite,
+                        capabilities,
+                        start,
+                    }
                 }
             }
             Stage::Started {
@@ -252,6 +354,42 @@ impl Process {
                     start,
                     private_key: Some(private_key),
                     provisioner_public_key: public_key,
+                }
+            }
+            Stage::StartedOOBPublicKey {
+                invite,
+                capabilities,
+                start,
+            } => {
+                self.stage = Stage::OOBPublicKey {
+                    device_public_key: self
+                        .oob_public_key
+                        .ok_or(ProvisionerError::OOBPublicKeyMissing)?,
+                    invite: *invite,
+                    capabilities: *capabilities,
+                    start: *start,
+                }
+            }
+            Stage::OOBPublicKey {
+                invite,
+                capabilities,
+                start,
+                device_public_key,
+            } => {
+                let private_key = ecdh::PrivateKey::new()?;
+                let provisioner_public_key = (&private_key.public_key()?).into();
+                let invite = *invite;
+                let capabilities = *capabilities;
+                let start = *start;
+                let device_public_key = *device_public_key;
+                self.send(&PDU::PublicKey(provisioner_public_key)).await?;
+                self.stage = Stage::PublicKeyDevice {
+                    invite,
+                    start,
+                    capabilities,
+                    device_public_key,
+                    private_key: Some(private_key),
+                    provisioner_public_key,
                 }
             }
             Stage::PublicKeyProvisioner {
@@ -285,7 +423,241 @@ impl Process {
                     provisioner_public_key: *provisioner_public_key,
                 };
             }
-            Stage::PublicKeyDevice { .. } => {}
+            Stage::PublicKeyDevice {
+                invite,
+                capabilities,
+                start,
+                private_key,
+                provisioner_public_key,
+                device_public_key,
+            } => {
+                let private_key = private_key
+                    .take()
+                    .ok_or(ProvisionerError::PrivateKeyMissing)?;
+                let ecdh_secret = private_key.agree(device_public_key, |s| ECDHSecret::new(s))?;
+                let confirmation_salt = confirmation::Input {
+                    invite: *invite,
+                    capabilities: *capabilities,
+                    start: *start,
+                    provisioner_public_key: *provisioner_public_key,
+                    device_public_key: *device_public_key,
+                }
+                .salt();
+                let confirmation_key =
+                    ConfirmationKey::from_salt_and_secret(&confirmation_salt, &ecdh_secret);
+                self.stage = Stage::Confirmation {
+                    ecdh_secret,
+                    confirmation_key,
+                    provisioner_random: Random::new_rand(),
+                    confirmation_salt,
+                    oob_type: start.auth_method,
+                }
+            }
+            Stage::Confirmation {
+                ecdh_secret,
+                confirmation_key,
+                provisioner_random,
+                confirmation_salt,
+                oob_type,
+            } => match oob_type {
+                AuthenticationMethod::NoOOB => {
+                    self.stage = Stage::SendConfirmation {
+                        ecdh_secret: *ecdh_secret,
+                        confirmation_key: *confirmation_key,
+                        confirmation_salt: *confirmation_salt,
+                        provisioner_random: *provisioner_random,
+                        auth_value: AuthValue::ZEROED,
+                    }
+                }
+                AuthenticationMethod::StaticOOB => {
+                    self.stage = Stage::StaticOOB {
+                        ecdh_secret: *ecdh_secret,
+                        confirmation_key: *confirmation_key,
+                        confirmation_salt: *confirmation_salt,
+                        provisioner_random: *provisioner_random,
+                    }
+                }
+                AuthenticationMethod::OutputOOB(a, s) => {
+                    self.stage = Stage::OutputOOB {
+                        ecdh_secret: *ecdh_secret,
+                        confirmation_key: *confirmation_key,
+                        confirmation_salt: *confirmation_salt,
+                        provisioner_random: *provisioner_random,
+                        output_oob_action: *a,
+                        output_oob_size: *s,
+                    }
+                }
+                AuthenticationMethod::InputOOB(a, s) => {
+                    self.stage = Stage::InputOOB {
+                        ecdh_secret: *ecdh_secret,
+                        confirmation_key: *confirmation_key,
+                        confirmation_salt: *confirmation_salt,
+                        provisioner_random: *provisioner_random,
+                        input_oob_action: *a,
+                        input_oob_size: *s,
+                    }
+                }
+            },
+
+            Stage::OutputOOB {
+                ecdh_secret,
+                confirmation_key,
+                confirmation_salt,
+                provisioner_random,
+                ..
+            } => {
+                self.stage = Stage::SendConfirmation {
+                    auth_value: self.auth_value,
+                    ecdh_secret: *ecdh_secret,
+                    confirmation_key: *confirmation_key,
+                    confirmation_salt: *confirmation_salt,
+                    provisioner_random: *provisioner_random,
+                }
+            }
+            Stage::InputOOB {
+                ecdh_secret,
+                confirmation_key,
+                confirmation_salt,
+                provisioner_random,
+                ..
+            } => {
+                self.stage = Stage::SendConfirmation {
+                    auth_value: self.auth_value,
+                    ecdh_secret: *ecdh_secret,
+                    confirmation_key: *confirmation_key,
+                    provisioner_random: *provisioner_random,
+                    confirmation_salt: *confirmation_salt,
+                }
+            }
+            Stage::StaticOOB {
+                ecdh_secret,
+                confirmation_key,
+                provisioner_random,
+                confirmation_salt,
+            } => {
+                self.stage = Stage::SendConfirmation {
+                    auth_value: self.auth_value,
+                    ecdh_secret: *ecdh_secret,
+                    confirmation_key: *confirmation_key,
+                    confirmation_salt: *confirmation_salt,
+                    provisioner_random: *provisioner_random,
+                }
+            }
+            Stage::SendConfirmation {
+                ecdh_secret,
+                confirmation_key,
+                confirmation_salt,
+                provisioner_random,
+                auth_value,
+            } => {
+                let confirmation = confirmation_key.confirm_random(provisioner_random, auth_value);
+                self.bearer.send(&PDU::Confirm(confirmation)).await?;
+                self.last_message_time = Some(Instant::now());
+                self.stage = Stage::WaitForDeviceConfirmation {
+                    auth_value: self.auth_value,
+                    ecdh_secret: *ecdh_secret,
+                    confirmation_key: *confirmation_key,
+                    confirmation_salt: *confirmation_salt,
+                    provisioner_random: *provisioner_random,
+                }
+            }
+            Stage::WaitForDeviceConfirmation {
+                ecdh_secret,
+                confirmation_key,
+                confirmation_salt,
+                provisioner_random,
+                auth_value,
+            } => {
+                let device_confirmation = match self.bearer.recv(Self::TIMEOUT).await? {
+                    PDU::Confirm(confirmation) => confirmation,
+                    _ => {
+                        self.fail(ErrorCode::UnexpectedPDU).await?;
+                        return Err(ProvisionerError::Failed(ErrorCode::UnexpectedPDU));
+                    }
+                };
+                self.last_message_time = Some(Instant::now());
+                self.stage = Stage::DeviceConfirmation {
+                    ecdh_secret: *ecdh_secret,
+                    confirmation_key: *confirmation_key,
+                    confirmation_salt: *confirmation_salt,
+                    provisioner_random: *provisioner_random,
+                    auth_value: *auth_value,
+                    device_confirmation,
+                }
+            }
+            Stage::DeviceConfirmation {
+                ecdh_secret,
+                confirmation_key,
+                confirmation_salt,
+                provisioner_random,
+                auth_value,
+                device_confirmation,
+            } => {
+                self.bearer.send(&PDU::Random(*provisioner_random)).await?;
+                self.last_message_time = Some(Instant::now());
+                self.stage = Stage::WaitForDeviceRandom {
+                    ecdh_secret: *ecdh_secret,
+                    confirmation_key: *confirmation_key,
+                    confirmation_salt: *confirmation_salt,
+                    provisioner_random: *provisioner_random,
+                    auth_value: *auth_value,
+                    device_confirmation: *device_confirmation,
+                }
+            }
+            Stage::WaitForDeviceRandom {
+                ecdh_secret,
+                confirmation_key,
+                confirmation_salt,
+                provisioner_random,
+                auth_value,
+                device_confirmation,
+            } => {
+                let device_random = match self.bearer.recv(Self::TIMEOUT).await? {
+                    PDU::Random(random) => random,
+                    _ => {
+                        self.fail(ErrorCode::UnexpectedPDU).await?;
+                        return Err(ProvisionerError::Failed(ErrorCode::UnexpectedPDU));
+                    }
+                };
+                self.last_message_time = Some(Instant::now());
+                self.stage = Stage::DeviceRandom {
+                    ecdh_secret: *ecdh_secret,
+                    confirmation_key: *confirmation_key,
+                    confirmation_salt: *confirmation_salt,
+                    provisioner_random: *provisioner_random,
+                    auth_value: *auth_value,
+                    device_confirmation: *device_confirmation,
+                    device_random,
+                }
+            }
+            Stage::DeviceRandom {
+                ecdh_secret,
+                confirmation_key,
+                confirmation_salt,
+                provisioner_random,
+                auth_value,
+                device_confirmation,
+                device_random,
+            } => {
+                if device_confirmation
+                    != &confirmation_key.confirm_random(device_random, auth_value)
+                {
+                    self.fail(ErrorCode::ConfirmationFailed).await?;
+                    return Err(ProvisionerError::DeviceConfirmationMismatch);
+                }
+                let provisioning_salt = ProvisioningSalt::from_randoms(
+                    confirmation_salt,
+                    provisioner_random,
+                    device_random,
+                );
+                self.stage = Stage::Distribute {
+                    security_materials: SessionSecurityMaterials::from_secret_salt(
+                        ecdh_secret,
+                        &provisioning_salt,
+                    ),
+                }
+            }
+            Stage::Distribute { security_materials } => unimplemented!(),
         }
         Ok(&self.stage)
     }

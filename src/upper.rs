@@ -119,12 +119,12 @@ impl SecurityMaterials<'_> {
     #[must_use]
     pub fn encrypt(&self, payload: &mut [u8], mic_size: MicSize) -> MIC {
         let (nonce, key, aad) = self.unpack();
-        AESCipher::new(*key).ccm_encrypt(nonce, aad, payload, mic_size)
+        AESCipher::new(key).ccm_encrypt(nonce, aad, payload, mic_size)
     }
 
     pub fn decrypt(&self, payload: &mut [u8], mic: MIC) -> Result<(), Error> {
         let (nonce, key, aad) = self.unpack();
-        AESCipher::new(*key).ccm_decrypt(nonce, aad, payload, mic)
+        AESCipher::new(key).ccm_decrypt(nonce, aad, payload, mic)
     }
     #[must_use]
     pub fn akf(&self) -> AKF {

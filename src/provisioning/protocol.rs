@@ -469,7 +469,7 @@ impl ProtocolPDU for Capabilities {
         })
     }
 }
-pub const ENCRYPTED_PROVISIONING_DATA_LEN: usize = 25;
+pub const ENCRYPTED_PROVISIONING_DATA_LEN: usize = super::data::PACKED_LEN;
 
 #[derive(Copy, Clone, PartialOrd, PartialEq, Ord, Eq, Debug, Hash)]
 pub struct EncryptedProvisioningData {
@@ -728,8 +728,16 @@ impl ProtocolPDU for Confirmation {
     }
 }
 pub const RANDOM_LEN: usize = 16;
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Default)]
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct Random(pub [u8; RANDOM_LEN]);
+impl Random {
+    pub const ZEROED: Random = Random([0_u8; RANDOM_LEN]);
+    pub fn new_rand() -> Random {
+        let mut out = [0_u8; RANDOM_LEN];
+        crate::random::secure_random_fill_bytes(&mut out);
+        Random(out)
+    }
+}
 impl ProtocolPDU for Random {
     const OPCODE: Opcode = Opcode::Random;
 
@@ -746,7 +754,7 @@ impl ProtocolPDU for Random {
         Self: Sized,
     {
         PackError::expect_length(Self::BYTE_LEN, buf)?;
-        let mut out = Random::default();
+        let mut out = Random::ZEROED;
         out.0.copy_from_slice(buf);
         Ok(out)
     }

@@ -218,21 +218,41 @@ impl AsRef<[u8]> for Salt {
 }
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
-pub struct ProvisioningSalt(Salt);
+pub struct ProvisioningSalt(pub Salt);
 impl ProvisioningSalt {
     pub fn as_salt(&self) -> Salt {
         self.0
     }
+    pub fn from_randoms(
+        confirmation_salt: &ConfirmationSalt,
+        provisioner_random: &crate::provisioning::protocol::Random,
+        device_random: &crate::provisioning::protocol::Random,
+    ) -> ProvisioningSalt {
+        ProvisioningSalt(Salt(
+            s1_slice(&[
+                confirmation_salt.as_ref(),
+                provisioner_random.0.as_ref(),
+                device_random.0.as_ref(),
+            ])
+            .0,
+        ))
+    }
 }
+impl AsRef<Salt> for ProvisioningSalt {
+    fn as_ref(&self) -> &Salt {
+        &self.0
+    }
+}
+pub const ECDH_SECRET_LEN: usize = 32;
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
-pub struct ECDHSecret(Salt);
+pub struct ECDHSecret(pub [u8; ECDH_SECRET_LEN]);
 impl ECDHSecret {
-    pub fn new_bytes(bytes: [u8; SALT_LEN]) -> Self {
-        Self(Salt::new(bytes))
+    pub fn new(bytes: &[u8]) -> ECDHSecret {
+        ECDHSecret(bytes.try_into().expect("expected ECDH_SECRET_LEN len"))
     }
-    pub fn as_salt(&self) -> Salt {
-        self.0
+    pub fn new_bytes(bytes: [u8; ECDH_SECRET_LEN]) -> Self {
+        Self(bytes)
     }
 }
 impl AsRef<[u8]> for ECDHSecret {
@@ -281,5 +301,8 @@ impl Display for KeyRefreshPhases {
     }
 }
 use crate::bytes::ToFromBytesEndian;
+use crate::crypto::k_funcs::s1_slice;
+use crate::provisioning::confirmation::ConfirmationSalt;
 use core::fmt::{Display, Error, Formatter};
 pub use k_funcs::{k1, k2, k3, k4, s1};
+use std::convert::TryInto;

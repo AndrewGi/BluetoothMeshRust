@@ -52,7 +52,7 @@ impl MicSize {
 pub struct AESCipher(Aes128);
 impl AESCipher {
     #[must_use]
-    pub fn new(key: Key) -> AESCipher {
+    pub fn new(key: &Key) -> AESCipher {
         AESCipher(Aes128::new(GenericArray::from_slice(key.as_ref())))
     }
     #[must_use]
@@ -188,6 +188,11 @@ impl AESCipher {
 
 impl From<Key> for AESCipher {
     fn from(k: Key) -> Self {
+        Self::new(&k)
+    }
+}
+impl From<&'_ Key> for AESCipher {
+    fn from(k: &Key) -> Self {
         Self::new(k)
     }
 }

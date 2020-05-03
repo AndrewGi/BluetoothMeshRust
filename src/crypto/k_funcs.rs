@@ -10,8 +10,8 @@ use core::convert::TryInto;
 
 /// k1 function from Mesh Core v1.0. N==`bytes` and P==`extra`.
 #[must_use]
-pub fn k1(key: &Key, salt: Salt, extra: &[u8]) -> Key {
-    let t = AESCipher::from(salt).cmac(key.as_ref());
+pub fn k1(n: &[u8], salt: &Salt, extra: &[u8]) -> Key {
+    let t = AESCipher::from(*salt).cmac(n);
     AESCipher::from(t).cmac(extra)
 }
 #[must_use]
@@ -81,7 +81,11 @@ pub const SMK4: Salt = Salt([
 ]);
 #[must_use]
 pub fn s1_bytes(m: &[u8]) -> Salt {
-    AESCipher::new(ZERO_KEY).cmac(m).as_salt()
+    AESCipher::new(&ZERO_KEY).cmac(m).as_salt()
+}
+#[must_use]
+pub fn s1_slice(m: &[&[u8]]) -> Salt {
+    AESCipher::new(&ZERO_KEY).cmac_slice(m).as_salt()
 }
 #[must_use]
 pub fn id128(n: &Key, s: impl AsRef<[u8]>) -> Key {
@@ -90,7 +94,7 @@ pub fn id128(n: &Key, s: impl AsRef<[u8]>) -> Key {
 #[must_use]
 pub fn id128_bytes(n: &Key, s: &[u8]) -> Key {
     let salt = s1_bytes(s);
-    k1(&salt.as_key(), n.as_salt(), b"id128\x01")
+    k1(n.as_ref(), &salt, b"id128\x01")
 }
 
 /// Tests based on Mesh Core v1.0 Sample Data.
@@ -128,7 +132,7 @@ mod tests {
         let salt = Salt::from_hex("2ba14ffa0df84a2831938d57d276cab4").unwrap();
         let p = hex_16_to_array("5a09d60797eeb4478aada59db3352a0d").unwrap();
         let expected = Key::from_hex("f6ed15a8934afbe7d83e8dcb57fcf5d7").unwrap();
-        assert_eq!(k1(&key, salt, &p[..]), expected);
+        assert_eq!(k1(key.as_ref(), &salt, &p[..]), expected);
     }
 
     #[test]

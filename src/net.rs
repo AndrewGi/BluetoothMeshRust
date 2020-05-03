@@ -46,7 +46,7 @@ impl DecryptedData {
         let mut buf = [0_u8; TRANSPORT_PDU_MAX_LEN + ADDRESS_LEN + MIC::max_len()];
         buf[..ADDRESS_LEN].copy_from_slice(&self.dst.to_bytes_be()[..]);
         buf[ADDRESS_LEN..self.len()].copy_from_slice(self.transport_pdu());
-        let mic = AESCipher::new(network_keys.encryption_key().key()).ccm_encrypt(
+        let mic = AESCipher::new(network_keys.encryption_key().as_ref()).ccm_encrypt(
             nonce.as_ref(),
             b"",
             &mut buf[..self.transport_len + ADDRESS_LEN],
@@ -166,7 +166,7 @@ impl EncryptedData<'_> {
         let mut buf = [0_u8; ENCRYPTED_DATA_MAX_LEN];
         let mic = self.mic();
         buf[..self.data_len()].copy_from_slice(self.data());
-        AESCipher::new(network_keys.encryption_key().key())
+        AESCipher::new(network_keys.encryption_key().as_ref())
             .ccm_decrypt(nonce.as_ref(), &[], &mut buf[..], mic)
             .ok()?;
         let mut transport_buf = [0_u8; TRANSPORT_PDU_MAX_LEN];
@@ -720,7 +720,7 @@ impl PackedPrivacy {
         Self(bytes)
     }
     pub fn encrypt_with(mut self, key: &PrivacyKey) -> PECB {
-        AESCipher::new(key.key()).ecb_encrypt(&mut self.0[..]);
+        AESCipher::new(key.as_ref()).ecb_encrypt(&mut self.0[..]);
         PECB(
             (&self.0[..PECB_LEN])
                 .try_into()

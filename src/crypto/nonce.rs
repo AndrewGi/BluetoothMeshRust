@@ -1,7 +1,9 @@
 //! Bluetooth Mesh nonces. Based on Mesh Core Spec v1.0.
 use crate::address::{Address, UnicastAddress};
 use crate::bytes::ToFromBytesEndian;
+use crate::crypto::{k1, ECDHSecret, ProvisioningSalt};
 use crate::mesh::{IVIndex, SequenceNumber, CTL, TTL};
+use std::convert::TryInto;
 
 const NONCE_LEN: usize = 13;
 const ZERO_NONCE_BYTES: [u8; NONCE_LEN] = [0_u8; NONCE_LEN];
@@ -250,5 +252,22 @@ impl ProxyNonceParts {
             iv[1],
             iv[0],
         ])
+    }
+}
+
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialOrd, PartialEq, Ord)]
+pub struct SessionNonce(pub Nonce);
+impl SessionNonce {
+    pub fn from_secret_salt(secret: &ECDHSecret, salt: &ProvisioningSalt) -> SessionNonce {
+        SessionNonce(Nonce::new(
+            (&k1(secret.as_ref(), salt.as_ref(), b"prsn").as_ref()[..NONCE_LEN])
+                .try_into()
+                .expect("hard coded length"),
+        ))
+    }
+}
+impl AsRef<Nonce> for SessionNonce {
+    fn as_ref(&self) -> &Nonce {
+        &self.0
     }
 }
