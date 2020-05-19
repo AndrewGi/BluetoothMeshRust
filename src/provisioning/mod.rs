@@ -7,6 +7,8 @@ pub mod bearer_control;
 pub mod confirmation;
 pub mod data;
 pub mod generic;
+pub mod generic_bearer;
+pub mod generic_link;
 pub mod link;
 pub mod pb_adv;
 pub mod pb_gatt;

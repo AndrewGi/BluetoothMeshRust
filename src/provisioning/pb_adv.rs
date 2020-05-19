@@ -1,7 +1,7 @@
 //! PB-ADV Provisioning bearer for Bluetooth Mesh
 use super::generic;
 use crate::provisioning::generic::GENERIC_PDU_MAX_LEN;
-use btle::bytes::StaticBuf;
+use btle::bytes::Storage;
 use btle::{PackError, RSSI};
 use std::convert::TryInto;
 
@@ -29,13 +29,13 @@ impl TransactionNumber {
     pub const fn new(trans_num: u8) -> TransactionNumber {
         TransactionNumber(trans_num)
     }
-    pub fn value(self) -> u8 {
+    pub const fn value(self) -> u8 {
         self.0
     }
-    pub fn new_provisionee() -> TransactionNumber {
+    pub const fn new_provisionee() -> TransactionNumber {
         Self::new(PROVISIONEE_START)
     }
-    pub fn new_provisioner() -> TransactionNumber {
+    pub const fn new_provisioner() -> TransactionNumber {
         Self::new(PROVISIONER_START)
     }
     pub fn is_provisionee(self) -> bool {
@@ -57,6 +57,19 @@ impl TransactionNumber {
         }
         Self::new(self.0 + 1)
     }
+    pub fn prev(self) -> TransactionNumber {
+        // Provisionee 0x80-0xFF
+        // Provisioner 0x00-0x7F
+        // Check if were at the end of the range and we have to wrap to the start
+        if self.is_provisionee() {
+            if self.0 == PROVISIONEE_START {
+                return Self::new(PROVISIONEE_END);
+            }
+        } else if self.0 == PROVISIONER_START {
+            return Self::new(PROVISIONER_END);
+        }
+        Self::new(self.0 - 1)
+    }
     /// Same as calling `next()` but modifies the TransactionNumber instead of returning a new one
     pub fn increment(&mut self) {
         let next = self.next();
@@ -74,13 +87,22 @@ impl From<TransactionNumber> for u8 {
         num.0
     }
 }
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
-pub struct PDU {
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct PDU<B: AsRef<[u8]>> {
     pub link_id: LinkID,
     pub transaction_number: TransactionNumber,
-    pub generic_pdu: generic::PDU<StaticBuf<u8, [u8; GENERIC_PDU_MAX_LEN]>>,
+    pub generic_pdu: generic::PDU<B>,
 }
-impl PDU {
+impl<B: AsRef<[u8]>> core::fmt::Debug for PDU<B> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("PDU<B>")
+            .field("link_id", &self.link_id)
+            .field("transaction_number", &self.transaction_number)
+            .field("generic_pdu", &self.generic_pdu)
+            .finish()
+    }
+}
+impl<B: Storage<u8>> PDU<B> {
     pub const HEADER_BYTE_LEN: usize = LinkID::BYTE_LEN + TransactionNumber::BYTE_LEN;
     pub const MIN_BYTE_LEN: usize = Self::HEADER_BYTE_LEN + 1;
     pub const MAX_BYTE_LEN: usize = Self::HEADER_BYTE_LEN + GENERIC_PDU_MAX_LEN;
@@ -108,10 +130,18 @@ impl PDU {
         })
     }
 }
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
-pub struct IncomingPDU {
-    pub pdu: PDU,
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct IncomingPDU<B: AsRef<[u8]>> {
+    pub pdu: PDU<B>,
     pub rssi: Option<RSSI>,
+}
+impl<B: AsRef<[u8]>> core::fmt::Debug for IncomingPDU<B> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("IncomingPDU<B>")
+            .field("pdu", &self.pdu)
+            .field("rssi", &self.rssi)
+            .finish()
+    }
 }
 pub struct PackedPDU {}
 impl AsRef<[u8]> for PackedPDU {

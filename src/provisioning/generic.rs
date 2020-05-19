@@ -1,20 +1,23 @@
+//! Generic Provisioning PDUs should be sent with delays of 20-50 milliseconds between them
 use super::bearer_control;
 
+use crate::provisioning::protocol;
 use btle::bytes::Storage;
 use btle::PackError;
-use core::convert::TryFrom;
-use std::convert::TryInto;
+use core::convert::{TryFrom, TryInto};
 
 /// 6 bit Segment Number
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Default, Hash)]
 pub struct SegmentIndex(u8);
 const SEGMENT_INDEX_MAX: u8 = (1_u8 << 6) - 1;
 impl SegmentIndex {
+    pub const ZERO: SegmentIndex = SegmentIndex(0);
+    pub const MAX_SEGMENTS: u8 = SEGMENT_INDEX_MAX + 1;
     /// Creates a new 6 bit Segment Index from a u8.
     /// # Panics
     /// Panics if `index` is greater than 6 bits (`index` > `SEGMENT_INDEX_MAX`).
     pub fn new(index: u8) -> SegmentIndex {
-        assert!(index < SEGMENT_INDEX_MAX);
+        assert!(index <= SEGMENT_INDEX_MAX, "segment index overflow");
         Self(index)
     }
 }
@@ -22,7 +25,7 @@ impl SegmentIndex {
 pub struct FCS(u8);
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
-pub struct MTU(u8);
+pub struct MTU(u16);
 
 #[repr(u8)]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
@@ -95,9 +98,9 @@ impl From<TransactionAcknowledgmentPDU> for u8 {
 }
 #[derive(Copy, Clone, PartialOrd, PartialEq, Ord, Eq, Debug, Hash)]
 pub struct TransactionStartPDU {
-    seg_n: SegmentIndex,
-    total_length: u16,
-    fcs: FCS,
+    pub seg_n: SegmentIndex,
+    pub total_length: u16,
+    pub fcs: FCS,
 }
 /// FCS 3GPP TS 27.010
 /// Polynomial x^8 x^2 + x + 1
@@ -330,7 +333,252 @@ impl<T: AsRef<[u8]>> core::fmt::Debug for PDU<T> {
             .finish()
     }
 }
-pub struct SegmentGenerator<'a> {
-    data: &'a [u8],
+pub const PDU_MTU: u16 = 24;
+pub const MAX_START_DATA_LEN: u16 = PDU_MTU - 4;
+pub const MAX_CONTINUATION_DATA_LEN: u16 = PDU_MTU - 1;
+pub const MAX_PDU_LEN: u16 = PDU_MTU * (SegmentIndex::MAX_SEGMENTS - 1) as u16 + MAX_START_DATA_LEN;
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+pub struct SegmentGenerator<B> {
+    data: B,
     fcs: FCS,
+}
+impl<B: AsRef<[u8]>> SegmentGenerator<B> {
+    pub fn new(data: B) -> SegmentGenerator<B> {
+        assert!(data.as_ref().len() <= usize::from(PDU_MTU));
+        SegmentGenerator {
+            fcs: fcs_calc(data.as_ref()),
+            data,
+        }
+    }
+    /// Number of Segments
+    pub fn seg_n(&self) -> SegmentIndex {
+        let len = self.data_len();
+        if len <= MAX_START_DATA_LEN {
+            SegmentIndex::new(0)
+        } else {
+            SegmentIndex::new(
+                ((len + MAX_CONTINUATION_DATA_LEN - 1 - MAX_START_DATA_LEN)
+                    / MAX_CONTINUATION_DATA_LEN)
+                    .try_into()
+                    .expect("segment index overflow"),
+            )
+        }
+    }
+    pub fn fcs(&self) -> FCS {
+        self.fcs
+    }
+    pub fn get_segment_data(&self, segment_index: SegmentIndex) -> Option<&'_ [u8]> {
+        let seg_n = self.seg_n();
+        if segment_index > seg_n {
+            None
+        } else {
+            if segment_index == SegmentIndex::ZERO {
+                if segment_index == seg_n {
+                    Some(self.data.as_ref())
+                } else {
+                    Some(&self.data.as_ref()[..MAX_START_DATA_LEN as usize])
+                }
+            } else {
+                let index = usize::from(MAX_START_DATA_LEN)
+                    + usize::from(MAX_CONTINUATION_DATA_LEN) * usize::from(segment_index.0 - 1);
+                if segment_index == seg_n {
+                    Some(&self.data.as_ref()[index..])
+                } else {
+                    Some(&self.data.as_ref()[index..index + usize::from(MAX_CONTINUATION_DATA_LEN)])
+                }
+            }
+        }
+    }
+    pub fn data_len(&self) -> u16 {
+        // Constructor insures `.len()` fits in an `u16`.
+        self.data.as_ref().len() as u16
+    }
+}
+impl<B: AsRef<[u8]>> core::fmt::Debug for SegmentGenerator<B> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("SegmentGenerator<B>")
+            .field("data", &self.data.as_ref())
+            .field("fcs", &self.fcs)
+            .finish()
+    }
+}
+impl<B: AsRef<[u8]>> core::hash::Hash for SegmentGenerator<B> {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        state.write(self.data.as_ref());
+        state.write_u8(self.fcs.0);
+    }
+}
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
+pub struct Reassembler<B> {
+    data: B,
+    fcs: FCS,
+    seg_i: SegmentIndex,
+    seg_n: SegmentIndex,
+}
+impl<B: AsRef<[u8]>> core::hash::Hash for Reassembler<B> {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        state.write(self.data.as_ref());
+        state.write_u8(self.fcs.0);
+        state.write_u8(self.seg_i.0);
+        state.write_u8(self.seg_n.0);
+    }
+}
+#[derive(Copy, PartialOrd, PartialEq, Ord, Eq, Hash, Debug, Clone)]
+pub enum ReassembleError {
+    NotFinished,
+    TooManySegments,
+    SegmentRepeat,
+    SegmentSkipped,
+    DataUnderflow,
+    DataOverflow,
+    FCSMismatch,
+    PackError(PackError),
+}
+impl<B: AsRef<[u8]> + AsMut<[u8]>> Reassembler<B> {
+    pub fn new_started(
+        data: B,
+        fcs: FCS,
+        seg_n: SegmentIndex,
+        seg_i: SegmentIndex,
+    ) -> Reassembler<B> {
+        assert!(
+            data.as_ref().len() < (u16::MAX as usize),
+            "data.len() overflows a u16"
+        );
+        Reassembler {
+            data,
+            fcs,
+            seg_i,
+            seg_n,
+        }
+    }
+    pub fn new(data: B, fcs: FCS, seg_n: SegmentIndex) -> Reassembler<B> {
+        Self::new_started(data, fcs, seg_n, SegmentIndex::ZERO)
+    }
+    pub fn from_start(
+        start: TransactionStartPDU,
+        data: &[u8],
+    ) -> Result<Reassembler<B>, ReassembleError>
+    where
+        B: Storage<u8>,
+    {
+        let mut out = Self::new(
+            B::with_size(start.total_length.into()),
+            start.fcs,
+            start.seg_n,
+        );
+        debug_assert_eq!(out.total_len(), start.total_length);
+        out.insert(data, SegmentIndex(0))?;
+        Ok(out)
+    }
+    pub fn total_len(&self) -> u16 {
+        // Trim usize -> u16 on purpose. Both are checked in constructor to not overflow u16
+        self.data.as_ref().len() as u16
+    }
+    pub fn fcs(&self) -> FCS {
+        self.fcs
+    }
+    pub fn fcs_finished(&self) -> Option<FCS> {
+        if self.is_done() {
+            Some(fcs_calc(self.all_data()))
+        } else {
+            None
+        }
+    }
+    pub fn seg_n(&self) -> SegmentIndex {
+        self.seg_i
+    }
+    pub fn seg_i(&self) -> SegmentIndex {
+        self.seg_i
+    }
+    pub fn data_index(&self) -> u16 {
+        match self.seg_i {
+            SegmentIndex(0) => 0,
+            SegmentIndex(1) => MAX_START_DATA_LEN,
+            SegmentIndex(i) => MAX_CONTINUATION_DATA_LEN * u16::from(i - 1) + MAX_START_DATA_LEN,
+        }
+    }
+    pub fn is_done(&self) -> bool {
+        debug_assert!(self.seg_i <= self.seg_n, "seg_i overflow");
+        self.seg_i == self.seg_n
+    }
+    pub fn current_data(&self) -> &[u8] {
+        &self.data.as_ref()[..self.data_index() as usize]
+    }
+    pub fn all_data(&self) -> &[u8] {
+        self.data.as_ref()
+    }
+    pub fn fcs_matches(&self) -> Option<bool> {
+        if self.is_done() {
+            Some(fcs_check(self.fcs, self.data.as_ref()))
+        } else {
+            None
+        }
+    }
+    pub fn into_inner(self) -> B {
+        self.data
+    }
+    pub fn finish_data(self) -> Result<B, ReassembleError> {
+        if self.fcs_matches().ok_or(ReassembleError::NotFinished)? {
+            Ok(self.data)
+        } else {
+            Err(ReassembleError::FCSMismatch)
+        }
+    }
+    pub fn finish_data_ref(&self) -> Result<&[u8], ReassembleError> {
+        if self.fcs_matches().ok_or(ReassembleError::NotFinished)? {
+            Ok(self.data.as_ref())
+        } else {
+            Err(ReassembleError::FCSMismatch)
+        }
+    }
+    pub fn finish_pdu(&self) -> Result<protocol::PDU, ReassembleError> {
+        let data = self.finish_data_ref()?;
+        protocol::PDU::unpack_raw(data.as_ref()).map_err(ReassembleError::PackError)
+    }
+    pub fn insert(
+        &mut self,
+        segment_data: &[u8],
+        seg_i: SegmentIndex,
+    ) -> Result<(), ReassembleError> {
+        if self.seg_n >= seg_i {
+            return Err(ReassembleError::TooManySegments);
+        }
+        if self.seg_i > seg_i {
+            return Err(ReassembleError::SegmentRepeat);
+        }
+        if self.seg_i < seg_i {
+            return Err(ReassembleError::SegmentSkipped);
+        }
+        if self.seg_i == SegmentIndex::ZERO {
+            if segment_data.len() > usize::from(MAX_START_DATA_LEN) {
+                return Err(ReassembleError::DataOverflow);
+            }
+            if self.seg_n != SegmentIndex(1) && segment_data.len() < usize::from(MAX_START_DATA_LEN)
+            {
+                return Err(ReassembleError::DataUnderflow);
+            }
+            if segment_data.len() < self.data.as_ref().len() {
+                return Err(ReassembleError::DataUnderflow);
+            }
+            self.data.as_mut()[..usize::from(MAX_START_DATA_LEN)]
+                .copy_from_slice(segment_data.as_ref());
+        } else {
+            if segment_data.len() > usize::from(MAX_CONTINUATION_DATA_LEN) {
+                return Err(ReassembleError::DataOverflow);
+            }
+            if self.seg_n != seg_i && segment_data.len() < usize::from(MAX_CONTINUATION_DATA_LEN) {
+                return Err(ReassembleError::DataUnderflow);
+            }
+            let index = usize::from(MAX_START_DATA_LEN)
+                + usize::from(seg_i.0) * usize::from(MAX_CONTINUATION_DATA_LEN);
+            if index + segment_data.len() < self.data.as_ref().len() {
+                return Err(ReassembleError::DataUnderflow);
+            }
+            self.data.as_mut()[index..index + usize::from(MAX_CONTINUATION_DATA_LEN)]
+                .copy_from_slice(segment_data.as_ref());
+        }
+        self.seg_i = seg_i;
+        Ok(())
+    }
 }

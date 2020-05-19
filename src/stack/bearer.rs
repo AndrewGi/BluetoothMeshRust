@@ -1,7 +1,8 @@
 //! Bluetooth Mesh Bearers.
 use crate::mesh::TransmitInterval;
-use crate::provisioning::pb_adv;
+use crate::provisioning::{link, pb_adv};
 use crate::{beacon, net};
+use btle::bytes::StaticBuf;
 use btle::le::advertisement::{AdType, OutgoingAdvertisement};
 use btle::le::report::{EventType, ReportInfo};
 use btle::RSSI;
@@ -62,7 +63,7 @@ impl From<OutgoingMessage> for OutgoingAdvertisement {
 pub enum IncomingMessage {
     Network(IncomingEncryptedNetworkPDU),
     Beacon(IncomingBeacon),
-    PBAdv(pb_adv::IncomingPDU),
+    PBAdv(pb_adv::IncomingPDU<StaticBuf<u8, [u8; link::GENERIC_PDU_DATA_MAX_LEN]>>),
 }
 impl IncomingMessage {
     pub fn from_report_info(report_info: ReportInfo<&[u8]>) -> Option<IncomingMessage> {
@@ -95,6 +96,14 @@ impl IncomingMessage {
         }
     }
 }
+/*
+pub fn single_shot_advertisement<A: btle::hci::adapter::Adapter, B: AsRef<[u8]>>(
+    le: &mut btle::hci::adapters::le::LEAdapter<A>,
+    advertisement: OutgoingAdvertisement,
+) -> Result<(), btle::hci::adapter::Error> {
+    le.set_advertising_data()
+}
+*/
 #[cfg(test)]
 mod tests {
     use crate::beacon::BeaconPDU::Unprovisioned;

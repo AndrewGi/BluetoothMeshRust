@@ -1,15 +1,16 @@
 use crate::crypto::{ecdh, ECDHSecret, ProvisioningSalt};
 use crate::foundation::state::AttentionTimer;
 use crate::provisioning::confirmation::{AuthValue, ConfirmationKey, ConfirmationSalt};
-use crate::provisioning::data::SessionSecurityMaterials;
+use crate::provisioning::data::{ProvisioningData, SessionSecurityMaterials};
 use crate::provisioning::protocol::{
     AuthenticationMethod, Capabilities, Confirmation, ErrorCode, Failed, InputOOBAction, Invite,
     OOBSize, OutputOOBAction, PublicKey, PublicKeyType, Random, Start, PDU,
 };
 use crate::provisioning::{confirmation, protocol};
 use btle::PackError;
+use core::time::Duration;
 use driver_async::asyncs::sync::mpsc;
-use driver_async::time::{Duration, Instant, InstantTrait};
+use driver_async::time::{Instant, InstantTrait};
 
 #[derive(Copy, Clone, PartialOrd, PartialEq, Ord, Eq, Debug, Hash)]
 pub enum ProvisionerError {
@@ -19,6 +20,7 @@ pub enum ProvisionerError {
     PrivateKeyMissing,
     OOBPublicKeyMissing,
     DeviceConfirmationMismatch,
+    CantDistributeYet,
     ECDH(ecdh::Error),
     PackError(PackError),
     Failed(ErrorCode),
@@ -169,6 +171,9 @@ pub struct Bearer {
     out_bearer: mpsc::Sender<PDU>,
 }
 impl Bearer {
+    pub async fn close(&mut self) -> Result<(), ProvisionerError> {
+        Ok(())
+    }
     pub async fn recv(&mut self, timeout: Duration) -> Result<PDU, ProvisionerError> {
         driver_async::asyncs::time::timeout(timeout, self.in_bearer.recv())
             .await
@@ -237,12 +242,22 @@ impl Process {
             None => Ok(None),
         }
     }
+    pub async fn distribute(&mut self, data: &ProvisioningData) -> Result<(), ProvisionerError> {
+        let sm = match &self.stage {
+            Stage::Distribute { security_materials } => security_materials,
+            _ => return Err(ProvisionerError::CantDistributeYet),
+        };
+        let encrypted = data.encrypt(sm);
+        self.send(&PDU::Data(encrypted)).await?;
+        self.bearer.close().await
+    }
     pub async fn fail(&mut self, reason: ErrorCode) -> Result<(), ProvisionerError> {
-        self.stage = Stage::Closed;
+        self.stage = Stage::Failed(Failed(reason));
         self.bearer
             .send(&PDU::Failed(Failed(reason)))
             .await
             .map_err(|_| ProvisionerError::ChannelClosed)?;
+        self.bearer.close().await?;
         Ok(())
     }
     async fn fail_with(&mut self, reason: ErrorCode) -> Result<(), ProvisionerError> {

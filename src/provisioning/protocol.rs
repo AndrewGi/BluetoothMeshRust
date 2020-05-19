@@ -105,6 +105,14 @@ impl PDU {
             Opcode::Failed => Ok(PDU::Failed(Failed::unpack(buf)?)),
         }
     }
+    pub fn unpack_raw(buf: &[u8]) -> Result<PDU, PackError> {
+        let opcode_padding = *buf.as_ref().get(0).ok_or(PackError::BadLength {
+            expected: 1,
+            got: 0,
+        })?;
+        let opcode = Opcode::try_from(opcode_padding)?;
+        PDU::unpack(opcode, &buf[1..])
+    }
 }
 pub trait ProtocolPDU {
     const OPCODE: Opcode;

@@ -5,7 +5,9 @@ use bluetooth_mesh::stack::bearer::IncomingMessage;
 use bluetooth_mesh::stack::full::FullStack;
 use bluetooth_mesh::stack::StackInternals;
 use btle::le::report::ReportInfo;
+use driver_async::asyncs::sync::mpsc;
 use futures_util::StreamExt;
+use bluetooth_mesh::provisioning::link::Link;
 
 pub fn sub_command() -> clap::App<'static, 'static> {
     clap::SubCommand::with_name("provisioner")
@@ -41,6 +43,7 @@ pub async fn provision(_logger: &slog::Logger, device_state_path: &str) -> Resul
         let internals = StackInternals::new(dsm);
         let cache = replay::Cache::new();
         let mut stack = FullStack::new(internals, cache, 5);
+        //let (pb_adv_outgoing_tx, pb_adv_outgoing_tx) = mpsc::channel(Link::CHANNEL_SIZE);
         while let Some(report_info) = incoming.next().await {
             if let Some(new_msg) = IncomingMessage::from_report_info(report_info?.as_ref()) {
                 dbg!(&new_msg);
