@@ -672,7 +672,9 @@ impl Process {
                     ),
                 }
             }
-            Stage::Distribute { security_materials } => unimplemented!(),
+            Stage::Distribute { .. } => {
+                unimplemented!("security_materials have to manually be sent for now")
+            }
         }
         Ok(&self.stage)
     }
