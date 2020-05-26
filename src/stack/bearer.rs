@@ -95,6 +95,26 @@ impl IncomingMessage {
             None
         }
     }
+    pub fn network_pdu(&self) -> Option<IncomingEncryptedNetworkPDU> {
+        match self {
+            IncomingMessage::Network(n) => Some(*n),
+            _ => None,
+        }
+    }
+    pub fn beacon(&self) -> Option<IncomingBeacon> {
+        match self {
+            IncomingMessage::Beacon(b) => Some(*b),
+            _ => None,
+        }
+    }
+    pub fn pb_adv(
+        &self,
+    ) -> Option<pb_adv::IncomingPDU<StaticBuf<u8, [u8; link::GENERIC_PDU_DATA_MAX_LEN]>>> {
+        match self {
+            IncomingMessage::PBAdv(p) => Some(*p),
+            _ => None,
+        }
+    }
 }
 /*
 pub fn single_shot_advertisement<A: btle::hci::adapter::Adapter, B: AsRef<[u8]>>(
