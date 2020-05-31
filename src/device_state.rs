@@ -283,7 +283,10 @@ impl Iterator for SeqRange {
 /// (only 24-bits) that only get reset every IVIndex update. Also segmented PDUs require sequential
 /// Sequence Number.
 #[derive(Default, Debug)]
-#[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    all(feature = "serde-1", feature = "std"),
+    derive(serde::Serialize, serde::Deserialize)
+)]
 pub struct SeqCounter(core::sync::atomic::AtomicU32);
 impl SeqCounter {
     pub fn new(start_seq: SequenceNumber) -> Self {
