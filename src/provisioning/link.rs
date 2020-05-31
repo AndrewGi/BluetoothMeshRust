@@ -280,7 +280,7 @@ impl<B: Storage<u8>> Link<B> {
                 .await
                 .ok_or(LinkError::EarlyBearerEnd)?
                 .map_err(LinkBearerError::Bearer)?;
-            if let Some(msg) = self.handle_pb_adv_pdu(pdu).await? {
+            if let Some(msg) = self.handle_pb_adv_pdu(pdu.as_ref()).await? {
                 return Ok(msg);
             }
         }
@@ -289,7 +289,7 @@ impl<B: Storage<u8>> Link<B> {
 
     pub async fn handle_pb_adv_pdu(
         &mut self,
-        pdu: pb_adv::PDU<B>,
+        pdu: pb_adv::PDU<&[u8]>,
     ) -> Result<Option<protocol::PDU>, LinkError> {
         if pdu.link_id != self.link_id {
             return Err(LinkError::BadLinkID);
@@ -309,7 +309,10 @@ impl<B: Storage<u8>> Link<B> {
             return Ok(None);
         }
         match &mut self.state {
-            State::PendingInvite(_) => {}
+            State::PendingInvite(_) => match pdu.generic_pdu.control {
+                Control::BearerControl(control) => self.handle_bearer_control(control).await?,
+                _ => self.fail_unexpected_pdu().await?,
+            },
             State::Working => match pdu.generic_pdu.control {
                 Control::BearerControl(pdu) => {
                     self.handle_bearer_control(pdu).await?;
@@ -317,11 +320,7 @@ impl<B: Storage<u8>> Link<B> {
                 Control::TransactionStart(start) => {
                     self.state = State::Reassembling(Reassembler::from_start(
                         start,
-                        pdu.generic_pdu
-                            .payload
-                            .as_ref()
-                            .map(AsRef::as_ref)
-                            .unwrap_or(&[]),
+                        pdu.generic_pdu.payload.unwrap_or(&[]),
                     )?);
                 }
                 Control::TransactionContinuation(_) => {
@@ -348,14 +347,8 @@ impl<B: Storage<u8>> Link<B> {
                     }
                     Control::TransactionContinuation(con) => {
                         if con.seg_i == reassembler.seg_i() {
-                            reassembler.insert(
-                                pdu.generic_pdu
-                                    .payload
-                                    .as_ref()
-                                    .map(AsRef::as_ref)
-                                    .unwrap_or(&[]),
-                                con.seg_i,
-                            )?;
+                            reassembler
+                                .insert(pdu.generic_pdu.payload.unwrap_or(&[]), con.seg_i)?;
                         }
                         if reassembler.is_done() {
                             let incoming_pdu = reassembler.finish_pdu()?;

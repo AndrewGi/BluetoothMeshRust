@@ -4,6 +4,7 @@ use crate::bytes::ToFromBytesEndian;
 use crate::crypto::{s1, NetworkID};
 use crate::mesh::IVIndex;
 use crate::uuid::UUID;
+use btle::le::advertisement::AdType;
 use btle::{ConversionError, PackError};
 use core::convert::{TryFrom, TryInto};
 
@@ -171,6 +172,7 @@ pub struct SecureNetworkBeacon {
     pub authentication_value: AuthenticationValue,
 }
 impl SecureNetworkBeacon {
+    pub const BEACON_TYPE: BeaconType = BeaconType::SecureNetwork;
     pub const BYTE_LEN: usize =
         1 + NetworkID::BYTE_LEN + IVIndex::BYTE_LEN + AuthenticationValue::BYTE_LEN;
     pub fn unpack_from(buf: &[u8]) -> Result<SecureNetworkBeacon, PackError> {
@@ -208,9 +210,16 @@ impl SecureNetworkBeacon {
         Ok(())
     }
 }
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[repr(u8)]
 pub enum BeaconType {
     Unprovisioned = 0x00,
     SecureNetwork = 0x01,
+}
+impl From<BeaconType> for u8 {
+    fn from(b: BeaconType) -> Self {
+        b as u8
+    }
 }
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum BeaconPDU {
@@ -231,6 +240,56 @@ impl BeaconPDU {
             )?)),
             _ => Err(PackError::BadOpcode),
         }
+    }
+    pub fn pack_into(&self, buf: &mut [u8]) -> Result<(), PackError> {
+        let beacon_type = match self {
+            BeaconPDU::Unprovisioned(u) => {
+                u.pack_into(&mut buf[1..])?;
+                UnprovisionedDeviceBeacon::BEACON_TYPE
+            }
+            BeaconPDU::SecureNetwork(n) => {
+                n.pack_into(&mut buf[1..])?;
+                SecureNetworkBeacon::BEACON_TYPE
+            }
+        };
+        buf[0] = beacon_type.into();
+        Ok(())
+    }
+    pub fn unprovisioned(&self) -> Option<UnprovisionedDeviceBeacon> {
+        match self {
+            BeaconPDU::Unprovisioned(u) => Some(*u),
+            BeaconPDU::SecureNetwork(_) => None,
+        }
+    }
+    pub fn byte_len(&self) -> usize {
+        match self {
+            BeaconPDU::Unprovisioned(u) => u.byte_len(),
+            BeaconPDU::SecureNetwork(_) => SecureNetworkBeacon::BYTE_LEN,
+        }
+    }
+}
+impl btle::le::advertisement::AdStructureType for BeaconPDU {
+    fn ad_type(&self) -> AdType {
+        AdType::MeshBeacon
+    }
+
+    fn byte_len(&self) -> usize {
+        self.byte_len()
+    }
+
+    fn pack_into(&self, buf: &mut [u8]) -> Result<(), PackError> {
+        self.pack_into(buf)
+    }
+}
+impl btle::le::advertisement::UnpackableAdStructType for BeaconPDU {
+    fn unpack_from(ad_type: AdType, buf: &[u8]) -> Result<Self, PackError>
+    where
+        Self: Sized,
+    {
+        if ad_type != AdType::MeshBeacon {
+            return Err(PackError::BadOpcode);
+        }
+        Self::unpack_from(buf)
     }
 }
 pub struct PackedBeacon {}

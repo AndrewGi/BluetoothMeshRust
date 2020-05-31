@@ -5,7 +5,6 @@ use crate::lower::{BlockAck, SegN, SegO, SegmentHeader, SegmentedAccessPDU, SeqA
 use crate::crypto::materials::NetworkKeys;
 use crate::device_state::SeqRange;
 use crate::mesh::{IVIndex, NetKeyIndex, SequenceNumber, CTL, NID};
-use crate::net::OwnedEncryptedPDU;
 use crate::stack::NetworkHeader;
 use crate::{lower, net, upper};
 
@@ -238,7 +237,7 @@ impl<'a, PDUIter: Iterator<Item = net::PDU>> EncryptedNetworkPDUIterator<'a, PDU
     }
 }
 impl<'a, PDUIter: Iterator<Item = net::PDU>> Iterator for EncryptedNetworkPDUIterator<'a, PDUIter> {
-    type Item = OwnedEncryptedPDU;
+    type Item = net::EncryptedPDU<net::StaticEncryptedPDUBuf>;
 
     fn next(&mut self) -> Option<Self::Item> {
         Some(

@@ -1,4 +1,5 @@
 use crate::CLIError;
+use btle::error::IOError;
 #[cfg(feature = "mesh")]
 use bluetooth_mesh::{device_state, mesh};
 use std::convert::TryFrom;
@@ -135,15 +136,19 @@ pub fn usb_adapter(adapter_id: u16) -> Result<btle::hci::usb::adapter::Adapter, 
         .bluetooth_adapters()
         .nth(adapter_id.into())
         .ok_or_else(|| CLIError::OtherMessage("no usb bluetooth adapters found".to_owned()))??
-        .open()?)
+        .open().map_err(|e: btle::hci::usb::Error| match e.0 {
+        IOError::NotImplemented => CLIError::OtherMessage("is the libusb driver installed for the USB adapter? (NotImplemented Error)".to_owned()),
+        e => CLIError::HCIAdapterError(btle::hci::adapter::Error::IOError(e)),
+    })
+    ?)
 }
-#[cfg(not(all(unix, feature = "bluez")))]
+#[cfg(not(all(unix, feature = "btle_bluez")))]
 pub fn bluez_adapter(_: u16) -> Result<btle::hci::adapter::DummyAdapter, CLIError> {
     Err(CLIError::OtherMessage(
         "bluez either isn't enable or supported on this platform".to_owned(),
     ))
 }
-#[cfg(all(unix, feature = "bluez"))]
+#[cfg(all(unix, feature = "btle_bluez"))]
 pub fn bluez_adapter(
     adapter_id: u16,
 ) -> Result<

@@ -324,6 +324,12 @@ impl<Buf: AsRef<[u8]>> PDU<Buf> {
             }),
         }
     }
+    pub fn as_ref(&self) -> PDU<&[u8]> {
+        PDU {
+            control: self.control,
+            payload: self.payload.as_ref().map(AsRef::as_ref),
+        }
+    }
 }
 impl<T: AsRef<[u8]>> core::fmt::Debug for PDU<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {

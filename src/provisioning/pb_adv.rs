@@ -2,11 +2,12 @@
 use super::generic;
 use crate::provisioning::generic::GENERIC_PDU_MAX_LEN;
 use btle::bytes::Storage;
+use btle::le::advertisement::AdType;
 use btle::{PackError, RSSI};
 use std::convert::TryInto;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
-pub struct LinkID(u32);
+pub struct LinkID(pub u32);
 
 impl LinkID {
     pub const BYTE_LEN: usize = 4;
@@ -15,6 +16,11 @@ impl LinkID {
     }
     pub fn value(self) -> u32 {
         self.0
+    }
+}
+impl crate::random::Randomizable for LinkID {
+    fn random_secure() -> Self {
+        LinkID(u32::random_secure())
     }
 }
 const PROVISIONEE_START: u8 = 0x80;
@@ -102,7 +108,7 @@ impl<B: AsRef<[u8]>> core::fmt::Debug for PDU<B> {
             .finish()
     }
 }
-impl<B: Storage<u8>> PDU<B> {
+impl<B: AsRef<[u8]>> PDU<B> {
     pub const HEADER_BYTE_LEN: usize = LinkID::BYTE_LEN + TransactionNumber::BYTE_LEN;
     pub const MIN_BYTE_LEN: usize = Self::HEADER_BYTE_LEN + 1;
     pub const MAX_BYTE_LEN: usize = Self::HEADER_BYTE_LEN + GENERIC_PDU_MAX_LEN;
@@ -117,7 +123,10 @@ impl<B: Storage<u8>> PDU<B> {
         buf[LinkID::BYTE_LEN] = self.transaction_number.0;
         Ok(())
     }
-    pub fn unpack_from(buf: &[u8]) -> Result<Self, PackError> {
+    pub fn unpack_from(buf: &[u8]) -> Result<Self, PackError>
+    where
+        B: Storage<u8>,
+    {
         PackError::atleast_length(Self::MIN_BYTE_LEN, buf)?;
         Ok(PDU {
             generic_pdu: generic::PDU::unpack_from(&buf[Self::HEADER_BYTE_LEN..])?,
@@ -128,6 +137,38 @@ impl<B: Storage<u8>> PDU<B> {
             )),
             transaction_number: TransactionNumber(buf[LinkID::BYTE_LEN]),
         })
+    }
+    pub fn as_ref(&self) -> PDU<&[u8]> {
+        PDU {
+            link_id: self.link_id,
+            transaction_number: self.transaction_number,
+            generic_pdu: self.generic_pdu.as_ref(),
+        }
+    }
+}
+impl<B: AsRef<[u8]>> btle::le::advertisement::AdStructureType for PDU<B> {
+    fn ad_type(&self) -> AdType {
+        AdType::PbAdv
+    }
+
+    fn byte_len(&self) -> usize {
+        self.byte_len()
+    }
+
+    fn pack_into(&self, buf: &mut [u8]) -> Result<(), PackError> {
+        self.pack_into(buf)
+    }
+}
+impl<B: Storage<u8>> btle::le::advertisement::UnpackableAdStructType for PDU<B> {
+    fn unpack_from(ad_type: AdType, buf: &[u8]) -> Result<Self, PackError>
+    where
+        Self: Sized,
+    {
+        if ad_type == AdType::PbAdv {
+            Self::unpack_from(buf)
+        } else {
+            Err(PackError::BadOpcode)
+        }
     }
 }
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]

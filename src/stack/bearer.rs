@@ -1,11 +1,11 @@
 //! Bluetooth Mesh Bearers.
-use crate::mesh::TransmitInterval;
+use crate::mesh::{TransmitCount, TransmitInterval, TransmitSteps};
 use crate::provisioning::{link, pb_adv};
 use crate::{beacon, net};
 use btle::bytes::StaticBuf;
-use btle::le::advertisement::{AdType, OutgoingAdvertisement};
+use btle::le::advertisement::{AdType, RawAdvertisement};
 use btle::le::report::{EventType, ReportInfo};
-use btle::RSSI;
+use btle::{PackError, RSSI};
 
 #[derive(Debug)]
 pub enum BearerError {
@@ -14,7 +14,7 @@ pub enum BearerError {
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct IncomingEncryptedNetworkPDU {
-    pub encrypted_pdu: net::OwnedEncryptedPDU,
+    pub encrypted_pdu: net::EncryptedPDU<net::StaticEncryptedPDUBuf>,
     pub rssi: Option<RSSI>,
     pub dont_relay: bool,
 }
@@ -24,7 +24,7 @@ impl IncomingEncryptedNetworkPDU {
             if let Some(ad_struct) = report_info.data.iter().next() {
                 if ad_struct.ad_type == AdType::MeshPDU {
                     return Some(IncomingEncryptedNetworkPDU {
-                        encrypted_pdu: net::OwnedEncryptedPDU::new(ad_struct.buf.as_ref())?,
+                        encrypted_pdu: net::EncryptedPDU::new(ad_struct.buf.as_ref())?.to_owned(),
                         rssi: report_info.rssi,
                         dont_relay: false,
                     });
@@ -38,42 +38,61 @@ impl IncomingEncryptedNetworkPDU {
 #[derive(Copy, Clone, Debug)]
 pub struct OutgoingEncryptedNetworkPDU {
     pub transmit_parameters: TransmitInterval,
-    pub pdu: net::OwnedEncryptedPDU,
+    pub pdu: net::EncryptedPDU<net::StaticEncryptedPDUBuf>,
 }
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct IncomingBeacon {
     pub beacon: beacon::BeaconPDU,
     pub rssi: Option<RSSI>,
 }
+pub type PBAdvBuf = StaticBuf<u8, [u8; link::GENERIC_PDU_DATA_MAX_LEN]>;
 #[derive(Debug)]
 pub enum OutgoingMessage {
     Network(OutgoingEncryptedNetworkPDU),
+    Beacon(beacon::BeaconPDU),
+    PBAdv(pb_adv::PDU<PBAdvBuf>),
 }
-impl From<&OutgoingMessage> for OutgoingAdvertisement {
-    fn from(_: &OutgoingMessage) -> Self {
-        todo!("implement outgoing messages")
-    }
-}
-impl From<OutgoingMessage> for OutgoingAdvertisement {
-    fn from(o: OutgoingMessage) -> Self {
-        (&o).into()
+impl OutgoingMessage {
+    pub fn to_raw_advertisement(&self) -> Result<(RawAdvertisement, TransmitInterval), PackError> {
+        let mut out = RawAdvertisement::new();
+        Ok(match self {
+            OutgoingMessage::Network(n) => {
+                out.insert(&n.pdu)?;
+                (out, n.transmit_parameters)
+            }
+            OutgoingMessage::Beacon(b) => {
+                out.insert(b)?;
+                (
+                    out,
+                    TransmitInterval::new(TransmitCount::new(3), TransmitSteps::new(2)),
+                )
+            }
+            OutgoingMessage::PBAdv(p) => {
+                out.insert(p)?;
+                (
+                    out,
+                    TransmitInterval::new(TransmitCount::new(3), TransmitSteps::new(1)),
+                )
+            }
+        })
     }
 }
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum IncomingMessage {
     Network(IncomingEncryptedNetworkPDU),
     Beacon(IncomingBeacon),
-    PBAdv(pb_adv::IncomingPDU<StaticBuf<u8, [u8; link::GENERIC_PDU_DATA_MAX_LEN]>>),
+    PBAdv(pb_adv::IncomingPDU<PBAdvBuf>),
 }
 impl IncomingMessage {
-    pub fn from_report_info(report_info: ReportInfo<&[u8]>) -> Option<IncomingMessage> {
+    pub fn from_report_info<B: AsRef<[u8]>>(report_info: ReportInfo<B>) -> Option<IncomingMessage> {
         if report_info.event_type == EventType::AdvNonconnInd {
             if let Some(ad_struct) = report_info.data.iter().next() {
                 dbg!(ad_struct.ad_type);
                 match ad_struct.ad_type {
                     AdType::MeshPDU => {
                         Some(IncomingMessage::Network(IncomingEncryptedNetworkPDU {
-                            encrypted_pdu: net::OwnedEncryptedPDU::new(ad_struct.buf.as_ref())?,
+                            encrypted_pdu: net::EncryptedPDU::new(ad_struct.buf.as_ref())?
+                                .to_owned(),
                             rssi: report_info.rssi,
                             dont_relay: false,
                         }))

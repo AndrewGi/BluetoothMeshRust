@@ -24,7 +24,6 @@ use crate::lower::SegO;
 use crate::mesh::{
     AppKeyIndex, ElementCount, ElementIndex, IVIndex, IVUpdateFlag, NetKeyIndex, TTL,
 };
-use crate::net::OwnedEncryptedPDU;
 use crate::segmenter::EncryptedNetworkPDUIterator;
 use crate::stack::element::ElementRef;
 use crate::stack::messages::{
@@ -356,7 +355,7 @@ impl StackInternals {
     /// If no security materials match, it'll return `None`
     pub fn decrypt_network_pdu(
         &self,
-        pdu: net::EncryptedPDU,
+        pdu: net::EncryptedPDU<&[u8]>,
     ) -> Option<(NetKeyIndex, IVIndex, net::PDU)> {
         let iv_index = self.device_state.rx_iv_index(pdu.ivi())?;
         for (index, sm) in self.net_keys().matching_nid(pdu.nid()) {
@@ -435,7 +434,7 @@ impl StackInternals {
         pdu: net::PDU,
         net_key_index: NetKeyIndex,
         iv_index: IVIndex,
-    ) -> Result<OwnedEncryptedPDU, SendError> {
+    ) -> Result<net::EncryptedPDU<net::StaticEncryptedPDUBuf>, SendError> {
         if !self.is_valid_iv_index(iv_index) {
             return Err(SendError::InvalidIVIndex);
         }

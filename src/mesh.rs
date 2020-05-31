@@ -524,6 +524,13 @@ impl TransmitCount {
         assert!(count <= TRANSMIT_COUNT_MAX);
         Self(count)
     }
+    pub fn new_clamped(count: u8) -> Self {
+        if count > TRANSMIT_COUNT_MAX {
+            Self(TRANSMIT_COUNT_MAX)
+        } else {
+            Self(count)
+        }
+    }
 }
 impl From<TransmitCount> for u8 {
     fn from(count: TransmitCount) -> Self {

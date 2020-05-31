@@ -2,7 +2,7 @@
 //! Network Layer is BIG Endian
 
 use crate::address::{Address, UnicastAddress, ADDRESS_LEN};
-use crate::bytes::ToFromBytesEndian;
+use crate::bytes::{Storage, ToFromBytesEndian};
 use crate::crypto::aes::{AESCipher, MicSize};
 use crate::crypto::key::PrivacyKey;
 use crate::crypto::materials::NetworkKeys;
@@ -10,8 +10,9 @@ use crate::crypto::nonce::{NetworkNonce, NetworkNonceParts};
 use crate::crypto::MIC;
 use crate::lower;
 use crate::mesh::{IVIndex, SequenceNumber, CTL, IVI, NID, TTL};
+use btle::bytes::StaticBuf;
 use btle::le::advertisement::{AdType, RawAdStructureBuffer};
-use btle::ConversionError;
+use btle::{ConversionError, PackError};
 use core::convert::{TryFrom, TryInto};
 use core::fmt;
 
@@ -283,35 +284,59 @@ impl fmt::Display for Header {
         )
     }
 }
-const ENCRYPTED_PDU_MAX_SIZE: usize = TRANSPORT_PDU_MAX_LEN + PDU_HEADER_LEN + 4;
-/// Owned Encrypted PDU. Stores the PDU as bytes in an internal array.
-/// See [`EncryptedPDU`] for general network PDU functions
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
-pub struct OwnedEncryptedPDU {
-    pdu_buffer: [u8; ENCRYPTED_PDU_MAX_SIZE],
-    length: usize,
-}
-impl OwnedEncryptedPDU {
-    pub fn new(bytes: &[u8]) -> Option<OwnedEncryptedPDU> {
-        if bytes.len() <= ENCRYPTED_DATA_MAX_LEN && bytes.len() >= ENCRYPTED_DATA_MIN_LEN {
-            let mut buf = [0_u8; ENCRYPTED_PDU_MAX_SIZE];
-            buf[..bytes.len()].copy_from_slice(bytes);
-            Some(Self {
-                pdu_buffer: buf,
-                length: bytes.len(),
-            })
+impl TryFrom<RawAdStructureBuffer<&[u8]>> for EncryptedPDU<StaticEncryptedPDUBuf> {
+    type Error = ConversionError;
+    fn try_from(ad_struct: RawAdStructureBuffer<&[u8]>) -> Result<Self, Self::Error> {
+        if ad_struct.ad_type == AdType::MeshPDU {
+            Ok(EncryptedPDU::new(ad_struct.buf)
+                .ok_or(ConversionError(()))?
+                .to_owned())
         } else {
-            None
+            Err(ConversionError(()))
         }
     }
-    /// # Panics
-    /// Panics if `length < ENCRYPTED_PDU_MIN_LEN || length > ENCRYPTED_PDU_MAX_LEN`.
-    pub fn new_zeroed(length: usize) -> Self {
-        assert!(length <= ENCRYPTED_DATA_MAX_LEN && length > ENCRYPTED_DATA_MIN_LEN);
-        OwnedEncryptedPDU {
-            pdu_buffer: [0_u8; ENCRYPTED_PDU_MAX_SIZE],
-            length,
+}
+pub const ENCRYPTED_PDU_MAX_SIZE: usize = TRANSPORT_PDU_MAX_LEN + PDU_HEADER_LEN + 4;
+pub type StaticEncryptedPDUBuf = StaticBuf<u8, [u8; ENCRYPTED_DATA_MAX_LEN]>;
+const MIN_ENCRYPTED_PDU_LEN: usize = PDU_HEADER_LEN + MIC::small_size();
+const MAX_ENCRYPTED_PDU_LEN: usize = ENCRYPTED_PDU_MAX_SIZE;
+
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
+pub struct EncryptedPDU<Buf>(Buf);
+
+impl<Buf: AsRef<[u8]>> EncryptedPDU<Buf> {
+    /// Wrapped a raw bytes that represent an Encrypted Network PDU
+    /// See `ENCRYPTED_PDU_MAX_SIZE` for the max size.
+    /// Returns `None` if `buf.len() < MIN_ENCRYPTED_PDU_LEN`
+    /// or `data.len() > MAX_ENCRYPTED_PDU_LEN`.
+    #[must_use]
+    pub fn new(data: Buf) -> Option<EncryptedPDU<Buf>> {
+        if data.as_ref().len() < MIN_ENCRYPTED_PDU_LEN
+            || data.as_ref().len() > MAX_ENCRYPTED_PDU_LEN
+        {
+            return None;
         }
+        Some(EncryptedPDU(data))
+    }
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.0.as_ref().len()
+    }
+    #[must_use]
+    pub fn data(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+    #[must_use]
+    pub fn nid(&self) -> NID {
+        NID::from_masked_u8(self.0.as_ref()[0])
+    }
+    #[must_use]
+    pub fn ivi(&self) -> IVI {
+        IVI(self.0.as_ref()[0] & 0x80 != 0)
+    }
+    #[must_use]
+    pub fn privacy_random(&self) -> PrivacyRandom<'_> {
+        PrivacyRandom::new_bytes(&self.0.as_ref()[1 + OBFUSCATED_LEN..][..PRIVACY_RANDOM_LEN])
     }
     #[must_use]
     pub fn new_parts(
@@ -319,9 +344,14 @@ impl OwnedEncryptedPDU {
         nid: NID,
         obfuscated: &ObfuscatedHeader,
         encrypted_data: EncryptedData,
-    ) -> Self {
-        let mut out = Self::new_zeroed(encrypted_data.len() + ObfuscatedHeader::len() + 1);
-        let buf = out.as_mut();
+    ) -> Self
+    where
+        Buf: Storage<u8>,
+    {
+        let mut out = EncryptedPDU(Buf::with_size(
+            encrypted_data.len() + ObfuscatedHeader::len() + 1,
+        ));
+        let buf = out.0.as_mut();
         buf[0] = nid.with_flag(ivi.into());
         obfuscated.pack_into(&mut buf[1..1 + ObfuscatedHeader::len()]);
         encrypted_data.pack_into(&mut buf[1 + ObfuscatedHeader::len()..]);
@@ -329,60 +359,6 @@ impl OwnedEncryptedPDU {
             .mic
             .be_pack_into(&mut buf[1 + ObfuscatedHeader::len() + encrypted_data.data_len()..]);
         out
-    }
-
-    pub fn as_ref(&self) -> EncryptedPDU {
-        EncryptedPDU {
-            data: &self.pdu_buffer[..self.length],
-        }
-    }
-}
-
-impl TryFrom<RawAdStructureBuffer<&[u8]>> for OwnedEncryptedPDU {
-    type Error = ConversionError;
-    fn try_from(ad_struct: RawAdStructureBuffer<&[u8]>) -> Result<Self, Self::Error> {
-        if ad_struct.ad_type == AdType::MeshPDU {
-            Ok(OwnedEncryptedPDU::new(ad_struct.buf).ok_or(ConversionError(()))?)
-        } else {
-            Err(ConversionError(()))
-        }
-    }
-}
-const MIN_ENCRYPTED_PDU_LEN: usize = PDU_HEADER_LEN + MIC::small_size();
-const MAX_ENCRYPTED_PDU_LEN: usize = ENCRYPTED_PDU_MAX_SIZE;
-
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
-pub struct EncryptedPDU<'a> {
-    data: &'a [u8],
-}
-
-impl<'a> EncryptedPDU<'a> {
-    /// Wrapped a raw bytes that represent an Encrypted Network PDU
-    /// See `ENCRYPTED_PDU_MAX_SIZE` for the max size.
-    /// Returns `None` if `buf.len() < MIN_ENCRYPTED_PDU_LEN`
-    /// or `data.len() > MAX_ENCRYPTED_PDU_LEN`.
-    #[must_use]
-    pub fn new(data: &'a [u8]) -> Option<EncryptedPDU<'a>> {
-        if data.len() < MIN_ENCRYPTED_PDU_LEN || data.len() > MAX_ENCRYPTED_PDU_LEN {
-            return None;
-        }
-        Some(EncryptedPDU { data })
-    }
-    #[must_use]
-    pub const fn len(&self) -> usize {
-        self.data.len()
-    }
-    #[must_use]
-    pub fn data(&self) -> &[u8] {
-        &self.data
-    }
-    #[must_use]
-    pub fn nid(&self) -> NID {
-        NID::from_masked_u8(self.data[0])
-    }
-    #[must_use]
-    pub fn ivi(&self) -> IVI {
-        IVI(self.data[0] & 0x80 != 0)
     }
     /// Attempts to decrypt the given network PDU. `IVIndex` much have a matching `ivi`.
     /// `NetworkKeys` should be the network keys used to encrypt the messages based on the `NID`.
@@ -398,7 +374,8 @@ impl<'a> EncryptedPDU<'a> {
         if iv_index.ivi() != self.ivi() {
             return Err(NetworkDataError::BadIVI);
         }
-        let pecb = PrivacyRandom::from(*self)
+        let pecb = self
+            .privacy_random()
             .pack_with_iv(iv_index)
             .encrypt_with(keys.privacy_key());
         let deobfuscated = self
@@ -424,7 +401,7 @@ impl<'a> EncryptedPDU<'a> {
     #[must_use]
     pub fn header(&self) -> ObfuscatedHeader {
         ObfuscatedHeader(
-            self.data[1..1 + OBFUSCATED_LEN]
+            self.0.as_ref()[1..1 + OBFUSCATED_LEN]
                 .try_into()
                 .expect("obfuscated header should always exist"),
         )
@@ -433,34 +410,54 @@ impl<'a> EncryptedPDU<'a> {
     /// `CTL == 0`, `MIC::byte_len() == 4`.
     pub fn mic(&self, ctl: CTL) -> MIC {
         let mic_size = if bool::from(ctl) { 8 } else { 4 };
-        MIC::try_from_bytes_be(&self.data[self.data.len() - mic_size..])
+        MIC::try_from_bytes_be(&self.0.as_ref()[self.0.as_ref().len() - mic_size..])
             .expect("every PDU has a MIC")
     }
 
     pub fn encrypted_data(&self, ctl: CTL) -> EncryptedData {
         let mic = self.mic(ctl);
         EncryptedData::new(
-            &self.data[OBFUSCATED_LEN..self.data.len() - mic.byte_size()],
+            &self.0.as_ref()[OBFUSCATED_LEN..self.0.as_ref().len() - mic.byte_size()],
             mic,
         )
     }
     /// Converts the reference EncryptedPDU into a owned byte array.
-    fn to_owned(&self) -> OwnedEncryptedPDU {
-        let mut out = OwnedEncryptedPDU::new_zeroed(self.data.len());
-        out.as_mut().copy_from_slice(self.data());
-        out
+    pub fn to_owned<NewBuf: Storage<u8>>(&self) -> EncryptedPDU<NewBuf> {
+        EncryptedPDU(NewBuf::from_slice(self.0.as_ref()))
+    }
+    pub fn as_ref(&self) -> EncryptedPDU<&[u8]> {
+        EncryptedPDU(self.0.as_ref())
+    }
+    pub fn as_mut(&mut self) -> EncryptedPDU<&mut [u8]>
+    where
+        Buf: AsMut<[u8]>,
+    {
+        EncryptedPDU(self.0.as_mut())
     }
 }
-impl AsRef<[u8]> for OwnedEncryptedPDU {
-    #[must_use]
+impl<B: AsRef<[u8]>> AsRef<[u8]> for EncryptedPDU<B> {
     fn as_ref(&self) -> &[u8] {
-        &self.pdu_buffer[..self.length]
+        self.0.as_ref()
     }
 }
-impl AsMut<[u8]> for OwnedEncryptedPDU {
-    #[must_use]
+impl<B: AsMut<[u8]>> AsMut<[u8]> for EncryptedPDU<B> {
     fn as_mut(&mut self) -> &mut [u8] {
-        &mut self.pdu_buffer[..self.length]
+        self.0.as_mut()
+    }
+}
+impl<B: AsRef<[u8]>> btle::le::advertisement::AdStructureType for EncryptedPDU<B> {
+    fn ad_type(&self) -> AdType {
+        AdType::MeshPDU
+    }
+
+    fn byte_len(&self) -> usize {
+        self.0.as_ref().len()
+    }
+
+    fn pack_into(&self, buf: &mut [u8]) -> Result<(), PackError> {
+        PackError::expect_length(self.byte_len(), buf)?;
+        buf.copy_from_slice(self.0.as_ref());
+        Ok(())
     }
 }
 /// Mesh Network PDU Structure
@@ -516,7 +513,7 @@ impl PDU {
         &self,
         net_keys: &NetworkKeys,
         iv_index: IVIndex,
-    ) -> Result<OwnedEncryptedPDU, PDUEncryptError> {
+    ) -> Result<EncryptedPDU<StaticEncryptedPDUBuf>, PDUEncryptError> {
         if !self.header.dst.is_assigned()
             || (self.payload.is_control() && self.header.dst.is_virtual())
         {
@@ -533,7 +530,7 @@ impl PDU {
                 .data()
                 .packed_privacy_random(self.header.dst, iv_index)
                 .encrypt_with(net_keys.privacy_key());
-            Ok(OwnedEncryptedPDU::new_parts(
+            Ok(EncryptedPDU::new_parts(
                 iv_index.ivi(),
                 net_keys.nid(),
                 &deobfuscated.obfuscate(pecb),
@@ -703,11 +700,6 @@ impl PrivacyRandom<'_> {
         out[5..9].copy_from_slice(&iv_index.to_bytes_be());
         out[9..].copy_from_slice(self.0);
         PackedPrivacy::new_bytes(out)
-    }
-}
-impl<'a: 'b, 'b> From<EncryptedPDU<'a>> for PrivacyRandom<'b> {
-    fn from(pdu: EncryptedPDU<'a>) -> Self {
-        PrivacyRandom::new_bytes(&pdu.data[1 + OBFUSCATED_LEN..][..PRIVACY_RANDOM_LEN])
     }
 }
 /// 0x00_00_00_00_00 (5) + IV_INDEX (4) + PRIVACY_RANDOM (7)
