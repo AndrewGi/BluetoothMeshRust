@@ -283,10 +283,6 @@ impl Iterator for SeqRange {
 /// (only 24-bits) that only get reset every IVIndex update. Also segmented PDUs require sequential
 /// Sequence Number.
 #[derive(Default, Debug)]
-#[cfg_attr(
-    all(feature = "serde-1", feature = "std"),
-    derive(serde::Serialize, serde::Deserialize)
-)]
 pub struct SeqCounter(core::sync::atomic::AtomicU32);
 impl SeqCounter {
     pub fn new(start_seq: SequenceNumber) -> Self {
@@ -320,10 +316,32 @@ impl SeqCounter {
         SequenceNumber(U24::new(self.0.load(Ordering::SeqCst)))
     }
 }
+
 impl Clone for SeqCounter {
     fn clone(&self) -> Self {
         SeqCounter(core::sync::atomic::AtomicU32::new(
             self.0.load(Ordering::SeqCst),
         ))
+    }
+}
+#[cfg(feature = "serde-1")]
+impl<'de> serde::Deserialize<'de> for SeqCounter {
+    fn deserialize<D>(deserializer: D) -> Result<Self, <D as serde::Deserializer<'de>>::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(SeqCounter::new(SequenceNumber::deserialize(deserializer)?))
+    }
+}
+#[cfg(feature = "serde-1")]
+impl serde::Serialize for SeqCounter {
+    fn serialize<S>(
+        &self,
+        serializer: S,
+    ) -> Result<<S as serde::Serializer>::Ok, <S as serde::Serializer>::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.check().serialize(serializer)
     }
 }
