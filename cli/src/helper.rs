@@ -1,7 +1,11 @@
 use crate::CLIError;
-use btle::error::IOError;
 #[cfg(feature = "mesh")]
 use bluetooth_mesh::{device_state, mesh};
+use btle::bytes::Storage;
+use btle::error::IOError;
+use btle::hci::command::{Command, CommandPacket};
+use btle::hci::event::EventPacket;
+use futures_core::future::LocalBoxFuture;
 use std::convert::TryFrom;
 use std::fmt::{Error, Formatter};
 use std::str::FromStr;
@@ -130,17 +134,85 @@ pub fn tokio_runtime() -> tokio::runtime::Runtime {
         .build()
         .expect("can't make async runtime")
 }
+#[derive(Debug)]
+pub enum HCIAdapter {
+    Usb(btle::hci::usb::adapter::Adapter),
+    #[cfg(not(all(unix, feature = "btle_bluez")))]
+    BlueZ(btle::hci::adapter::DummyAdapter),
+    #[cfg(all(unix, feature = "btle_bluez"))]
+    BlueZ(
+        btle::hci::stream::Stream<
+            btle::hci::bluez_socket::AsyncHCISocket,
+            Box<btle::hci::bluez_socket::AsyncHCISocket>,
+        >,
+    ),
+}
+impl btle::hci::adapter::Adapter for HCIAdapter {
+    fn write_command<'s, 'p: 's>(
+        &'s mut self,
+        packet: CommandPacket<&'p [u8]>,
+    ) -> LocalBoxFuture<'s, Result<(), btle::hci::adapter::Error>> {
+        match self {
+            HCIAdapter::Usb(u) => u.write_command(packet),
+            HCIAdapter::BlueZ(b) => b.write_command(packet),
+        }
+    }
+    fn send_command<'a, 'c: 'a, Cmd: Command + 'c>(
+        &'a mut self,
+        command: Cmd,
+    ) -> LocalBoxFuture<'a, Result<Cmd::Return, btle::hci::adapter::Error>> {
+        match self {
+            HCIAdapter::Usb(u) => u.send_command(command),
+            HCIAdapter::BlueZ(b) => b.send_command(command),
+        }
+    }
+    fn read_event<'s, 'p: 's, S: Storage<u8> + 'p>(
+        &'s mut self,
+    ) -> LocalBoxFuture<'s, Result<EventPacket<S>, btle::hci::adapter::Error>> {
+        match self {
+            HCIAdapter::Usb(u) => u.read_event(),
+            HCIAdapter::BlueZ(b) => b.read_event(),
+        }
+    }
+}
 pub fn usb_adapter(adapter_id: u16) -> Result<btle::hci::usb::adapter::Adapter, CLIError> {
     Ok(btle::hci::usb::manager::Manager::new()?
         .devices()?
         .bluetooth_adapters()
         .nth(adapter_id.into())
         .ok_or_else(|| CLIError::OtherMessage("no usb bluetooth adapters found".to_owned()))??
-        .open().map_err(|e: btle::hci::usb::Error| match e.0 {
-        IOError::NotImplemented => CLIError::OtherMessage("is the libusb driver installed for the USB adapter? (NotImplemented Error)".to_owned()),
-        e => CLIError::HCIAdapterError(btle::hci::adapter::Error::IOError(e)),
-    })
-    ?)
+        .open()
+        .map_err(|e: btle::hci::usb::Error| match e.0 {
+            IOError::NotImplemented => CLIError::OtherMessage(
+                "is the libusb driver installed for the USB adapter? (NotImplemented Error)"
+                    .to_owned(),
+            ),
+            e => CLIError::HCIAdapterError(btle::hci::adapter::Error::IOError(e)),
+        })?)
+}
+pub fn hci_adapter(which_adapter: &str) -> Result<HCIAdapter, CLIError> {
+    pub const USB_PREFIX: &'static str = "usb:";
+    pub const BLUEZ_PREFIX: &'static str = "bluez:";
+    if which_adapter.starts_with(USB_PREFIX) {
+        Ok(HCIAdapter::Usb(usb_adapter(
+            (&which_adapter[USB_PREFIX.len()..]).parse().map_err(|_| {
+                CLIError::OtherMessage(format!("bad usb adapter {}", which_adapter))
+            })?,
+        )?))
+    } else if which_adapter.starts_with(BLUEZ_PREFIX) {
+        Ok(HCIAdapter::BlueZ(bluez_adapter(
+            (&which_adapter[BLUEZ_PREFIX.len()..])
+                .parse()
+                .map_err(|_| {
+                    CLIError::OtherMessage(format!("bad bluez adapter {}", which_adapter))
+                })?,
+        )?))
+    } else {
+        Err(CLIError::OtherMessage(format!(
+            "unrecognized HCI adapter `{}`",
+            which_adapter
+        )))
+    }
 }
 #[cfg(not(all(unix, feature = "btle_bluez")))]
 pub fn bluez_adapter(_: u16) -> Result<btle::hci::adapter::DummyAdapter, CLIError> {

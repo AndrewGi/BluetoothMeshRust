@@ -12,17 +12,8 @@ pub fn sub_command() -> clap::App<'static, 'static> {
                 .help("HCI source/sink (`bluez`/`usb`)")
                 .short("s")
                 .long("source")
-                .value_name("SOURCE_NAME")
-                .default_value("usb"),
-        )
-        .arg(
-            clap::Arg::with_name("adapter_id")
-                .help("specify the HCI adapter ID")
-                .short("a")
-                .long("adapter_id")
-                .default_value("0")
-                .value_name("ADAPTER_ID")
-                .validator(helper::is_u16_validator),
+                .value_name("SOURCE_NAME:ADAPTER_ID")
+                .default_value("usb:0"),
         )
         .arg(
             clap::Arg::with_name("pcap")
@@ -39,34 +30,22 @@ pub fn dump_matches(
 ) -> Result<(), CLIError> {
     let logger = parent_logger.new(o!());
     info!(logger, "dump");
-    let adapter_id: u16 = dump_matches
-        .value_of("adapter_id")
-        .expect("has default value")
-        .parse()
-        .expect("validated by clap");
     let pcap_file = dump_matches.value_of("pcap");
     let source = dump_matches.value_of("source").expect("required by clap");
     match dump_matches.subcommand() {
-        ("", _) => dump(&logger, source, adapter_id, pcap_file),
+        ("", _) => dump(&logger, source, pcap_file),
         _ => unreachable!("unhandled subcommand"),
     }
 }
 pub fn dump(
     _: &slog::Logger,
-    source: &'_ str,
-    adapter_id: u16,
+    which_adapter: &'_ str,
     pcap_file: Option<&'_ str>,
 ) -> Result<(), CLIError> {
-    crate::helper::tokio_runtime().block_on(async move {
-        match source {
-            "usb" => dump_adapter_pcap(helper::usb_adapter(adapter_id)?, pcap_file).await,
-            "bluez" => dump_adapter_pcap(helper::bluez_adapter(adapter_id)?, pcap_file).await,
-            _ => Err(CLIError::OtherMessage(format!(
-                "HCI source `{}` unknown",
-                source
-            ))),
-        }
-    })
+    crate::helper::tokio_runtime().block_on(dump_adapter_pcap(
+        helper::hci_adapter(which_adapter)?,
+        pcap_file,
+    ))
 }
 pub async fn dump_adapter_pcap<A: btle::hci::adapter::Adapter>(
     adapter: A,

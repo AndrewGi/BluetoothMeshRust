@@ -1,17 +1,17 @@
 use crate::helper::tokio_runtime;
 use crate::CLIError;
 use bluetooth_mesh::provisioning::link::Link;
+use bluetooth_mesh::provisioning::pb_adv;
+use bluetooth_mesh::random::Randomizable;
 use bluetooth_mesh::replay;
-use bluetooth_mesh::stack::bearer::{IncomingMessage, IncomingBeacon, PBAdvBuf};
+use bluetooth_mesh::stack::bearer::{IncomingMessage, PBAdvBuf};
 use bluetooth_mesh::stack::full::FullStack;
 use bluetooth_mesh::stack::StackInternals;
+use bluetooth_mesh::uuid::UUID;
 use btle::le::advertisement::StaticAdvBuffer;
 use btle::le::report::ReportInfo;
 use driver_async::asyncs::sync::mpsc;
 use futures_util::stream::{Stream, StreamExt};
-use bluetooth_mesh::provisioning::pb_adv;
-use bluetooth_mesh::random::Randomizable;
-use bluetooth_mesh::uuid::UUID;
 
 pub fn sub_command() -> clap::App<'static, 'static> {
     clap::SubCommand::with_name("provisioner")
@@ -43,10 +43,14 @@ fn incoming_stream(
             .transpose()
     })
 }
-async fn filter_only_pb_adv<S: Stream<Item = Result<IncomingMessage, btle::hci::adapter::Error>>>(mut stream: core::pin::Pin<&mut S>) -> Result<Option<pb_adv::IncomingPDU<PBAdvBuf>>, btle::hci::adapter::Error> {
+async fn filter_only_pb_adv<
+    S: Stream<Item = Result<IncomingMessage, btle::hci::adapter::Error>>,
+>(
+    mut stream: core::pin::Pin<&mut S>,
+) -> Result<Option<pb_adv::IncomingPDU<PBAdvBuf>>, btle::hci::adapter::Error> {
     while let Some(incoming_result) = stream.as_mut().next().await {
         if let Some(pb_adv_pdu) = incoming_result?.pb_adv() {
-            return Ok(Some(pb_adv_pdu))
+            return Ok(Some(pb_adv_pdu));
         }
     }
     Ok(None)
@@ -62,14 +66,15 @@ pub async fn provision(_logger: &slog::Logger, device_state_path: &str) -> Resul
     let adapter = btle::hci::adapters::Adapter::new(adapter);
     let mut le = adapter.le();
     async move {
-        let early_end_error = || CLIError::OtherMessage("early end on incoming advertisement stream".to_owned());
+        let early_end_error =
+            || CLIError::OtherMessage("early end on incoming advertisement stream".to_owned());
         let mut incoming = incoming_stream(le.advertisement_stream::<Box<[ReportInfo]>>().await?);
         //Intellij doesn't like pin_mut!
         //futures_util::pin_mut!(incoming);
         let mut incoming = unsafe { core::pin::Pin::new_unchecked(&mut incoming) };
         let internals = StackInternals::new(dsm);
         let cache = replay::Cache::new();
-        let mut stack = FullStack::new(internals, cache, 5);
+        let stack = FullStack::new(internals, cache, 5);
         // Box<[u8]> stores the PDU being assembled for the pb-adv link.
         println!("waiting for beacons...");
         let beacon = loop {
@@ -87,9 +92,15 @@ pub async fn provision(_logger: &slog::Logger, device_state_path: &str) -> Resul
         let mut link = Link::<Box<[u8]>>::invite(tx_link, pb_adv::LinkID::random(), &uuid);
         let mut incoming_borrow = incoming.as_mut();
         let next_pb_adv = move || async move {
-            Result::<_, Box<dyn btle::error::Error>>::Ok(filter_only_pb_adv(incoming_borrow.as_mut()).await?.ok_or_else(early_end_error)?.pdu)
+            Result::<_, Box<dyn btle::error::Error>>::Ok(
+                filter_only_pb_adv(incoming_borrow.as_mut())
+                    .await?
+                    .ok_or_else(early_end_error)?
+                    .pdu,
+            )
         };
-        link.handle_pb_adv_pdu(next_pb_adv().await?.as_ref()).await?;
+        link.handle_pb_adv_pdu(next_pb_adv().await?.as_ref())
+            .await?;
         println!("{:?}", link.state());
         Result::<(), Box<dyn btle::error::Error>>::Ok(())
     }
