@@ -3,6 +3,7 @@ use crate::CLIError;
 use bluetooth_mesh::{device_state, mesh};
 use btle::bytes::Storage;
 use btle::error::IOError;
+use btle::hci::adapter::Adapter;
 use btle::hci::command::{Command, CommandPacket};
 use btle::hci::event::EventPacket;
 use futures_core::future::LocalBoxFuture;
@@ -147,14 +148,14 @@ pub enum HCIAdapter {
         >,
     ),
 }
-impl btle::hci::adapter::Adapter for HCIAdapter {
+impl Adapter for HCIAdapter {
     fn write_command<'s, 'p: 's>(
         &'s mut self,
         packet: CommandPacket<&'p [u8]>,
     ) -> LocalBoxFuture<'s, Result<(), btle::hci::adapter::Error>> {
         match self {
-            HCIAdapter::Usb(u) => u.write_command(packet),
-            HCIAdapter::BlueZ(b) => b.write_command(packet),
+            HCIAdapter::Usb(u) => Adapter::write_command(u, packet),
+            HCIAdapter::BlueZ(b) => Adapter::write_command(b, packet),
         }
     }
     fn send_command<'a, 'c: 'a, Cmd: Command + 'c>(
@@ -162,16 +163,16 @@ impl btle::hci::adapter::Adapter for HCIAdapter {
         command: Cmd,
     ) -> LocalBoxFuture<'a, Result<Cmd::Return, btle::hci::adapter::Error>> {
         match self {
-            HCIAdapter::Usb(u) => u.send_command(command),
-            HCIAdapter::BlueZ(b) => b.send_command(command),
+            HCIAdapter::Usb(u) => Adapter::send_command(u, command),
+            HCIAdapter::BlueZ(b) => Adapter::send_command(b, command),
         }
     }
     fn read_event<'s, 'p: 's, S: Storage<u8> + 'p>(
         &'s mut self,
     ) -> LocalBoxFuture<'s, Result<EventPacket<S>, btle::hci::adapter::Error>> {
         match self {
-            HCIAdapter::Usb(u) => u.read_event(),
-            HCIAdapter::BlueZ(b) => b.read_event(),
+            HCIAdapter::Usb(u) => Adapter::read_event(u),
+            HCIAdapter::BlueZ(b) => Adapter::read_event(b),
         }
     }
 }

@@ -42,15 +42,14 @@ pub fn dump(
     which_adapter: &'_ str,
     pcap_file: Option<&'_ str>,
 ) -> Result<(), CLIError> {
-    crate::helper::tokio_runtime().block_on(dump_adapter_pcap(
-        helper::hci_adapter(which_adapter)?,
-        pcap_file,
-    ))
+    crate::helper::tokio_runtime().block_on(dump_adapter_pcap(which_adapter, pcap_file))
 }
-pub async fn dump_adapter_pcap<A: btle::hci::adapter::Adapter>(
-    adapter: A,
+pub async fn dump_adapter_pcap(
+    which_adapter: &'_ str,
     pcap_file: Option<&'_ str>,
 ) -> Result<(), CLIError> {
+    let adapter = helper::hci_adapter(which_adapter)?;
+    println!("using adapter `{:?}`", adapter);
     match pcap_file {
         Some(pcap_file) => {
             println!("using pcap file '{}'", pcap_file);
