@@ -11,7 +11,7 @@ maintenance = {status ="actively-developed"}
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["mesh", "pcap", "btle_usb"]
+default = ["mesh", "pcap", "btle_usb", "btle_bluez"]
 btle_usb = ["btle/hci_usb"]
 btle_bluez = ["btle/bluez_socket"]
 mesh = ["bluetooth_mesh"]

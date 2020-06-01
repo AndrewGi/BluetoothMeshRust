@@ -18,7 +18,15 @@ pub fn sub_command() -> clap::App<'static, 'static> {
         .about("Provisioner Role for adding Nodes to a network")
         .subcommand(
             clap::SubCommand::with_name("run")
-                .about("join real Bluetooth Mesh network as a provisioner."),
+                .about("join real Bluetooth Mesh network as a provisioner.")
+                .arg(
+                    clap::Arg::with_name("source")
+                        .help("HCI source/sink (`bluez`/`usb`)")
+                        .short("s")
+                        .long("source")
+                        .value_name("SOURCE_NAME:ADAPTER_ID")
+                        .default_value("usb:0"),
+                ),
         )
 }
 pub fn provisioner_matches(
@@ -27,7 +35,11 @@ pub fn provisioner_matches(
     matches: &clap::ArgMatches,
 ) -> Result<(), CLIError> {
     match matches.subcommand() {
-        ("run", Some(_matches)) => tokio_runtime().block_on(provision(logger, device_state_path)),
+        ("run", Some(run_matches)) => tokio_runtime().block_on(provision(
+            logger,
+            run_matches.value_of("source").expect("required by clap"),
+            device_state_path,
+        )),
         ("", None) => Err(CLIError::Clap(clap::Error::with_description(
             "missing subcommand",
             clap::ErrorKind::ArgumentNotFound,
@@ -58,11 +70,15 @@ async fn filter_only_pb_adv<
 pub async fn dump() -> Result<(), CLIError> {
     unimplemented!()
 }
-pub async fn provision(_logger: &slog::Logger, device_state_path: &str) -> Result<(), CLIError> {
+pub async fn provision(
+    _logger: &slog::Logger,
+    which_adapter: &'_ str,
+    device_state_path: &str,
+) -> Result<(), CLIError> {
     let dsm = crate::helper::load_device_state(device_state_path)?;
-    println!("opening usb adapter...");
-    let adapter = crate::helper::usb_adapter(0)?;
-    println!("usb adapter open!");
+    println!("opening HCI adapter...");
+    let adapter = crate::helper::hci_adapter(which_adapter)?;
+    println!("HCI adapter (`{:?}`) open!", adapter);
     let adapter = btle::hci::adapters::Adapter::new(adapter);
     let mut le = adapter.le();
     async move {
