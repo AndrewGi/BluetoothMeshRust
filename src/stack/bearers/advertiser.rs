@@ -4,6 +4,7 @@ use btle::hci::adapter;
 use btle::le::advertisement::RawAdvertisement;
 use btle::le::advertiser;
 use btle::{BTAddress, PackError};
+use driver_async::asyncs::sync::mpsc;
 use driver_async::asyncs::task;
 use driver_async::asyncs::time::{delay_for, Duration};
 use futures_util::stream::{Stream, StreamExt};
@@ -59,11 +60,11 @@ impl<A: advertiser::Advertiser> HCIBearer<A> {
         advertisement: RawAdvertisement,
         transmit_interval: TransmitInterval,
     ) -> Result<(), adapter::Error> {
-        let interval_duration =
-            Duration::from_millis(transmit_interval.steps.to_milliseconds().into());
+        let interval_duration = transmit_interval.steps.to_duration();
         let interval_delay = interval_duration
             .checked_sub(Self::ADVERTISING_DURATION)
-            .unwrap_or(Duration::from_micros(0));
+            .unwrap_or_default();
+        // transmit_count is 0-based (0 means transmit once, 1 means twice, etc)
         let transmit_count = u8::from(transmit_interval.count);
         self.hci
             .set_advertising_data(advertisement.as_ref())
@@ -91,20 +92,93 @@ impl<A: btle::le::scan::Observer> HCIBearer<A> {
             .filter_map(|r| async move { r.map(IncomingMessage::from_report_info).transpose() }))
     }
 }
-pub struct BufferedHCIAdvertiser {
-    hci_task: task::JoinHandle<Result<(), adapter::Error>>,
+/// [`HCIBearer`] with `mpsc` channels buffering it.
+pub struct BufferedHCIAdvertiser<A> {
+    bearer: HCIBearer<A>,
+    incoming_tx: mpsc::Sender<IncomingMessage>,
+    outgoing_rx: mpsc::Receiver<OutgoingMessage>,
 }
-/*
-impl<A: btle::le::advertiser::Advertiser> BufferedHCIAdvertiser<A> {
+impl<A: btle::le::advertiser::Advertiser + btle::le::scan::Observer> BufferedHCIAdvertiser<A> {
     pub fn new_with(
         bearer: HCIBearer<A>,
         incoming_tx: mpsc::Sender<IncomingMessage>,
         outgoing_rx: mpsc::Receiver<OutgoingMessage>,
     ) -> BufferedHCIAdvertiser<A> {
         BufferedHCIAdvertiser {
-            hci_task: task::spawn(async move { loop {} }),
+            bearer,
+            incoming_tx,
+            outgoing_rx,
         }
     }
+    pub fn new_with_channel_size(
+        bearer: HCIBearer<A>,
+        channel_size: usize,
+    ) -> (
+        BufferedHCIAdvertiser<A>,
+        mpsc::Receiver<IncomingMessage>,
+        mpsc::Sender<OutgoingMessage>,
+    ) {
+        let (incoming_tx, incoming_rx) = mpsc::channel(channel_size);
+        let (outgoing_tx, outgoing_rx) = mpsc::channel(channel_size);
+        (
+            Self::new_with(bearer, incoming_tx, outgoing_rx),
+            incoming_rx,
+            outgoing_tx,
+        )
+    }
+    /// Spawn the `run_loop()` on the task executor. This method will call `task::spawn` for
+    /// adapters implementing `Send`. If the adapter is `!Send`, look at [`spawn_local`].
+    pub fn spawn_send(mut self) -> task::JoinHandle<Result<(), adapter::Error>>
+    where
+        A: Send + 'static,
+    {
+        task::spawn(async move { self.run_loop().await })
+    }
+    /// Spawn the `run_loop()` on the task executor. This method will call `task::spawn_local` for
+    /// adapters that are `!Send`. This means `run_loop()` will run on the local thread,
+    /// asynchronously without blocking.
+    pub fn spawn_local(mut self) -> task::JoinHandle<Result<(), adapter::Error>>
+    where
+        A: 'static,
+    {
+        task::spawn_local(async move { self.run_loop().await })
+    }
+    /// Send outgoing messages and receive incoming continuously. Run until the
+    /// bearer and `outgoing_rx` return `None` or if an error occures.
+    pub async fn run_loop(&mut self) -> Result<(), adapter::Error> {
+        unimplemented!()
+    }
+    /*
+    pub async fn send(
+        &mut self,
+        msg: OutgoingMessage,
+    ) -> Result<Result<(), adapter::Error>, PackError> {
+        let (advertisement, interval) = msg.to_raw_advertisement()?;
+        Ok(self.advertise(advertisement, interval).await)
+    }
+    pub async fn advertise(
+        &mut self,
+        advertisement: RawAdvertisement,
+        transmit_interval: TransmitInterval,
+    ) -> Result<(), adapter::Error> {
+        let interval_duration = transmit_interval.steps.to_duration();
+        let interval_delay = interval_duration
+            .checked_sub(Self::ADVERTISING_DURATION)
+            .unwrap_or_default();
+        // transmit_count is 0-based (0 means transmit once, 1 means twice, etc)
+        let transmit_count = u8::from(transmit_interval.count);
+        self.hci
+            .set_advertising_data(advertisement.as_ref())
+            .await?;
+        for i in 0..=transmit_count {
+            self.hci.set_advertising_enable(true).await?;
+            delay_for(Self::ADVERTISING_DURATION).await;
+            self.hci.set_advertising_enable(false).await?;
+            if i != transmit_count {
+                delay_for(interval_delay).await;
+            }
+        }
+        Ok(())
+    }
+     */
 }
-
-    */
