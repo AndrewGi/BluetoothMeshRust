@@ -35,7 +35,7 @@ impl IncomingEncryptedNetworkPDU {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct OutgoingEncryptedNetworkPDU {
     pub transmit_parameters: TransmitInterval,
     pub pdu: net::EncryptedPDU<net::StaticEncryptedPDUBuf>,
@@ -46,7 +46,7 @@ pub struct IncomingBeacon {
     pub rssi: Option<RSSI>,
 }
 pub type PBAdvBuf = StaticBuf<u8, [u8; link::GENERIC_PDU_DATA_MAX_LEN]>;
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum OutgoingMessage {
     Network(OutgoingEncryptedNetworkPDU),
     Beacon(beacon::BeaconPDU),
@@ -133,6 +133,22 @@ impl IncomingMessage {
             IncomingMessage::PBAdv(p) => Some(*p),
             _ => None,
         }
+    }
+}
+/// ['IncomingMessage`] or [`OutgoingMessage`]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub enum Message {
+    Outgoing(OutgoingMessage),
+    Incoming(IncomingMessage),
+}
+impl From<OutgoingMessage> for Message {
+    fn from(m: OutgoingMessage) -> Self {
+        Message::Outgoing(m)
+    }
+}
+impl From<IncomingMessage> for Message {
+    fn from(m: IncomingMessage) -> Self {
+        Message::Incoming(m)
     }
 }
 /*
