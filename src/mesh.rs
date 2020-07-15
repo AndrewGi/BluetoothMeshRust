@@ -4,7 +4,6 @@ use core::convert::{TryFrom, TryInto};
 use core::fmt::{Display, Formatter};
 use core::ops::{Add, Sub};
 use core::str::FromStr;
-use core::time;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
@@ -512,7 +511,7 @@ impl ElementIndex {
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct ElementCount(pub u8);
 const TRANSMIT_COUNT_MAX: u8 = 0b111;
-/// 3-bit Transit Count,
+/// 0-Indexed, 3-bit Transmit Count,
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct TransmitCount(u8);
@@ -530,6 +529,9 @@ impl TransmitCount {
         } else {
             Self(count)
         }
+    }
+    pub const fn inner(self) -> u8 {
+        self.0
     }
 }
 impl From<TransmitCount> for u8 {
@@ -550,11 +552,8 @@ impl TransmitSteps {
         assert!(steps <= STEPS_MAX);
         Self(steps)
     }
-    pub fn to_milliseconds(&self) -> u32 {
-        (u32::from(self.0) + 1) * 50
-    }
-    pub fn to_duration(&self) -> time::Duration {
-        time::Duration::from_millis(self.to_milliseconds().into())
+    pub fn to_milliseconds(&self, step_worth_ms: u32) -> u32 {
+        (u32::from(self.0) + 1) * step_worth_ms
     }
 }
 

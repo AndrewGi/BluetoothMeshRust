@@ -11,7 +11,7 @@ pub struct LinkID(pub u32);
 
 impl LinkID {
     pub const BYTE_LEN: usize = 4;
-    pub fn new(link_id: u32) -> LinkID {
+    pub const fn new(link_id: u32) -> LinkID {
         LinkID(link_id)
     }
     pub fn value(self) -> u32 {

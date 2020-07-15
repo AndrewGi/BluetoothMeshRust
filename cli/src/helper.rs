@@ -4,7 +4,7 @@ use bluetooth_mesh::{device_state, mesh};
 use btle::bytes::Storage;
 use btle::error::IOError;
 use btle::hci::adapter::Adapter;
-use btle::hci::command::{Command, CommandPacket};
+use btle::hci::command::CommandPacket;
 use btle::hci::event::EventPacket;
 use futures_core::future::LocalBoxFuture;
 use std::convert::TryFrom;
@@ -158,15 +158,6 @@ impl Adapter for HCIAdapter {
             HCIAdapter::BlueZ(b) => Adapter::write_command(b, packet),
         }
     }
-    fn send_command<'a, 'c: 'a, Cmd: Command + 'c>(
-        &'a mut self,
-        command: Cmd,
-    ) -> LocalBoxFuture<'a, Result<Cmd::Return, btle::hci::adapter::Error>> {
-        match self {
-            HCIAdapter::Usb(u) => Adapter::send_command(u, command),
-            HCIAdapter::BlueZ(b) => Adapter::send_command(b, command),
-        }
-    }
     fn read_event<'s, 'p: 's, S: Storage<u8> + 'p>(
         &'s mut self,
     ) -> LocalBoxFuture<'s, Result<EventPacket<S>, btle::hci::adapter::Error>> {
@@ -177,7 +168,7 @@ impl Adapter for HCIAdapter {
     }
 }
 pub fn usb_adapter(adapter_id: u16) -> Result<btle::hci::usb::adapter::Adapter, CLIError> {
-    Ok(btle::hci::usb::manager::Manager::new()?
+    let mut adapter: btle::hci::usb::adapter::Adapter = btle::hci::usb::manager::Manager::new()?
         .devices()?
         .bluetooth_adapters()
         .nth(adapter_id.into())
@@ -189,7 +180,9 @@ pub fn usb_adapter(adapter_id: u16) -> Result<btle::hci::usb::adapter::Adapter, 
                     .to_owned(),
             ),
             e => CLIError::HCIAdapterError(btle::hci::adapter::Error::IOError(e)),
-        })?)
+        })?;
+    adapter.reset()?;
+    Ok(adapter)
 }
 pub fn hci_adapter(which_adapter: &str) -> Result<HCIAdapter, CLIError> {
     pub const USB_PREFIX: &'static str = "usb:";

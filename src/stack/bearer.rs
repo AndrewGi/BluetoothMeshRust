@@ -1,4 +1,5 @@
 //! Bluetooth Mesh Bearers.
+use crate::foundation::state::NetworkTransmit;
 use crate::mesh::{TransmitCount, TransmitInterval, TransmitSteps};
 use crate::provisioning::{link, pb_adv};
 use crate::{beacon, net};
@@ -37,13 +38,28 @@ impl IncomingEncryptedNetworkPDU {
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct OutgoingEncryptedNetworkPDU {
-    pub transmit_parameters: TransmitInterval,
+    pub transmit_parameters: NetworkTransmit,
     pub pdu: net::EncryptedPDU<net::StaticEncryptedPDUBuf>,
 }
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct IncomingBeacon {
     pub beacon: beacon::BeaconPDU,
     pub rssi: Option<RSSI>,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct TransmitInstructions {
+    /// 0-index times (`0` means 1 time, `1` means 2 times, `2` means 3 times, etc)
+    pub times: u8,
+    pub interval: core::time::Duration,
+}
+impl From<NetworkTransmit> for TransmitInstructions {
+    fn from(t: NetworkTransmit) -> Self {
+        TransmitInstructions {
+            times: t.0.count.inner() + 1,
+            interval: core::time::Duration::from_millis(t.0.steps.to_milliseconds(10).into()),
+        }
+    }
 }
 pub type PBAdvBuf = StaticBuf<u8, [u8; link::GENERIC_PDU_DATA_MAX_LEN]>;
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
@@ -53,25 +69,37 @@ pub enum OutgoingMessage {
     PBAdv(pb_adv::PDU<PBAdvBuf>),
 }
 impl OutgoingMessage {
-    pub fn to_raw_advertisement(&self) -> Result<(RawAdvertisement, TransmitInterval), PackError> {
+    pub fn to_raw_advertisement(
+        &self,
+    ) -> Result<(RawAdvertisement, TransmitInstructions), PackError> {
         let mut out = RawAdvertisement::new();
         Ok(match self {
             OutgoingMessage::Network(n) => {
                 out.insert(&n.pdu)?;
-                (out, n.transmit_parameters)
+                (out, n.transmit_parameters.into())
             }
             OutgoingMessage::Beacon(b) => {
+                //TODO: TransmitInstructions
                 out.insert(b)?;
                 (
                     out,
-                    TransmitInterval::new(TransmitCount::new(3), TransmitSteps::new(2)),
+                    NetworkTransmit(TransmitInterval::new(
+                        TransmitCount::new(3),
+                        TransmitSteps::new(2),
+                    ))
+                    .into(),
                 )
             }
             OutgoingMessage::PBAdv(p) => {
+                //TODO: TransmitInstructions
                 out.insert(p)?;
                 (
                     out,
-                    TransmitInterval::new(TransmitCount::new(3), TransmitSteps::new(1)),
+                    NetworkTransmit(TransmitInterval::new(
+                        TransmitCount::new(3),
+                        TransmitSteps::new(1),
+                    ))
+                    .into(),
                 )
             }
         })
@@ -87,7 +115,6 @@ impl IncomingMessage {
     pub fn from_report_info<B: AsRef<[u8]>>(report_info: ReportInfo<B>) -> Option<IncomingMessage> {
         if report_info.event_type == EventType::AdvNonconnInd {
             if let Some(ad_struct) = report_info.data.iter().next() {
-                dbg!(ad_struct.ad_type);
                 match ad_struct.ad_type {
                     AdType::MeshPDU => {
                         Some(IncomingMessage::Network(IncomingEncryptedNetworkPDU {

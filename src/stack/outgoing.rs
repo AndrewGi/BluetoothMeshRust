@@ -71,7 +71,7 @@ impl Outgoing {
     ) -> Result<(), SendError> {
         let internals = self.internals.read().await;
         let (pdu, net_sm) = internals.lower_to_net(&msg)?;
-        let transmit_parameters = internals.device_state.config_states().network_transmit.0;
+        let transmit_parameters = internals.device_state.config_states().network_transmit;
         // Release the lock on StackInternals.
         self.send_encrypted_network_pdu(OutgoingEncryptedNetworkPDU {
             transmit_parameters,
@@ -101,7 +101,7 @@ impl Outgoing {
             .tx_key();
         let nid = net_sm.network_keys().nid();
         let ctl = CTL(msg.segments.upper_pdu.is_control());
-        let transmit_parameters = internals.device_state().config_states().network_transmit.0;
+        let transmit_parameters = internals.device_state().config_states().network_transmit;
         let ttl = msg.ttl.unwrap_or_else(|| internals.default_ttl());
         let mut ack_rx = self.ack_rx.lock().await;
         let make_net_header = |seq: SequenceNumber| Header {

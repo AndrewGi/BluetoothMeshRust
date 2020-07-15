@@ -234,6 +234,11 @@ impl TryFrom<u8> for DefaultTTLState {
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 #[cfg_attr(feature = "serde-1", derive(serde::Serialize, serde::Deserialize))]
 pub struct NetworkTransmit(pub TransmitInterval);
+impl NetworkTransmit {
+    pub fn interval(self) -> core::time::Duration {
+        core::time::Duration::from_millis(self.0.steps.to_milliseconds(10).into())
+    }
+}
 impl Default for NetworkTransmit {
     fn default() -> Self {
         NetworkTransmit(TransmitInterval {

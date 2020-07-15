@@ -199,7 +199,7 @@ pub struct Process {
 }
 impl Process {
     pub const TIMEOUT: Duration = Duration::from_secs(30);
-    pub fn new_with(
+    pub const fn new_with(
         bearer: Bearer,
         attention_timer: AttentionTimer,
         authentication_method: AuthenticationMethod,
@@ -229,8 +229,7 @@ impl Process {
     pub fn is_timed_out(&self) -> bool {
         self.last_message_time
             .and_then(|i| Instant::now().checked_duration_since(i))
-            .map(|d| d < Self::TIMEOUT)
-            .unwrap_or(false)
+            .map_or(false, |d| d < Self::TIMEOUT)
     }
     pub fn time_until_timeout(&self) -> Result<Option<Duration>, ProvisionerError> {
         match self.last_message_time {
@@ -298,7 +297,7 @@ impl Process {
         self.update_last_message_time();
         Ok(())
     }
-    fn start_pdu(&self) -> Start {
+    const fn start_pdu(&self) -> Start {
         Start {
             algorithm: protocol::AlgorithmsFlags::FIPSP256,
             public_key_type: self.public_key_type,

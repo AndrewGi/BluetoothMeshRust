@@ -4,15 +4,14 @@ use bluetooth_mesh::provisioning::link::Link;
 use bluetooth_mesh::provisioning::pb_adv;
 use bluetooth_mesh::random::Randomizable;
 use bluetooth_mesh::replay;
-use bluetooth_mesh::stack::bearer::{IncomingMessage, PBAdvBuf};
+use bluetooth_mesh::stack::bearer::{IncomingMessage, OutgoingMessage, PBAdvBuf};
+use bluetooth_mesh::stack::bearers::advertiser::BufferedHCIAdvertiser;
 use bluetooth_mesh::stack::full::FullStack;
 use bluetooth_mesh::stack::StackInternals;
 use bluetooth_mesh::uuid::UUID;
-use btle::le::advertisement::StaticAdvBuffer;
-use btle::le::report::ReportInfo;
 use driver_async::asyncs::sync::mpsc;
+use driver_async::asyncs::task;
 use futures_util::stream::{Stream, StreamExt};
-
 pub fn sub_command() -> clap::App<'static, 'static> {
     clap::SubCommand::with_name("provisioner")
         .about("Provisioner Role for adding Nodes to a network")
@@ -34,12 +33,16 @@ pub fn provisioner_matches(
     device_state_path: &str,
     matches: &clap::ArgMatches,
 ) -> Result<(), CLIError> {
+    let mut runtime = tokio_runtime();
     match matches.subcommand() {
-        ("run", Some(run_matches)) => tokio_runtime().block_on(provision(
-            logger,
-            run_matches.value_of("source").expect("required by clap"),
-            device_state_path,
-        )),
+        ("run", Some(run_matches)) => tokio::task::LocalSet::new().block_on(
+            &mut runtime,
+            provision(
+                logger,
+                run_matches.value_of("source").expect("required by clap"),
+                device_state_path,
+            ),
+        ),
         ("", None) => Err(CLIError::Clap(clap::Error::with_description(
             "missing subcommand",
             clap::ErrorKind::ArgumentNotFound,
@@ -47,21 +50,13 @@ pub fn provisioner_matches(
         _ => unreachable!("unhandled provisioner subcommand"),
     }
 }
-fn incoming_stream(
-    s: impl Stream<Item = Result<ReportInfo<StaticAdvBuffer>, btle::hci::adapter::Error>>,
-) -> impl Stream<Item = Result<IncomingMessage, btle::hci::adapter::Error>> {
-    s.filter_map(|r| async move {
-        r.map(|i| IncomingMessage::from_report_info(i.as_ref()))
-            .transpose()
-    })
-}
 async fn filter_only_pb_adv<
-    S: Stream<Item = Result<IncomingMessage, btle::hci::adapter::Error>>,
+    S: Stream<Item = Result<IncomingMessage, btle::hci::adapter::Error>> + Unpin,
 >(
-    mut stream: core::pin::Pin<&mut S>,
+    mut stream: S,
 ) -> Result<Option<pb_adv::IncomingPDU<PBAdvBuf>>, btle::hci::adapter::Error> {
-    while let Some(incoming_result) = stream.as_mut().next().await {
-        if let Some(pb_adv_pdu) = incoming_result?.pb_adv() {
+    while let Some(msg) = stream.next().await {
+        if let Some(pb_adv_pdu) = msg?.pb_adv() {
             return Ok(Some(pb_adv_pdu));
         }
     }
@@ -75,27 +70,31 @@ pub async fn provision(
     which_adapter: &'_ str,
     device_state_path: &str,
 ) -> Result<(), CLIError> {
+    const BEARER_CHANNEL_SIZE: usize = 16;
     let dsm = crate::helper::load_device_state(device_state_path)?;
     println!("opening HCI adapter...");
     let adapter = crate::helper::hci_adapter(which_adapter)?;
     println!("HCI adapter (`{:?}`) open!", adapter);
-    let adapter = btle::hci::adapters::Adapter::new(adapter);
-    let mut le = adapter.le();
+    // If using USB HCI adapter, `read_event()` blocks instead of `Poll::Pending` so this will
+    // block the current thread
+    let (mut adapter, mut bearer_rx, bearer_tx) =
+        BufferedHCIAdvertiser::new_with_channel_size(adapter, BEARER_CHANNEL_SIZE);
+    // Workaround is to spawn a thread for the adapter. In the future, hopefully there will be a
+    // async rust USB library.
+    let _adapter_thread = std::thread::spawn(move || {
+        tokio_runtime().block_on(adapter.run_loop_send_error());
+    });
     async move {
         let early_end_error =
             || CLIError::OtherMessage("early end on incoming advertisement stream".to_owned());
-        let mut incoming = incoming_stream(le.advertisement_stream::<Box<[ReportInfo]>>().await?);
-        //Intellij doesn't like pin_mut!
-        //futures_util::pin_mut!(incoming);
-        let mut incoming = unsafe { core::pin::Pin::new_unchecked(&mut incoming) };
+        println!("starting buffered advertiser...");
         let internals = StackInternals::new(dsm);
         let cache = replay::Cache::new();
         let stack = FullStack::new(internals, cache, 5);
         // Box<[u8]> stores the PDU being assembled for the pb-adv link.
         println!("waiting for beacons...");
         let beacon = loop {
-            if let Some(beacon) = incoming.next().await.ok_or(early_end_error())??.beacon() {
-                dbg!(beacon);
+            if let Some(beacon) = bearer_rx.recv().await.ok_or(early_end_error())??.beacon() {
                 if beacon.beacon.unprovisioned().is_some() {
                     break beacon;
                 }
@@ -104,12 +103,26 @@ pub async fn provision(
         println!("using beacon: `{:?}`", &beacon);
         let uuid: UUID = beacon.beacon.unprovisioned().expect("filtered above").uuid;
         println!("UUID: {}", &uuid);
-        let (tx_link, rx_link) = mpsc::channel(Link::<Box<[u8]>>::CHANNEL_SIZE);
-        let mut link = Link::<Box<[u8]>>::invite(tx_link, pb_adv::LinkID::random(), &uuid);
-        let mut incoming_borrow = incoming.as_mut();
+        let (tx_link, mut rx_link) = mpsc::channel(Link::<Box<[u8]>>::CHANNEL_SIZE);
+        let mut bearer_link_tx = bearer_tx.clone();
+        // Forwards PB ADV Link messages to the bearer
+        task::spawn(async move {
+            while let Some(msg) = rx_link.recv().await {
+                dbg!(&msg);
+                if bearer_link_tx
+                    .send(OutgoingMessage::PBAdv(msg))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+            }
+        });
+
+        let mut link = Link::<PBAdvBuf>::invite(tx_link, pb_adv::LinkID::random(), &uuid);
         let next_pb_adv = move || async move {
             Result::<_, Box<dyn btle::error::Error>>::Ok(
-                filter_only_pb_adv(incoming_borrow.as_mut())
+                filter_only_pb_adv(&mut bearer_rx)
                     .await?
                     .ok_or_else(early_end_error)?
                     .pdu,

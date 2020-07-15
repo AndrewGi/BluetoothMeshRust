@@ -269,7 +269,7 @@ impl<Buf: AsRef<[u8]>> PDU<Buf> {
         self.control.byte_len() + self.payload_len()
     }
     pub fn payload_len(&self) -> usize {
-        self.payload.as_ref().map(|l| l.as_ref().len()).unwrap_or(0)
+        self.payload.as_ref().map_or(0, |l| l.as_ref().len())
     }
     pub fn pack_into(&self, buf: &mut [u8]) -> Result<(), PackError> {
         let control_len = self.control.byte_len();
@@ -540,7 +540,7 @@ impl<B: AsRef<[u8]> + AsMut<[u8]>> Reassembler<B> {
     }
     pub fn finish_pdu(&self) -> Result<protocol::PDU, ReassembleError> {
         let data = self.finish_data_ref()?;
-        protocol::PDU::unpack_raw(data.as_ref()).map_err(ReassembleError::PackError)
+        protocol::PDU::unpack_raw(data).map_err(ReassembleError::PackError)
     }
     pub fn insert(
         &mut self,
