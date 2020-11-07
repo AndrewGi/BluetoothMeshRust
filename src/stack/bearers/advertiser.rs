@@ -96,22 +96,7 @@ impl<A: btle::hci::adapter::Adapter> BufferedHCIAdvertiser<A> {
     {
         task::spawn_local(async move { self.run_loop_send_error().await })
     }
-    /*
-    pub fn spawn_send(
-        bearer: A,
-        incoming_tx: mpsc::Sender<Result<IncomingMessage, adapter::Error>>,
-        outgoing_rx: mpsc::Receiver<OutgoingMessage>,
-    ) -> task::JoinHandle<Result<(), adapter::Error>>
-    where
-        A: Send,
-    {
-        task::spawn(async move {
-            Self::new_with(bearer, incoming_tx, outgoing_rx)
-                .run_loop()
-                .await
-        })
-    }
-    */
+
     async fn setup(&mut self) -> Result<(), adapter::Error> {
         self.bearer.adapter.reset().await?;
         self.bearer
@@ -131,7 +116,7 @@ impl<A: btle::hci::adapter::Adapter> BufferedHCIAdvertiser<A> {
         }
         Ok(())
     }
-    async fn recv(&mut self, msg: IncomingMessage) -> Result<(), adapter::Error> {
+    async fn recv(&self, msg: IncomingMessage) -> Result<(), adapter::Error> {
         self.incoming_tx
             .send(Ok(msg))
             .await
@@ -143,10 +128,7 @@ impl<A: btle::hci::adapter::Adapter> BufferedHCIAdvertiser<A> {
             .await
             .map_err(|_| adapter::Error::ChannelClosed)
     }
-    async fn handle_event(
-        &mut self,
-        event: EventPacket<AdvertiserBuf>,
-    ) -> Result<(), adapter::Error> {
+    async fn handle_event(&self, event: EventPacket<AdvertiserBuf>) -> Result<(), adapter::Error> {
         if let Ok(event) = RawMetaEvent::try_from(event.as_ref()) {
             if let Ok(advertisement) =
                 AdvertisingReport::<Box<[ReportInfo]>>::meta_unpack_packet(event)
