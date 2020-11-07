@@ -2,7 +2,6 @@ use crate::CLIError;
 #[cfg(feature = "mesh")]
 use bluetooth_mesh::{device_state, mesh};
 use btle::bytes::Storage;
-use btle::error::IOError;
 use btle::hci::adapter::Adapter;
 use btle::hci::command::CommandPacket;
 use btle::hci::event::EventPacket;
@@ -10,6 +9,7 @@ use futures_core::future::LocalBoxFuture;
 use std::convert::TryFrom;
 use std::fmt::{Error, Formatter};
 use std::str::FromStr;
+use usbw::libusb::asyncs::AsyncContext;
 
 pub struct HexSlice<'a>(pub &'a [u8]);
 impl<'a> std::fmt::UpperHex for HexSlice<'a> {
@@ -129,8 +129,7 @@ pub fn write_device_state(
         .map_err(CLIError::SerdeJSON)
 }
 pub fn tokio_runtime() -> tokio::runtime::Runtime {
-    tokio::runtime::Builder::new()
-        .basic_scheduler()
+    tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .expect("can't make async runtime")
@@ -167,22 +166,35 @@ impl Adapter for HCIAdapter {
         }
     }
 }
+pub fn libusb_context() -> &'static AsyncContext {
+    static CONTEXT: once_cell::sync::OnceCell<AsyncContext> = once_cell::sync::OnceCell::new();
+    CONTEXT.get_or_init(|| {
+        usbw::libusb::context::default_context()
+            .expect("unable to start libusb context")
+            .start_async()
+    })
+}
 pub fn usb_adapter(adapter_id: u16) -> Result<btle::hci::usb::adapter::Adapter, CLIError> {
-    let mut adapter: btle::hci::usb::adapter::Adapter = btle::hci::usb::manager::Manager::new()?
-        .devices()?
-        .bluetooth_adapters()
+    let context = libusb_context();
+    let device_list = context.context_ref().device_list();
+    let mut adapters = btle::hci::usb::device::bluetooth_adapters(device_list.iter());
+    let mut adapter = adapters
         .nth(adapter_id.into())
         .ok_or_else(|| CLIError::OtherMessage("no usb bluetooth adapters found".to_owned()))??
         .open()
-        .map_err(|e: btle::hci::usb::Error| match e.0 {
-            IOError::NotImplemented => CLIError::OtherMessage(
+        .map_err(|e: usbw::libusb::error::Error| match e {
+            usbw::libusb::error::Error::NotSupported => CLIError::OtherMessage(
                 "is the libusb driver installed for the USB adapter? (NotImplemented Error)"
                     .to_owned(),
             ),
-            e => CLIError::HCIAdapterError(btle::hci::adapter::Error::IOError(e)),
+            e => CLIError::HCIAdapterError(btle::hci::adapter::Error::IOError(
+                btle::hci::usb::Error::from(e).into(),
+            )),
         })?;
-    adapter.reset()?;
-    Ok(adapter)
+    adapter.reset().map_err(btle::hci::usb::Error::from)?;
+    Ok(btle::hci::usb::adapter::Adapter::open(
+        context.make_async_device(adapter),
+    )?)
 }
 pub fn hci_adapter(which_adapter: &str) -> Result<HCIAdapter, CLIError> {
     pub const USB_PREFIX: &'static str = "usb:";
