@@ -26,7 +26,7 @@ pub fn hex_16_to_array(hex: &str) -> Option<[u8; 16]> {
 
 pub mod aes;
 mod aes_ccm;
-mod aes_cmac;
+//mod aes_cmac;
 pub mod ecdh;
 pub mod k_funcs;
 pub mod key;

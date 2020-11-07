@@ -1,13 +1,11 @@
 //! AES CCM module. Based on `aes_ccm` crate but had to be reimplemented because it was missing
 //! certain public functions.
-use aes::block_cipher_trait::BlockCipher;
-use aes::Aes128;
-
-use aead::generic_array::typenum::{U0, U10, U12, U13, U14, U16, U4, U6, U8};
-use aead::generic_array::{ArrayLength, GenericArray};
-use aead::{Aead, Error, NewAead};
-
+use aead::{Error, NewAead};
+use aes::{Aes128, NewBlockCipher};
+use block_modes::cipher::BlockCipher;
 use core::marker::PhantomData;
+use generic_array::{ArrayLength, GenericArray};
+use typenum::consts::{U10, U12, U13, U14, U16, U4, U6, U8};
 
 // Number of columns (32-bit words) comprising the state
 const NB: usize = 4;
@@ -41,123 +39,12 @@ where
     /// Tag size.
     tag_size: PhantomData<TagSize>,
 }
-/// Added the ability to clone a cipher to avoid having to recalculate the cipher from the key.
-impl<TagSize: CcmTagSize> From<&Aes128> for AesCcm<TagSize> {
-    fn from(cipher: &Aes128) -> Self {
-        AesCcm {
-            cipher: cipher.clone(),
-            tag_size: PhantomData,
-        }
-    }
-}
-impl<TagSize: CcmTagSize> From<Aes128> for AesCcm<TagSize> {
-    fn from(cipher: Aes128) -> Self {
-        AesCcm {
-            cipher,
-            tag_size: PhantomData,
-        }
-    }
-}
-impl<TagSize> NewAead for AesCcm<TagSize>
-where
-    TagSize: CcmTagSize,
-{
-    type KeySize = U16;
 
-    /// Creates a new `AesCcm`.
-    fn new(key: GenericArray<u8, U16>) -> Self {
-        AesCcm {
-            cipher: Aes128::new(&key),
-            tag_size: PhantomData,
-        }
-    }
-}
-
-impl<TagSize> Aead for AesCcm<TagSize>
-where
-    TagSize: CcmTagSize,
-{
-    type NonceSize = U13;
-    type TagSize = TagSize;
-    type CiphertextOverhead = U0;
-
-    /// In-place CCM encryption and generation of detached authentication tag.
-    fn encrypt_in_place_detached(
+pub type NonceSize = U13;
+impl<TagSize: CcmTagSize> AesCcm<TagSize> {
+    pub fn decrypt(
         &self,
-        nonce: &GenericArray<u8, Self::NonceSize>,
-        associated_data: &[u8],
-        payload: &mut [u8],
-    ) -> Result<GenericArray<u8, TagSize>, Error> {
-        let alen = associated_data.len();
-        let plen = payload.len();
-        let tlen = TagSize::to_usize();
-
-        // Input sanity check
-        if alen >= CCM_AAD_MAX_BYTES || plen >= CCM_PAYLOAD_MAX_BYTES {
-            return Err(Error);
-        }
-
-        // The sequence b for encryption is formatted as follows:
-        // b = [FLAGS | nonce | counter ], where:
-        //   FLAGS is 1 byte long
-        //   nonce is 13 bytes long
-        //   counter is 2 bytes long
-        // The byte FLAGS is composed by the following 8 bits:
-        //   0-2 bits: used to represent the value of q-1
-        //   3-7 bits: always 0's
-        let mut b = [0_u8; AES_BLOCK_SIZE];
-        let mut tag = [0_u8; AES_BLOCK_SIZE];
-
-        // Generating the authentication tag ----------------------------------
-
-        // Formatting the sequence b for authentication
-        b[0] = if alen > 0 { 0x40 } else { 0 } | ((tlen as u8 - 2) / 2) << 3 | 1;
-        b[1..14].copy_from_slice(&nonce[..13]);
-        b[14] = (plen >> 8) as u8;
-        b[15] = plen as u8;
-
-        // Computing the authentication tag using CBC-MAC
-        tag.copy_from_slice(&b);
-        self.cipher
-            .encrypt_block(GenericArray::from_mut_slice(&mut tag));
-        if alen > 0 {
-            ccm_cbc_mac(&mut tag, associated_data, true, &self.cipher);
-        }
-        if plen > 0 {
-            ccm_cbc_mac(&mut tag, payload, false, &self.cipher);
-        }
-
-        // Encryption ---------------------------------------------------------
-
-        // Formatting the sequence b for encryption
-        // q - 1 = 2 - 1 = 1
-        b[0] = 1;
-        b[14] = 0;
-        b[15] = 0;
-
-        // Encrypting payload using ctr mode
-        ccm_ctr_mode(payload, &mut b, &self.cipher);
-
-        // Restoring initial counter for ctr_mode (0)
-        b[14] = 0;
-        b[15] = 0;
-
-        // Encrypting b and generating the tag
-        self.cipher
-            .encrypt_block(GenericArray::from_mut_slice(&mut b));
-        let mut t = GenericArray::default();
-        for i in 0..tlen {
-            t[i] = tag[i] ^ b[i];
-        }
-
-        Ok(t)
-    }
-
-    /// In-place CCM decryption and verification of detached authentication
-    /// tag.
-    fn decrypt_in_place_detached(
-        &self,
-        nonce: &GenericArray<u8, Self::NonceSize>,
+        nonce: &GenericArray<u8, NonceSize>,
         associated_data: &[u8],
         payload: &mut [u8],
         tag: &GenericArray<u8, TagSize>,
@@ -232,6 +119,107 @@ where
         }
 
         Ok(())
+    }
+    pub fn encrypt(
+        &self,
+        nonce: &GenericArray<u8, NonceSize>,
+        associated_data: &[u8],
+        payload: &mut [u8],
+    ) -> Result<GenericArray<u8, TagSize>, Error> {
+        let alen = associated_data.len();
+        let plen = payload.len();
+        let tlen = TagSize::to_usize();
+
+        // Input sanity check
+        if alen >= CCM_AAD_MAX_BYTES || plen >= CCM_PAYLOAD_MAX_BYTES {
+            return Err(Error);
+        }
+
+        // The sequence b for encryption is formatted as follows:
+        // b = [FLAGS | nonce | counter ], where:
+        //   FLAGS is 1 byte long
+        //   nonce is 13 bytes long
+        //   counter is 2 bytes long
+        // The byte FLAGS is composed by the following 8 bits:
+        //   0-2 bits: used to represent the value of q-1
+        //   3-7 bits: always 0's
+        let mut b = [0_u8; AES_BLOCK_SIZE];
+        let mut tag = [0_u8; AES_BLOCK_SIZE];
+
+        // Generating the authentication tag ----------------------------------
+
+        // Formatting the sequence b for authentication
+        b[0] = if alen > 0 { 0x40 } else { 0 } | ((tlen as u8 - 2) / 2) << 3 | 1;
+        b[1..14].copy_from_slice(&nonce[..13]);
+        b[14] = (plen >> 8) as u8;
+        b[15] = plen as u8;
+
+        // Computing the authentication tag using CBC-MAC
+        tag.copy_from_slice(&b);
+        self.cipher
+            .encrypt_block(GenericArray::from_mut_slice(&mut tag));
+        if alen > 0 {
+            ccm_cbc_mac(&mut tag, associated_data, true, &self.cipher);
+        }
+        if plen > 0 {
+            ccm_cbc_mac(&mut tag, payload, false, &self.cipher);
+        }
+
+        // Encryption ---------------------------------------------------------
+
+        // Formatting the sequence b for encryption
+        // q - 1 = 2 - 1 = 1
+        b[0] = 1;
+        b[14] = 0;
+        b[15] = 0;
+
+        // Encrypting payload using ctr mode
+        ccm_ctr_mode(payload, &mut b, &self.cipher);
+
+        // Restoring initial counter for ctr_mode (0)
+        b[14] = 0;
+        b[15] = 0;
+
+        // Encrypting b and generating the tag
+        self.cipher
+            .encrypt_block(GenericArray::from_mut_slice(&mut b));
+        let mut t = GenericArray::default();
+        for i in 0..tlen {
+            t[i] = tag[i] ^ b[i];
+        }
+
+        Ok(t)
+    }
+}
+/// Added the ability to clone a cipher to avoid having to recalculate the cipher from the key.
+impl<TagSize: CcmTagSize> From<&Aes128> for AesCcm<TagSize> {
+    fn from(cipher: &Aes128) -> Self {
+        AesCcm {
+            cipher: cipher.clone(),
+            tag_size: PhantomData,
+        }
+    }
+}
+impl<TagSize: CcmTagSize> From<Aes128> for AesCcm<TagSize> {
+    fn from(cipher: Aes128) -> Self {
+        AesCcm {
+            cipher,
+            tag_size: PhantomData,
+        }
+    }
+}
+impl<TagSize> NewAead for AesCcm<TagSize>
+where
+    TagSize: CcmTagSize,
+{
+    type KeySize = U16;
+
+    /// Creates a new `AesCcm`.
+    fn new(key: &GenericArray<u8, U16>) -> Self {
+        AesCcm {
+            cipher: Aes128::new(&key),
+            tag_size: PhantomData,
+        }
     }
 }
 

@@ -26,14 +26,22 @@ serde-1 = ["serde", "btle/serde-1"]
 std = ["serde/std", "rand/std", "btle/std", "ring/std"]
 
 [dependencies]
+# Custom backends built for `bluetooth_mesh`
 btle = {version = "0.1.4", path = "btle", default-features = false, features=["hci"]}
 driver_async = {version = "0.0.2", path="async_driver", default-features = false}
-futures-util = {version = "0.3.4", optional=true, default-features = false, features=["alloc"]}
-rand = {version ="0.7", default-features = false}
-aes = "0.3.2"
-aead = "0.2.0"
-dbl = "0.2.1"
-block-modes = "0.3.3"
-subtle = "2.2.2"
+# Common libraries
 serde = {version = "1.0", default-features = false, features = ["derive"], optional = true }
+futures-util = {version = "0.3", optional=true, default-features = false, features=["alloc"]}
+# Used mostly for crypto key generation
+rand = {version ="0.7", default-features = false}
+# Crypto Libs
+aes = "0.6"
+cmac = "0.5"
+aead = "0.3"
+dbl = "0.3"
+subtle = "2.3"
+block-modes = "0.7"
 ring = "0.17.0-alpha.1"
+# Most crypto libs take generic-array inputs
+generic-array = "0.14"
+typenum = "1.12"

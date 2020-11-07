@@ -1,3 +1,9 @@
+
+use dbl::Dbl;
+
+use aes::block_cipher_trait::generic_array::{typenum::Unsigned, ArrayLength, GenericArray};
+use aes::block_cipher_trait::BlockCipher;
+use core::fmt;
 //! AES CMAC module. Based on `aes_cmac` crate but had to be reimplemented because it was missing
 //! certain public functions.
 // Copied from cmac crates because they didn't make `from_cipher` public :(
@@ -17,11 +23,6 @@ pub struct MacError;
 #[derive(Default, Debug, Copy, Clone, Eq, PartialEq)]
 pub struct InvalidKeyLength;
 
-use dbl::Dbl;
-
-use aes::block_cipher_trait::generic_array::{typenum::Unsigned, ArrayLength, GenericArray};
-use aes::block_cipher_trait::BlockCipher;
-use core::fmt;
 
 type Block<N> = GenericArray<u8, N>;
 

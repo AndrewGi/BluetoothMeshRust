@@ -2,24 +2,19 @@
 //! (aes_soft in this case). This lets the rest of the library code to not have a hard dependence
 //! on any 3rd party libs. Bluetooth Mesh uses 128-bit exclusively as its Key bit size.
 
-use crate::crypto::aes_cmac::Cmac;
+use crate::bytes::ToFromBytesEndian;
+use crate::crypto::aes_ccm::AesCcm;
 use crate::crypto::key::Key;
 use crate::crypto::{nonce::Nonce, Salt, MIC};
-use aes::block_cipher_trait::{
-    generic_array::{
-        typenum::consts::{U4, U8},
-        GenericArray,
-    },
-    BlockCipher,
-};
 use aes::Aes128;
 use block_modes::block_padding::ZeroPadding;
+use block_modes::cipher::NewBlockCipher;
 use block_modes::BlockMode;
-
-use crate::bytes::ToFromBytesEndian;
-use aead::Aead;
+use cmac::{Cmac, FromBlockCipher, Mac};
 use core::convert::TryInto;
 use core::slice;
+use generic_array::GenericArray;
+use typenum::consts::{U4, U8};
 
 const AES_BLOCK_LEN: usize = 16;
 type AesBlock = [u8; AES_BLOCK_LEN];
@@ -28,8 +23,8 @@ const ZERO_BLOCK: AesBlock = [0_u8; AES_BLOCK_LEN];
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Error;
 type AesEcb = block_modes::Ecb<Aes128, ZeroPadding>;
-type AesCcmBigMic = crate::crypto::aes_ccm::AesCcm<U8>;
-type AesCcmSmallMic = crate::crypto::aes_ccm::AesCcm<U4>;
+type AesCcmBigMic = AesCcm<U8>;
+type AesCcmSmallMic = AesCcm<U4>;
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Debug, Hash)]
 pub enum MicSize {
     Big,
@@ -118,13 +113,10 @@ impl AESCipher {
         let mut cmac_context = self.cmac_cipher();
         for m in ms {
             if !m.is_empty() {
-                cmac_context.input(m);
+                cmac_context.update(m);
             }
         }
-        cmac_context
-            .result()
-            .code()
-            .as_ref()
+        AsRef::<[u8]>::as_ref(&cmac_context.finalize().into_bytes())
             .try_into()
             .expect("cmac code should be 16 bytes (SALT_LEN)")
     }
@@ -139,14 +131,14 @@ impl AESCipher {
         match mic_size {
             MicSize::Big => self
                 .ccm_big_mic_cipher()
-                .encrypt_in_place_detached(nonce, associated_data, payload)
+                .encrypt(nonce, associated_data, payload)
                 .expect("payload or associated data too big")
                 .as_slice()
                 .try_into()
                 .unwrap(),
             MicSize::Small => self
                 .ccm_small_mic_cipher()
-                .encrypt_in_place_detached(nonce, associated_data, payload)
+                .encrypt(nonce, associated_data, payload)
                 .expect("payload or associated data too big")
                 .as_slice()
                 .try_into()
@@ -166,7 +158,7 @@ impl AESCipher {
         match mic {
             MIC::Big(b) => self
                 .ccm_small_mic_cipher()
-                .decrypt_in_place_detached(
+                .decrypt(
                     nonce,
                     associated_data,
                     payload,
@@ -175,7 +167,7 @@ impl AESCipher {
                 .or(Err(Error)),
             MIC::Small(s) => self
                 .ccm_small_mic_cipher()
-                .decrypt_in_place_detached(
+                .decrypt(
                     nonce,
                     associated_data,
                     payload,
