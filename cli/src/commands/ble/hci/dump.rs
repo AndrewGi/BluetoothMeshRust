@@ -48,7 +48,7 @@ pub async fn dump_adapter_pcap(
     which_adapter: &'_ str,
     pcap_file: Option<&'_ str>,
 ) -> Result<(), CLIError> {
-    let adapter = helper::hci_adapter(which_adapter)?;
+    let adapter = helper::hci_adapter(which_adapter).await?;
     println!("using adapter `{:?}`", adapter);
     match pcap_file {
         Some(pcap_file) => {

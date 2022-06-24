@@ -235,17 +235,13 @@ impl<A: btle::hci::adapter::Adapter> BufferedHCIAdvertiser<A> {
         self.bearer
             .set_advertising_data(advertisement.as_ref())
             .await?;
-        println!("start send");
         // Enable advertising
         self.bearer.set_advertising_enable(true).await?;
-        println!("wait");
         // Scan for advertisements while advertising for `advertisement_duration`
         self.handle_incoming_for(advertisement_duration * u32::from(transmit_count))
             .await?;
         // Disable advertising
-        println!("stop send");
         self.bearer.set_advertising_enable(false).await?;
-        println!("done");
         Ok(())
     }
 }

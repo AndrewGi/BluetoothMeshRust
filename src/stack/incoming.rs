@@ -63,7 +63,7 @@ impl Incoming {
     async fn handle_encrypted_access_loop(
         internals: Arc<RwLock<StackInternals>>,
         mut incoming_encrypted_access: mpsc::Receiver<EncryptedIncomingMessage<Box<[u8]>>>,
-        mut outgoing_encrypted_access: mpsc::Sender<IncomingMessage<Box<[u8]>>>,
+        outgoing_encrypted_access: mpsc::Sender<IncomingMessage<Box<[u8]>>>,
     ) -> Result<(), RecvError> {
         loop {
             let next = incoming_encrypted_access
@@ -175,7 +175,7 @@ impl Incoming {
         replay_cache: Arc<Mutex<replay::Cache>>,
         mut outgoing_relay: Option<mpsc::Sender<RelayPDU>>,
         mut incoming: mpsc::Receiver<IncomingEncryptedNetworkPDU>,
-        mut outgoing: mpsc::Sender<IncomingNetworkPDU>,
+        outgoing: mpsc::Sender<IncomingNetworkPDU>,
     ) -> Result<(), RecvError> {
         loop {
             let next = incoming.recv().await.ok_or(RecvError::ChannelClosed)?;

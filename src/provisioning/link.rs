@@ -127,7 +127,7 @@ impl<B: Storage<u8>> Link<B> {
         link_id: LinkID,
         uuid: &UUID,
     ) -> Link<B> {
-        let mut link = Link {
+        let link = Link {
             link_id,
             my_transaction_number: TransactionNumber::new_provisioner().next(),
             other_transaction_number: TransactionNumber::new_provisionee(),

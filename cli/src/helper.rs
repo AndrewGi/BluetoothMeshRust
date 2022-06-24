@@ -129,7 +129,7 @@ pub fn write_device_state(
         .map_err(CLIError::SerdeJSON)
 }
 pub fn tokio_runtime() -> tokio::runtime::Runtime {
-    tokio::runtime::Builder::new_current_thread()
+    tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .expect("can't make async runtime")
@@ -169,16 +169,17 @@ impl Adapter for HCIAdapter {
 pub fn libusb_context() -> &'static AsyncContext {
     static CONTEXT: once_cell::sync::OnceCell<AsyncContext> = once_cell::sync::OnceCell::new();
     CONTEXT.get_or_init(|| {
-        usbw::libusb::context::default_context()
-            .expect("unable to start libusb context")
-            .start_async()
+        let context =
+            usbw::libusb::context::default_context().expect("unable to start libusb context");
+        context.set_debug_level(usbw::libusb::context::LogLevel::Info);
+        context.start_async()
     })
 }
-pub fn usb_adapter(adapter_id: u16) -> Result<btle::hci::usb::adapter::Adapter, CLIError> {
+pub async fn usb_adapter(adapter_id: u16) -> Result<btle::hci::usb::adapter::Adapter, CLIError> {
     let context = libusb_context();
     let device_list = context.context_ref().device_list();
     let mut adapters = btle::hci::usb::device::bluetooth_adapters(device_list.iter());
-    let mut adapter = adapters
+    let adapter = adapters
         .nth(adapter_id.into())
         .ok_or_else(|| CLIError::OtherMessage("no usb bluetooth adapters found".to_owned()))??
         .open()
@@ -191,20 +192,23 @@ pub fn usb_adapter(adapter_id: u16) -> Result<btle::hci::usb::adapter::Adapter, 
                 btle::hci::usb::Error::from(e).into(),
             )),
         })?;
-    adapter.reset().map_err(btle::hci::usb::Error::from)?;
-    Ok(btle::hci::usb::adapter::Adapter::open(
-        context.make_async_device(adapter),
-    )?)
+    let mut adapter = btle::hci::usb::adapter::Adapter::open(context.make_async_device(adapter))?;
+    adapter
+        .flush_event_buffer()
+        .await
+        .map_err(btle::hci::usb::Error::from)?;
+    Ok(adapter)
 }
-pub fn hci_adapter(which_adapter: &str) -> Result<HCIAdapter, CLIError> {
+pub async fn hci_adapter(which_adapter: &str) -> Result<HCIAdapter, CLIError> {
     pub const USB_PREFIX: &'static str = "usb:";
     pub const BLUEZ_PREFIX: &'static str = "bluez:";
     if which_adapter.starts_with(USB_PREFIX) {
-        Ok(HCIAdapter::Usb(usb_adapter(
-            (&which_adapter[USB_PREFIX.len()..]).parse().map_err(|_| {
+        Ok(HCIAdapter::Usb(
+            usb_adapter((&which_adapter[USB_PREFIX.len()..]).parse().map_err(|_| {
                 CLIError::OtherMessage(format!("bad usb adapter {}", which_adapter))
-            })?,
-        )?))
+            })?)
+            .await?,
+        ))
     } else if which_adapter.starts_with(BLUEZ_PREFIX) {
         Ok(HCIAdapter::BlueZ(bluez_adapter(
             (&which_adapter[BLUEZ_PREFIX.len()..])

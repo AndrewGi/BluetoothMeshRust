@@ -73,16 +73,13 @@ pub async fn provision(
     const BEARER_CHANNEL_SIZE: usize = 16;
     let dsm = crate::helper::load_device_state(device_state_path)?;
     println!("opening HCI adapter...");
-    let adapter = crate::helper::hci_adapter(which_adapter)?;
+    let adapter = crate::helper::hci_adapter(which_adapter).await?;
     println!("HCI adapter (`{:?}`) open!", adapter);
-    // If using USB HCI adapter, `read_event()` blocks instead of `Poll::Pending` so this will
-    // block the current thread
+    // TODO: I wrote a async usb driver (`usbw`) so a BufferedHCIAdvertiser might not be needed anymore!
     let (mut adapter, mut bearer_rx, bearer_tx) =
         BufferedHCIAdvertiser::new_with_channel_size(adapter, BEARER_CHANNEL_SIZE);
-    // Workaround is to spawn a thread for the adapter. In the future, hopefully there will be a
-    // async rust USB library.
-    let _adapter_thread = std::thread::spawn(move || {
-        tokio_runtime().block_on(adapter.run_loop_send_error());
+    let _adapter_task = task::spawn(async move {
+        adapter.run_loop_send_error().await;
     });
     async move {
         let early_end_error =
