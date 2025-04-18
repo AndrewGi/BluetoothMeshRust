@@ -7,7 +7,7 @@
 //!
 // No STD disabled until https://github.com/rust-lang/rust/pull/69033 goes stable/nightly.
 //#![no_std]
-#![deny(broken_intra_doc_links)]
+#![deny(rustdoc::broken_intra_doc_links)]
 //Might re-enable clippy::restriction later.
 #![warn(clippy::all, clippy::pedantic, clippy::nursery, clippy::cargo)]
 #![allow(

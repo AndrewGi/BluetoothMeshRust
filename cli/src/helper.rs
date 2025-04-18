@@ -129,7 +129,7 @@ pub fn write_device_state(
         .map_err(CLIError::SerdeJSON)
 }
 pub fn tokio_runtime() -> tokio::runtime::Runtime {
-    tokio::runtime::Builder::new_multi_thread()
+    tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .expect("can't make async runtime")

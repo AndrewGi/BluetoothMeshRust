@@ -571,7 +571,7 @@ impl<'a> PrivateHeader<'a> {
         ivi: IVI,
         nid: NID,
         deobfuscated_header: &'a DeobfuscatedHeader,
-    ) -> PrivateHeader {
+    ) -> PrivateHeader<'a> {
         PrivateHeader {
             ivi,
             nid,

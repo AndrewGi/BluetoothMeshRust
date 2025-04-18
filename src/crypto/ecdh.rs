@@ -5,6 +5,7 @@ use std::convert::TryInto;
 pub enum Error {
     KeyGenerationProblem,
     EarlyPublicKeyAgreementKey,
+    Unspecfied,
 }
 
 #[derive(Clone)]
@@ -63,8 +64,7 @@ impl PrivateKey {
         ring::agreement::agree_ephemeral(
             self.key,
             &ring::agreement::UnparsedPublicKey::new(&ring::agreement::ECDH_P256, p_key.as_ref()),
-            Error::EarlyPublicKeyAgreementKey,
-            |b| Ok(kdf(b)),
-        )
+            kdf
+        ).map_err(|_| Error::EarlyPublicKeyAgreementKey)
     }
 }
